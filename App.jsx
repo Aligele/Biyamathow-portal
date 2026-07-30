@@ -57,6 +57,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
+const APP_VERSION = "v7 · approvals + timetable";
 const SCHOOL_NAME = "Biyamathow Mixed Day and Boarding Senior School";
 const SCHOOL_LOCATION = "Sabuli, Wajir County";
 const DEFAULT_ADMIN_PASSWORD = "admin123";
@@ -469,6 +470,16 @@ function RowList({ items, render, onRemove }) {
 
 // ---------- data helpers ----------
 const getMarksFor = (roster, classId, term) => roster.marks?.[classId]?.[termKey(term)] || { approved: false, grid: {} };
+
+// Results move: draft → submitted (teacher) → approved (admin publishes to parents).
+// Older records only had a boolean, so they map onto the new states cleanly.
+const MARK_STATUS = {
+  draft:     { label: "DRAFT — not yet sent to admin",        bg: "#F5E8DC", fg: "#C98A2C", border: "#E8CBA0" },
+  submitted: { label: "SENT FOR APPROVAL — awaiting admin",   bg: "#E3E9F5", fg: "#3B5998", border: "#BCCAE6" },
+  approved:  { label: "APPROVED — visible to students & parents", bg: "#E4F0E8", fg: "#3F7A5C", border: "#B8D9C4" },
+  returned:  { label: "RETURNED BY ADMIN — needs correction", bg: "#F7E4E1", fg: "#B84C3E", border: "#E8C4BD" },
+};
+const statusOf = (m) => m?.status || (m?.approved ? "approved" : "draft");
 const setMarksFor = (roster, classId, term, data) => ({
   ...roster,
   marks: { ...roster.marks, [classId]: { ...(roster.marks?.[classId] || {}), [termKey(term)]: data } },
@@ -604,6 +615,7 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
 
       <div style={{ textAlign: "center", marginTop: 34, fontFamily: FONT.mono, fontSize: 9.5, color: "#5F7A68", letterSpacing: 1 }}>
         ROLL · RECORD · REGISTER
+        <div style={{ marginTop: 5, fontSize: 8.5, color: "#4A6355", letterSpacing: 0.5 }}>{APP_VERSION}</div>
       </div>
     </div>
     </>
@@ -705,10 +717,12 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
     <div>
       {topBar("Admin", onExit)}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["overview", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "backup", "settings"]} active={tab} onChange={setTab} />
+        <TabBar tabs={["overview", "approvals", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "backup", "settings"]} active={tab} onChange={setTab} />
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
 
           {tab === "overview" && <AdminOverview roster={roster} />}
+
+          {tab === "approvals" && <Approvals roster={roster} saveRoster={saveRoster} />}
 
           {tab === "classes" && (
             <div>
@@ -837,7 +851,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
               {marksClassId && (
                 <MarksEditor roster={roster} saveRoster={saveRoster} classId={marksClassId}
                   students={roster.students.filter((s) => s.classId === marksClassId)}
-                  allowedSubjects={roster.subjects} />
+                  allowedSubjects={roster.subjects} role="admin" />
               )}
             </div>
           )}
@@ -949,6 +963,8 @@ function AdminOverview({ roster }) {
     Object.values(cls[today] || {}).forEach((v) => { if (v === "present" || v === "late") presentToday++; });
   });
   const cleared = roster.students.filter((s) => (s.feeDue || 0) - (s.feePaid || 0) <= 0).length;
+  let pendingApprovals = 0;
+  Object.values(roster.marks || {}).forEach((terms) => Object.values(terms || {}).forEach((rec) => { if (statusOf(rec) === "submitted") pendingApprovals++; }));
 
   return (
     <div>
@@ -961,6 +977,7 @@ function AdminOverview({ roster }) {
         <StatCard label="Fees collected" value={`${cur}${money(totalPaid)}`} tone="#3F7A5C" />
         <StatCard label="Fees outstanding" value={`${cur}${money(totalDue - totalPaid)}`} tone={totalDue - totalPaid > 0 ? "#B84C3E" : "#3F7A5C"} />
         <StatCard label="Fees cleared" value={`${cleared}/${roster.students.length}`} />
+        <StatCard label="Awaiting approval" value={pendingApprovals} tone={pendingApprovals > 0 ? "#3B5998" : "#22304A"} />
       </div>
       {roster.students.length === 0 && (
         <p style={{ fontFamily: FONT.body, color: "#6B6552", fontSize: 13, marginTop: 18 }}>
@@ -1206,14 +1223,24 @@ function StaffAttendance({ roster, saveRoster }) {
 }
 
 // ================= MARKS EDITOR (shared: admin + teacher) =================
-function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects }) {
+function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, role = "admin", actorName = "" }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
   const [entry, setEntry] = useState({ studentId: "", subject: "", assessment: "exam", score: "" });
-  const { approved, grid } = getMarksFor(roster, classId, term);
+  const record = getMarksFor(roster, classId, term);
+  const { grid } = record;
+  const status = statusOf(record);
+  const locked = status === "submitted" || status === "approved";
   const weights = roster.settings.weights || DEFAULT_WEIGHTS;
   const passMark = roster.settings.passMark || 50;
 
+  const writeRecord = (patch, msg) =>
+    saveRoster(setMarksFor(roster, classId, term, {
+      ...record, grid, ...patch,
+      approved: (patch.status || status) === "approved",
+    }), msg);
+
   const addMark = () => {
+    if (locked) return;
     if (!entry.studentId || !entry.subject || entry.score === "") return;
     const existing = normEntry(grid[entry.studentId]?.[entry.subject]);
     const nextGrid = {
@@ -1224,20 +1251,28 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects })
       },
     };
     const label = ASSESSMENTS.find((a) => a.key === entry.assessment)?.label;
-    saveRoster(setMarksFor(roster, classId, term, { approved, grid: nextGrid }), `${label} mark added`);
+    saveRoster(setMarksFor(roster, classId, term, { ...record, status: status === "returned" ? "draft" : status, grid: nextGrid, approved: false }), `${label} mark added`);
     setEntry({ ...entry, score: "" });
   };
 
   const removeComponent = (studentId, subject, key) => {
+    if (locked) return;
     const existing = { ...normEntry(grid[studentId]?.[subject]) };
     delete existing[key];
     const subjects = { ...(grid[studentId] || {}) };
     if (Object.keys(existing).length === 0) delete subjects[subject];
     else subjects[subject] = existing;
-    saveRoster(setMarksFor(roster, classId, term, { approved, grid: { ...grid, [studentId]: subjects } }), "Mark removed");
+    saveRoster(setMarksFor(roster, classId, term, { ...record, grid: { ...grid, [studentId]: subjects }, approved: false }), "Mark removed");
   };
 
-  const setApproved = (val) => saveRoster(setMarksFor(roster, classId, term, { approved: val, grid }), val ? `Results published for ${term}` : "Results unpublished");
+  const submit = () => writeRecord({ status: "submitted", submittedBy: actorName, submittedAt: todayISO(), note: "" }, "Sent to admin for approval");
+  const withdraw = () => writeRecord({ status: "draft" }, "Withdrawn — you can edit again");
+  const approve = () => writeRecord({ status: "approved", approvedAt: todayISO(), note: "" }, `Approved & published for ${term}`);
+  const unpublish = () => writeRecord({ status: "draft" }, "Unpublished");
+  const returnToTeacher = () => {
+    const note = window.prompt("Message to the teacher (optional):", "") || "";
+    writeRecord({ status: "returned", note }, "Returned to teacher");
+  };
 
   const ranked = classPositions(grid, students, roster.subjects, weights);
 
@@ -1245,15 +1280,31 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects })
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 10 }}>
         <div style={{
-          display: "inline-block", padding: "5px 12px", borderRadius: 12, fontFamily: FONT.mono, fontSize: 11, fontWeight: 700,
-          background: approved ? "#E4F0E8" : "#F5E8DC", color: approved ? "#3F7A5C" : "#C98A2C", border: `1px solid ${approved ? "#B8D9C4" : "#E8CBA0"}`,
-        }}>{approved ? "● PUBLISHED to students & parents" : "○ DRAFT — hidden from students/parents"}</div>
+          display: "inline-block", padding: "5px 12px", borderRadius: 12, fontFamily: FONT.mono, fontSize: 10.5, fontWeight: 700,
+          background: MARK_STATUS[status].bg, color: MARK_STATUS[status].fg, border: `1px solid ${MARK_STATUS[status].border}`,
+        }}>{MARK_STATUS[status].label}</div>
         <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 120 }} />
       </div>
 
-      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 10 }}>
         Final mark = CAT 1 ({weights.cat1}%) + CAT 2 ({weights.cat2}%) + Main Exam ({weights.exam}%). Weights are set in Settings.
       </div>
+
+      {record.note && status === "returned" && (
+        <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1", border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginBottom: 10 }}>
+          <strong>Admin says:</strong> {record.note}
+        </div>
+      )}
+
+      {locked && (
+        <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F5F1E6", border: "1px solid #E4DFCF", fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 10 }}>
+          {status === "submitted"
+            ? (role === "teacher"
+                ? "Marks are locked while admin reviews them. Tap “Withdraw & edit” if you need to change something."
+                : "Submitted by " + (record.submittedBy || "a teacher") + (record.submittedAt ? " on " + fmtDate(record.submittedAt) : "") + ". Review below, then approve or return.")
+            : "Approved and published. " + (role === "admin" ? "Unpublish first if corrections are needed." : "Ask admin to unpublish if a correction is needed.")}
+        </div>
+      )}
 
       {allowedSubjects.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#B84C3E" }}>No subjects assigned to you — ask admin to assign the subjects you teach.</div>}
       {allowedSubjects.length > 0 && students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No students in this class yet.</div>}
@@ -1287,7 +1338,7 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects })
               <option value="">Score…</option>
               {SCORE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
-            <button onClick={addMark} disabled={!entry.studentId || !entry.subject || entry.score === ""} style={primaryBtn()}>Add mark</button>
+            <button onClick={addMark} disabled={locked || !entry.studentId || !entry.subject || entry.score === ""} style={{ ...primaryBtn(), opacity: locked ? 0.45 : 1 }}>Add mark</button>
           </div>
 
           {ranked.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No marks entered for {term} yet.</div>}
@@ -1332,10 +1383,25 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects })
           )}
 
           {ranked.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              {!approved
-                ? <button onClick={() => setApproved(true)} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Publish results</button>
-                : <button onClick={() => setApproved(false)} style={{ ...primaryBtn(), background: "#B84C3E" }}>Unpublish</button>}
+            <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {role === "teacher" && status === "submitted" && (
+                <button onClick={withdraw} style={{ ...primaryBtn(), background: "#C98A2C" }}>Withdraw &amp; edit</button>
+              )}
+              {role === "teacher" && (status === "draft" || status === "returned") && (
+                <button onClick={submit} style={{ ...primaryBtn(), background: "#3B5998" }}>Send to admin for approval</button>
+              )}
+              {role === "admin" && status === "submitted" && (
+                <>
+                  <button onClick={approve} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve &amp; publish</button>
+                  <button onClick={returnToTeacher} style={{ ...primaryBtn(), background: "#B84C3E" }}>Return to teacher</button>
+                </>
+              )}
+              {role === "admin" && (status === "draft" || status === "returned") && (
+                <button onClick={approve} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve &amp; publish</button>
+              )}
+              {role === "admin" && status === "approved" && (
+                <button onClick={unpublish} style={{ ...primaryBtn(), background: "#B84C3E" }}>Unpublish</button>
+              )}
             </div>
           )}
         </>
@@ -1368,7 +1434,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit }) {
               <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
                 You can enter results for: {mySubjects.length ? mySubjects.join(", ") : "— no subjects assigned yet —"}
               </div>
-              <MarksEditor roster={roster} saveRoster={saveRoster} classId={classId} students={students} allowedSubjects={mySubjects} />
+              <MarksEditor roster={roster} saveRoster={saveRoster} classId={classId} students={students} allowedSubjects={mySubjects} role="teacher" actorName={teacher.name} />
             </div>
           )}
         </div>
@@ -1564,6 +1630,76 @@ function FamilyView({ roster, studentId, onExit }) {
   );
 }
 
+
+
+// ---------- Admin: results waiting for approval ----------
+function Approvals({ roster, saveRoster }) {
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
+  const pending = [];
+  Object.entries(roster.marks || {}).forEach(([classId, terms]) => {
+    Object.entries(terms || {}).forEach(([tKey, rec]) => {
+      const st = statusOf(rec);
+      if (st === "submitted") pending.push({ classId, tKey, rec });
+    });
+  });
+
+  const act = (classId, tKey, rec, status, msg, note) => {
+    const marks = { ...roster.marks, [classId]: { ...roster.marks[classId], [tKey]: { ...rec, status, note: note ?? "", approved: status === "approved", approvedAt: status === "approved" ? todayISO() : rec.approvedAt } } };
+    saveRoster({ ...roster, marks }, msg);
+  };
+
+  return (
+    <div>
+      <SectionTitle>Approvals</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+        Results a teacher has sent for approval. Nothing reaches students or parents until you approve it.
+      </div>
+
+      {pending.length === 0 && (
+        <div style={{ padding: "14px 15px", borderRadius: 5, background: "#F5F1E6", border: "1px solid #E4DFCF", fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
+          Nothing waiting for approval right now.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {pending.map(({ classId, tKey, rec }) => {
+          const studentsIn = roster.students.filter((s) => s.classId === classId);
+          const ranked = classPositions(rec.grid || {}, studentsIn, roster.subjects, weights);
+          return (
+            <div key={classId + tKey} style={{ background: "#F5F1E6", border: "1px solid #BCCAE6", borderLeft: "4px solid #3B5998", borderRadius: 5, padding: "12px 14px" }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 600, color: "#22304A" }}>
+                {classNameOf(roster, classId)} — {tKey.replace(/_/g, " ")}
+              </div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552", marginTop: 3 }}>
+                Sent by {rec.submittedBy || "a teacher"}{rec.submittedAt ? " · " + fmtDate(rec.submittedAt) : ""} · {ranked.length} student{ranked.length === 1 ? "" : "s"} with results
+              </div>
+
+              {ranked.length > 0 && (
+                <div style={{ display: "grid", gap: 3, margin: "9px 0 11px" }}>
+                  {ranked.slice(0, 5).map((r) => (
+                    <div key={r.student.id} style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT.body, fontSize: 12.5, color: "#22304A" }}>
+                      <span><span style={{ fontFamily: FONT.mono, color: "#8A8368", marginRight: 6 }}>#{r.position}</span>{r.student.name}</span>
+                      <span style={{ fontFamily: FONT.mono, fontWeight: 700, color: gradeInk(r.average) }}>{r.average} {gradeOf(r.average)}</span>
+                    </div>
+                  ))}
+                  {ranked.length > 5 && <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368" }}>…and {ranked.length - 5} more</div>}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => act(classId, tKey, rec, "approved", "Approved & published")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve &amp; publish</button>
+                <button onClick={() => {
+                  const note = window.prompt("Message to the teacher (optional):", "") || "";
+                  act(classId, tKey, rec, "returned", "Returned to teacher", note);
+                }} style={{ ...primaryBtn(), background: "#B84C3E" }}>Return to teacher</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ================= TIMETABLE =================
 function TimetableAdmin({ roster, saveRoster }) {
