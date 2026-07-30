@@ -51,14 +51,72 @@ const DEFAULT_TERM = "Term 1";
 const DEFAULT_SUBJECTS = ["Math", "English", "Science", "Social", "IRE", "Kiswahili"];
 const SCORE_OPTIONS = Array.from({ length: 100 }, (_, i) => i + 1);
 
+// ---- Assessments: two CATs plus the main exam, combined by weight ----
+const ASSESSMENTS = [
+  { key: "cat1", label: "CAT 1", short: "CAT 1" },
+  { key: "cat2", label: "CAT 2", short: "CAT 2" },
+  { key: "exam", label: "Main Exam", short: "EXAM" },
+];
+const DEFAULT_WEIGHTS = { cat1: 15, cat2: 15, exam: 70 };
+
+// KCSE-style grading used by Kenyan senior schools
+const GRADE_BANDS = [[80,"A"],[75,"A-"],[70,"B+"],[65,"B"],[60,"B-"],[55,"C+"],[50,"C"],[45,"C-"],[40,"D+"],[35,"D"],[30,"D-"],[0,"E"]];
+const gradeOf = (score) => {
+  if (score === null || score === undefined) return "—";
+  for (const [min, g] of GRADE_BANDS) if (score >= min) return g;
+  return "E";
+};
+const gradeInk = (score) => (score === null || score === undefined) ? "#8A8368" : score >= 65 ? "#3F7A5C" : score >= 50 ? "#C98A2C" : "#B84C3E";
+
+// Older records stored a single number; treat that as the main exam mark.
+const normEntry = (e) => (typeof e === "number" ? { exam: e } : (e || {}));
+
+// Weighted final mark for one subject, scaled to whatever components exist yet.
+const subjectFinal = (entry, weights) => {
+  const e = normEntry(entry);
+  let sum = 0, wsum = 0;
+  for (const a of ASSESSMENTS) {
+    const v = e[a.key];
+    if (typeof v === "number") { sum += v * (weights[a.key] || 0); wsum += (weights[a.key] || 0); }
+  }
+  return wsum ? Math.round(sum / wsum) : null;
+};
+
+const studentSummary = (grid, studentId, subjects, weights) => {
+  const per = {};
+  let total = 0, count = 0;
+  subjects.forEach((sub) => {
+    const f = subjectFinal(grid?.[studentId]?.[sub], weights);
+    if (f !== null) { per[sub] = f; total += f; count++; }
+  });
+  return { per, total, count, average: count ? Math.round(total / count) : null };
+};
+
+// Ranks a class, sharing a position on ties (1,2,2,4 …).
+const classPositions = (grid, students, subjects, weights) => {
+  const rows = students
+    .map((s) => ({ student: s, ...studentSummary(grid, s.id, subjects, weights) }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.average - a.average);
+  let pos = 0, prev = null, seen = 0;
+  rows.forEach((r) => { seen++; if (r.average !== prev) { pos = seen; prev = r.average; } r.position = pos; });
+  return rows;
+};
+const positionOf = (rows, studentId) => {
+  const r = rows.find((x) => x.student.id === studentId);
+  return r ? { position: r.position, outOf: rows.length, average: r.average, total: r.total } : null;
+};
+
+
 const EMPTY_ROSTER = {
   classes: [],
   teachers: [],
   students: [],
   subjects: DEFAULT_SUBJECTS,
-  attendance: {}, // { [classId]: { [date]: { [studentId]: status } } }
-  marks: {},      // { [classId]: { [termKey]: { approved, grid: { [studentId]: { [subject]: score } } } } }
-  settings: { adminPassword: DEFAULT_ADMIN_PASSWORD, currency: "KSh", passMark: 50 },
+  attendance: {},      // { [classId]: { [date]: { [studentId]: status } } }
+  staffAttendance: {}, // { [date]: { [teacherId]: status } }
+  marks: {},           // { [classId]: { [termKey]: { approved, grid: { [studentId]: { [subject]: {cat1,cat2,exam} } } } } }
+  settings: { adminPassword: DEFAULT_ADMIN_PASSWORD, currency: "KSh", passMark: 50, weights: DEFAULT_WEIGHTS },
 };
 
 const FONT = {
@@ -85,8 +143,9 @@ export default function SchoolRegister() {
             ...p,
             subjects: p.subjects?.length ? p.subjects : DEFAULT_SUBJECTS,
             attendance: p.attendance || {},
+            staffAttendance: p.staffAttendance || {},
             marks: p.marks || {},
-            settings: { ...EMPTY_ROSTER.settings, ...(p.settings || {}) },
+            settings: { ...EMPTY_ROSTER.settings, ...(p.settings || {}), weights: { ...DEFAULT_WEIGHTS, ...(p.settings?.weights || {}) } },
           };
           rosterRef.current = loaded;
           setRoster(loaded);
@@ -214,6 +273,19 @@ function Shell({ children }) {
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
         .chalk-fade { animation: chalkIn 0.35s ease both; }
         @keyframes chalkIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+        .rise { animation: rise 0.5s cubic-bezier(.2,.7,.3,1) both; }
+        @keyframes rise { from { opacity: 0; transform: translateY(14px);} to { opacity: 1; transform: translateY(0);} }
+        .gate-bg {
+          position: fixed; inset: 0; pointer-events: none;
+          background:
+            radial-gradient(60% 40% at 50% 0%, rgba(232,178,61,0.16), transparent 70%),
+            radial-gradient(50% 40% at 85% 100%, rgba(63,122,92,0.28), transparent 70%),
+            linear-gradient(180deg, #1B3327 0%, #1F3A2E 45%, #17281F 100%);
+        }
+        .role-card { transition: transform .18s ease, border-color .18s ease, background .18s ease; }
+        .role-card:active { transform: scale(0.985); }
+        @media (hover:hover) { .role-card:hover { border-color: #E8B23D; background: #2A4636; } }
+        .rule { height:1px; flex:1; background:linear-gradient(90deg,transparent,#4A6E58,transparent); }
         @media print {
           .no-print { display: none !important; }
           html, body { background: #fff !important; }
@@ -332,12 +404,6 @@ const setMarksFor = (roster, classId, term, data) => ({
 const getAttendanceFor = (roster, classId) => roster.attendance?.[classId] || {};
 const setAttendanceFor = (roster, classId, log) => ({ ...roster, attendance: { ...roster.attendance, [classId]: log } });
 
-const studentAverage = (grid, studentId) => {
-  const scores = Object.values(grid?.[studentId] || {}).filter((v) => typeof v === "number");
-  if (!scores.length) return null;
-  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-};
-
 // ================= ROLE GATE =================
 function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFamily }) {
   const [step, setStep] = useState("root");
@@ -366,19 +432,35 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
   const matches = roster.students.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="chalk-fade" style={{ maxWidth: 440, margin: "0 auto", padding: "7vh 20px 40px" }}>
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <Seal size={56} />
-        <div style={{ fontFamily: FONT.mono, color: "#B8C4B9", fontSize: 10.5, letterSpacing: 1.4, marginTop: 10 }}>REPUBLIC OF KENYA · MINISTRY OF EDUCATION</div>
-        <h1 style={{ fontFamily: FONT.display, color: "#F5F3EE", fontSize: 26, margin: "6px 0 0", fontWeight: 600, lineHeight: 1.25 }}>{SCHOOL_NAME}</h1>
-        <div style={{ fontFamily: FONT.mono, color: "#E8B23D", fontSize: 12, marginTop: 4 }}>{SCHOOL_LOCATION}</div>
+    <>
+    <div className="gate-bg" />
+    <div className="rise" style={{ position: "relative", maxWidth: 430, margin: "0 auto", padding: "6vh 20px 44px" }}>
+      <div style={{ textAlign: "center", marginBottom: 30 }}>
+        <div style={{
+          width: 84, height: 84, margin: "0 auto", borderRadius: "50%",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "radial-gradient(circle at 35% 25%, #2E5040, #1C3327)",
+          border: "1px solid #4A6E58",
+          boxShadow: "0 0 0 6px rgba(232,178,61,0.07), 0 10px 26px rgba(0,0,0,0.35)",
+        }}>
+          <Seal size={52} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0 0" }}>
+          <span className="rule" /><span style={{ fontFamily: FONT.mono, color: "#93A899", fontSize: 9.5, letterSpacing: 2, whiteSpace: "nowrap" }}>REPUBLIC OF KENYA</span><span className="rule" />
+        </div>
+        <div style={{ fontFamily: FONT.mono, color: "#93A899", fontSize: 9.5, letterSpacing: 2, marginTop: 5 }}>MINISTRY OF EDUCATION</div>
+        <h1 style={{ fontFamily: FONT.display, color: "#F7F5EF", fontSize: 25, margin: "12px 0 0", fontWeight: 700, lineHeight: 1.22, letterSpacing: 0.2 }}>{SCHOOL_NAME}</h1>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 9, padding: "4px 12px", borderRadius: 20, border: "1px solid #3E6350", background: "rgba(30,55,42,0.6)" }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#E8B23D" }} />
+          <span style={{ fontFamily: FONT.mono, color: "#E8B23D", fontSize: 11, letterSpacing: 0.8 }}>{SCHOOL_LOCATION}</span>
+        </div>
       </div>
 
       {step === "root" && (
         <div style={{ display: "grid", gap: 12 }}>
-          <RoleCard title="Teacher login" desc="Mark attendance and enter exam results." onClick={() => { setStep("teacher"); setErr(""); }} />
-          <RoleCard title="Admin" desc="Classes, teachers, students, fees and reports." onClick={() => { setStep("admin"); setErr(""); }} />
-          <RoleCard title="Student / Parent" desc="View attendance, results, fees — print anytime." onClick={() => { setStep("family"); setErr(""); }} />
+          <RoleCard glyph="T" title="Teacher Login" desc="Mark attendance, enter CATs and exam results." onClick={() => { setStep("teacher"); setErr(""); }} />
+          <RoleCard glyph="A" title="Administration" desc="Classes, staff, students, fees and full reports." onClick={() => { setStep("admin"); setErr(""); }} />
+          <RoleCard glyph="P" title="Student / Parent" desc="Results with class position, attendance and fees." onClick={() => { setStep("family"); setErr(""); }} />
         </div>
       )}
 
@@ -432,15 +514,34 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
           </div>
         </div>
       )}
+
+      <div style={{ textAlign: "center", marginTop: 34, fontFamily: FONT.mono, fontSize: 9.5, color: "#5F7A68", letterSpacing: 1 }}>
+        ROLL · RECORD · REGISTER
+      </div>
     </div>
+    </>
   );
 }
 
-function RoleCard({ title, desc, onClick }) {
+function RoleCard({ title, desc, onClick, glyph }) {
   return (
-    <button onClick={onClick} style={{ textAlign: "left", background: "#243F31", border: "1px solid #345645", borderRadius: 4, padding: "16px 18px", color: "#F5F3EE" }}>
-      <div style={{ fontFamily: FONT.display, fontSize: 19, fontWeight: 600 }}>{title}</div>
-      <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#B8C4B9", marginTop: 3 }}>{desc}</div>
+    <button onClick={onClick} className="role-card" style={{
+      display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left",
+      background: "rgba(36,63,49,0.72)", border: "1px solid #375A45", borderRadius: 10,
+      padding: "15px 16px", color: "#F5F3EE", backdropFilter: "blur(6px)",
+      boxShadow: "0 2px 10px rgba(0,0,0,0.18)",
+    }}>
+      <span style={{
+        flex: "0 0 auto", width: 42, height: 42, borderRadius: 10,
+        border: "1px solid #4A6E58", background: "linear-gradient(160deg,#2C4B39,#213A2C)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "#E8B23D", fontFamily: FONT.mono, fontSize: 17, fontWeight: 700,
+      }}>{glyph}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontFamily: FONT.display, fontSize: 18, fontWeight: 600, letterSpacing: 0.2 }}>{title}</span>
+        <span style={{ display: "block", fontFamily: FONT.body, fontSize: 12.5, color: "#A8BCAC", marginTop: 2, lineHeight: 1.35 }}>{desc}</span>
+      </span>
+      <span style={{ flex: "0 0 auto", color: "#6E8F79", fontSize: 20, fontFamily: FONT.body }}>›</span>
     </button>
   );
 }
@@ -516,7 +617,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
     <div>
       {topBar("Admin", onExit)}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["overview", "classes", "subjects", "teachers", "students", "marks", "fees", "reports", "backup", "settings"]} active={tab} onChange={setTab} />
+        <TabBar tabs={["overview", "classes", "subjects", "teachers", "staff", "students", "marks", "fees", "reports", "backup", "settings"]} active={tab} onChange={setTab} />
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
 
           {tab === "overview" && <AdminOverview roster={roster} />}
@@ -658,6 +759,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
             </div>
           )}
 
+          {tab === "staff" && <StaffAttendance roster={roster} saveRoster={saveRoster} />}
+
           {tab === "reports" && <AdminReports roster={roster} />}
 
           {tab === "backup" && <AdminBackup roster={roster} saveRoster={saveRoster} syncState={syncState} onForceSave={onForceSave} />}
@@ -678,6 +781,30 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
                 </select>
                 <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>out of 100</span>
               </div>
+
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 8 }}>
+                Assessment weighting (must total 100)
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {ASSESSMENTS.map((a) => (
+                  <label key={a.key} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: FONT.body, fontSize: 12.5, color: "#22304A" }}>
+                    {a.label}
+                    <input type="number" min="0" max="100"
+                      value={(roster.settings.weights || DEFAULT_WEIGHTS)[a.key]}
+                      onChange={(e) => saveRoster({ ...roster, settings: { ...roster.settings, weights: { ...(roster.settings.weights || DEFAULT_WEIGHTS), [a.key]: Number(e.target.value) || 0 } } })}
+                      style={{ ...darkInput(), width: 66, padding: "6px 8px" }} />%
+                  </label>
+                ))}
+              </div>
+              {(() => {
+                const w = roster.settings.weights || DEFAULT_WEIGHTS;
+                const total = (w.cat1 || 0) + (w.cat2 || 0) + (w.exam || 0);
+                return (
+                  <div style={{ fontFamily: FONT.mono, fontSize: 11.5, color: total === 100 ? "#3F7A5C" : "#B84C3E", marginBottom: 20 }}>
+                    Total: {total}%{total === 100 ? " ✓" : " — should be 100"}
+                  </div>
+                );
+              })()}
 
               <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 8 }}>Currency</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -731,121 +858,232 @@ function AdminOverview({ roster }) {
 function AdminReports({ roster }) {
   const cur = roster.settings.currency;
   const passMark = roster.settings.passMark || 50;
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
   const [view, setView] = useState("fees");
   const [classId, setClassId] = useState("");
   const [term, setTerm] = useState(DEFAULT_TERM);
 
-  const paid = [], partial = [], unpaid = [];
+  // ---- fees ----
+  const paidList = [], partialList = [], unpaidList = [];
   roster.students.forEach((s) => {
     const due = s.feeDue || 0, p = s.feePaid || 0;
-    if (due > 0 && p >= due) paid.push(s);
-    else if (p > 0) partial.push(s);
-    else unpaid.push(s);
+    if (due > 0 && p >= due) paidList.push(s);
+    else if (p > 0) partialList.push(s);
+    else unpaidList.push(s);
   });
 
+  // ---- exam / positions ----
   const examClasses = classId ? roster.classes.filter((c) => c.id === classId) : roster.classes;
-  const passed = [], failed = [], noResult = [];
-  examClasses.forEach((c) => {
+  const perClass = examClasses.map((c) => {
     const { grid } = getMarksFor(roster, c.id, term);
-    roster.students.filter((s) => s.classId === c.id).forEach((s) => {
-      const avg = studentAverage(grid, s.id);
-      if (avg === null) noResult.push({ s, c });
-      else if (avg >= passMark) passed.push({ s, c, avg });
-      else failed.push({ s, c, avg });
+    const studentsIn = roster.students.filter((s) => s.classId === c.id);
+    return { cls: c, ranked: classPositions(grid, studentsIn, roster.subjects, weights), size: studentsIn.length };
+  }).filter((x) => x.size > 0);
+
+  const allRanked = perClass.flatMap((x) => x.ranked);
+  const passedCount = allRanked.filter((r) => r.average >= passMark).length;
+  const failedCount = allRanked.filter((r) => r.average < passMark).length;
+
+  // ---- staff attendance (last 30 days) ----
+  const days = [...Array(30)].map((_, i2) => { const d = new Date(); d.setDate(d.getDate() - i2); return d.toISOString().slice(0, 10); });
+  const staffRows = roster.teachers.map((t) => {
+    let present = 0, absent = 0, late = 0;
+    days.forEach((d) => {
+      const st = roster.staffAttendance?.[d]?.[t.id];
+      if (st === "present") present++;
+      else if (st === "late") late++;
+      else if (st === "absent") absent++;
     });
+    const marked = present + absent + late;
+    return { t, present, absent, late, marked, rate: marked ? Math.round(((present + late) / marked) * 100) : null };
   });
 
-  const List = ({ items, empty, render, tone }) => (
-    items.length === 0
-      ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368", marginBottom: 14 }}>{empty}</div>
-      : <div style={{ display: "grid", gap: 5, marginBottom: 16 }}>
-          {items.map((it, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#F5F1E6", border: `1px solid ${tone || "#E4DFCF"}`, borderLeft: `4px solid ${tone || "#E4DFCF"}`, borderRadius: 3 }}>
-              {render(it)}
-            </div>
-          ))}
-        </div>
+  const Bar = ({ label, value, tone }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderLeft: `4px solid ${tone}`, borderRadius: 3 }}>{label}{value}</div>
   );
 
   return (
     <div>
       <SectionTitle>Reports</SectionTitle>
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {["fees", "exam"].map((v) => (
+        {[["fees", "Fee status"], ["exam", "Results & position"], ["staff", "Teacher attendance"]].map(([v, label]) => (
           <button key={v} onClick={() => setView(v)} style={{
-            padding: "6px 14px", borderRadius: 3, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600, textTransform: "capitalize",
+            padding: "6px 13px", borderRadius: 3, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
             border: `1px solid ${view === v ? "#22304A" : "#D8D2C2"}`, background: view === v ? "#22304A" : "#fff", color: view === v ? "#fff" : "#6B6552",
-          }}>{v === "fees" ? "Fee status" : "Exam results"}</button>
+          }}>{label}</button>
         ))}
       </div>
 
       {view === "fees" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 10, marginBottom: 18 }}>
-            <StatCard label="Fully paid" value={paid.length} tone="#3F7A5C" />
-            <StatCard label="Part paid" value={partial.length} tone="#C98A2C" />
-            <StatCard label="Not paid" value={unpaid.length} tone="#B84C3E" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(115px,1fr))", gap: 10, marginBottom: 18 }}>
+            <StatCard label="Fully paid" value={paidList.length} tone="#3F7A5C" />
+            <StatCard label="Part paid" value={partialList.length} tone="#C98A2C" />
+            <StatCard label="Not paid" value={unpaidList.length} tone="#B84C3E" />
           </div>
-
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#3F7A5C", marginBottom: 8 }}>✓ Fully paid ({paid.length})</div>
-          <List items={paid} empty="Nobody has cleared their fees yet." tone="#3F7A5C" render={(s) => (<>
-            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: "#3F7A5C" }}>{cur}{money(s.feePaid)}</span>
-          </>)} />
-
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#C98A2C", marginBottom: 8 }}>◐ Part paid ({partial.length})</div>
-          <List items={partial} empty="No partial payments." tone="#C98A2C" render={(s) => (<>
-            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: "#B84C3E" }}>owes {cur}{money((s.feeDue || 0) - (s.feePaid || 0))}</span>
-          </>)} />
-
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#B84C3E", marginBottom: 8 }}>✗ Not paid ({unpaid.length})</div>
-          <List items={unpaid} empty="Everyone has paid something." tone="#B84C3E" render={(s) => (<>
-            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: "#B84C3E" }}>{cur}{money(s.feeDue)} due</span>
-          </>)} />
+          {[["✓ Fully paid", paidList, "#3F7A5C", (s) => `${cur}${money(s.feePaid)}`],
+            ["◐ Part paid", partialList, "#C98A2C", (s) => `owes ${cur}${money((s.feeDue||0)-(s.feePaid||0))}`],
+            ["✗ Not paid", unpaidList, "#B84C3E", (s) => `${cur}${money(s.feeDue)} due`]].map(([title, list, tone, val]) => (
+            <div key={title}>
+              <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: tone, margin: "0 0 8px" }}>{title} ({list.length})</div>
+              {list.length === 0
+                ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368", marginBottom: 14 }}>None.</div>
+                : <div style={{ display: "grid", gap: 5, marginBottom: 16 }}>
+                    {list.map((s) => (
+                      <Bar key={s.id} tone={tone}
+                        label={<span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>}
+                        value={<span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: tone }}>{val(s)}</span>} />
+                    ))}
+                  </div>}
+            </div>
+          ))}
         </div>
       )}
 
       {view === "exam" && (
         <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-            <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ ...darkInput(), flex: 1, minWidth: 150 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ ...darkInput(), flex: 1, minWidth: 140 }}>
               <option value="">All classes</option>
               {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 120 }} />
+            <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 110 }} />
           </div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>Pass mark: <strong>{passMark}/100</strong> average (change in Settings).</div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px,1fr))", gap: 10, marginBottom: 18 }}>
-            <StatCard label="Passed" value={passed.length} tone="#3F7A5C" />
-            <StatCard label="Failed" value={failed.length} tone="#B84C3E" />
-            <StatCard label="No results" value={noResult.length} />
+          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 14 }}>
+            Final = CAT 1 {weights.cat1}% + CAT 2 {weights.cat2}% + Exam {weights.exam}%. Pass mark {passMark}.
           </div>
 
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#3F7A5C", marginBottom: 8 }}>✓ Passed ({passed.length})</div>
-          <List items={passed} empty="No passes recorded for this term." tone="#3F7A5C" render={({ s, c, avg }) => (<>
-            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({c.name})</span></span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: "#3F7A5C" }}>{avg}/100</span>
-          </>)} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(115px,1fr))", gap: 10, marginBottom: 20 }}>
+            <StatCard label="Passed" value={passedCount} tone="#3F7A5C" />
+            <StatCard label="Failed" value={failedCount} tone="#B84C3E" />
+            <StatCard label="With results" value={allRanked.length} />
+          </div>
 
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#B84C3E", marginBottom: 8 }}>✗ Failed ({failed.length})</div>
-          <List items={failed} empty="No failures recorded for this term." tone="#B84C3E" render={({ s, c, avg }) => (<>
-            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({c.name})</span></span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: "#B84C3E" }}>{avg}/100</span>
-          </>)} />
+          {perClass.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No classes with students yet.</div>}
 
-          {noResult.length > 0 && (
-            <>
-              <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#8A8368", marginBottom: 8 }}>— No results yet ({noResult.length})</div>
-              <List items={noResult} empty="" render={({ s, c }) => (
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({c.name})</span></span>
-              )} />
-            </>
-          )}
+          {perClass.map(({ cls, ranked, size }) => (
+            <div key={cls.id} style={{ marginBottom: 24 }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+                {cls.name} <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#8A8368" }}>· {ranked.length} of {size} with results</span>
+              </div>
+              {ranked.length === 0
+                ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No results entered for {term}.</div>
+                : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 340 }}>
+                      <thead>
+                        <tr>
+                          {["Pos", "Student", "Total", "Avg", "Grade", ""].map((h, k) => (
+                            <th key={k} style={{ borderBottom: "1px solid #E4DFCF", padding: "6px 8px", textAlign: k > 1 ? "right" : "left", fontFamily: FONT.mono, fontSize: 9.5, textTransform: "uppercase", color: "#8A8368", letterSpacing: 0.5 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ranked.map((r) => (
+                          <tr key={r.student.id} style={{ background: r.position <= 3 ? "#F7F2E2" : "transparent" }}>
+                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: r.position === 1 ? "#B8860B" : "#22304A" }}>{r.position}</td>
+                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", fontFamily: FONT.body, fontSize: 13, color: "#22304A" }}>{r.student.name}</td>
+                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.total}</td>
+                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.average}</td>
+                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(r.average) }}>{gradeOf(r.average)}</td>
+                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: r.average >= passMark ? "#3F7A5C" : "#B84C3E" }}>{r.average >= passMark ? "PASS" : "FAIL"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+            </div>
+          ))}
         </div>
       )}
+
+      {view === "staff" && (
+        <div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>Teacher attendance over the last 30 days. Mark it daily under the <strong>Staff</strong> tab.</div>
+          {staffRows.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No teachers added yet.</div>}
+          <div style={{ display: "grid", gap: 6 }}>
+            {staffRows.map((r) => (
+              <div key={r.t.id} style={{ padding: "10px 13px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>{r.t.name} <span style={{ color: "#8A8368", fontSize: 12, fontWeight: 400 }}>({classNameOf(roster, r.t.classId)})</span></span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: r.rate === null ? "#8A8368" : r.rate >= 90 ? "#3F7A5C" : r.rate >= 75 ? "#C98A2C" : "#B84C3E" }}>
+                    {r.rate === null ? "no records" : `${r.rate}%`}
+                  </span>
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552", marginTop: 4 }}>
+                  present {r.present} · late {r.late} · absent {r.absent} · days marked {r.marked}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Staff (teacher) attendance marking ----------
+function StaffAttendance({ roster, saveRoster }) {
+  const [date, setDate] = useState(todayISO());
+  const dayLog = roster.staffAttendance?.[date] || {};
+
+  const setMark = (teacherId, status) => {
+    saveRoster({
+      ...roster,
+      staffAttendance: { ...(roster.staffAttendance || {}), [date]: { ...dayLog, [teacherId]: status } },
+    });
+  };
+
+  const history = [...Array(7)].map((_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const iso = d.toISOString().slice(0, 10);
+    const day = roster.staffAttendance?.[iso] || {};
+    return { d: iso, total: Object.keys(day).length, present: Object.values(day).filter((v) => v === "present" || v === "late").length };
+  });
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
+        <SectionTitle>Teacher attendance</SectionTitle>
+        <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} style={darkInput()} />
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>Each tap saves right away.</div>
+
+      {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Add teachers first.</div>}
+      <div style={{ display: "grid", gap: 6 }}>
+        {roster.teachers.map((t) => (
+          <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3 }}>
+            <div>
+              <div style={{ fontFamily: FONT.body, fontSize: 14, color: "#22304A", fontWeight: 500 }}>{t.name}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368" }}>{classNameOf(roster, t.classId)}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {Object.entries(STATUS).map(([key, val]) => (
+                <button key={key} onClick={() => setMark(t.id, key)} title={val.label} style={{
+                  width: 34, height: 34, borderRadius: "50%",
+                  border: `2px solid ${dayLog[t.id] === key ? val.ink : "#D8D2C2"}`,
+                  background: dayLog[t.id] === key ? val.ink : "transparent",
+                  color: dayLog[t.id] === key ? "#fff" : val.ink,
+                  fontFamily: FONT.mono, fontWeight: 700, fontSize: 13,
+                }}>{val.mark}</button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <SectionTitle>Last 7 days</SectionTitle>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {history.map((h) => (
+            <div key={h.d} style={{ textAlign: "center", minWidth: 62 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#8A8368" }}>{fmtDate(h.d)}</div>
+              <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#22304A" }}>{h.total ? `${h.present}/${h.total}` : "—"}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -853,31 +1091,38 @@ function AdminReports({ roster }) {
 // ================= MARKS EDITOR (shared: admin + teacher) =================
 function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
-  const [entry, setEntry] = useState({ studentId: "", subject: "", score: "" });
+  const [entry, setEntry] = useState({ studentId: "", subject: "", assessment: "exam", score: "" });
   const { approved, grid } = getMarksFor(roster, classId, term);
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
   const passMark = roster.settings.passMark || 50;
 
   const addMark = () => {
     if (!entry.studentId || !entry.subject || entry.score === "") return;
-    const nextGrid = { ...grid, [entry.studentId]: { ...(grid[entry.studentId] || {}), [entry.subject]: Number(entry.score) } };
-    saveRoster(setMarksFor(roster, classId, term, { approved, grid: nextGrid }), "Result added");
-    setEntry({ studentId: entry.studentId, subject: "", score: "" }); // keep student for quick next subject
+    const existing = normEntry(grid[entry.studentId]?.[entry.subject]);
+    const nextGrid = {
+      ...grid,
+      [entry.studentId]: {
+        ...(grid[entry.studentId] || {}),
+        [entry.subject]: { ...existing, [entry.assessment]: Number(entry.score) },
+      },
+    };
+    const label = ASSESSMENTS.find((a) => a.key === entry.assessment)?.label;
+    saveRoster(setMarksFor(roster, classId, term, { approved, grid: nextGrid }), `${label} mark added`);
+    setEntry({ ...entry, score: "" });
   };
 
-  const removeMark = (studentId, subject) => {
-    const nextGrid = { ...grid, [studentId]: { ...grid[studentId] } };
-    delete nextGrid[studentId][subject];
-    saveRoster(setMarksFor(roster, classId, term, { approved, grid: nextGrid }), "Result removed");
+  const removeComponent = (studentId, subject, key) => {
+    const existing = { ...normEntry(grid[studentId]?.[subject]) };
+    delete existing[key];
+    const subjects = { ...(grid[studentId] || {}) };
+    if (Object.keys(existing).length === 0) delete subjects[subject];
+    else subjects[subject] = existing;
+    saveRoster(setMarksFor(roster, classId, term, { approved, grid: { ...grid, [studentId]: subjects } }), "Mark removed");
   };
 
-  const setApproved = (val) => saveRoster(setMarksFor(roster, classId, term, { approved: val, grid }), val ? `Results published for ${term}` : `Results unpublished`);
+  const setApproved = (val) => saveRoster(setMarksFor(roster, classId, term, { approved: val, grid }), val ? `Results published for ${term}` : "Results unpublished");
 
-  const rows = [];
-  students.forEach((s) => {
-    Object.entries(grid[s.id] || {}).forEach(([subject, score]) => {
-      if (score !== undefined && (allowedSubjects.includes(subject) || true)) rows.push({ sId: s.id, name: s.name, subject, score });
-    });
-  });
+  const ranked = classPositions(grid, students, roster.subjects, weights);
 
   return (
     <div>
@@ -889,42 +1134,87 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects })
         <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 120 }} />
       </div>
 
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 12 }}>
+        Final mark = CAT 1 ({weights.cat1}%) + CAT 2 ({weights.cat2}%) + Main Exam ({weights.exam}%). Weights are set in Settings.
+      </div>
+
       {allowedSubjects.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#B84C3E" }}>No subjects assigned to you — ask admin to assign the subjects you teach.</div>}
       {allowedSubjects.length > 0 && students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No students in this class yet.</div>}
 
       {allowedSubjects.length > 0 && students.length > 0 && (
         <>
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
             <select value={entry.studentId} onChange={(e) => setEntry({ ...entry, studentId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 130 }}>
               <option value="">Student…</option>
-              {students.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {students.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>
             <select value={entry.subject} onChange={(e) => setEntry({ ...entry, subject: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
               <option value="">Subject…</option>
               {allowedSubjects.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
             </select>
-            <select value={entry.score} onChange={(e) => setEntry({ ...entry, score: e.target.value })} style={{ ...darkInput(), width: 100 }}>
-              <option value="">Score…</option>
-              {SCORE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <button onClick={addMark} disabled={!entry.studentId || !entry.subject || entry.score === ""} style={primaryBtn()}>
-              Add result
-            </button>
           </div>
 
-          {rows.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No results entered for {term} yet.</div>}
-          <div style={{ display: "grid", gap: 5 }}>
-            {rows.map((r) => (
-              <div key={r.sId + r.subject} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3 }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>
-                  {r.name} — {r.subject}: <strong style={{ color: r.score >= passMark ? "#3F7A5C" : "#B84C3E" }}>{r.score}/100</strong>
-                </span>
-                <button onClick={() => removeMark(r.sId, r.subject)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
-              </div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+            {ASSESSMENTS.map((a) => (
+              <button key={a.key} onClick={() => setEntry({ ...entry, assessment: a.key })} style={{
+                padding: "7px 14px", borderRadius: 20, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
+                border: `1px solid ${entry.assessment === a.key ? "#22304A" : "#D8D2C2"}`,
+                background: entry.assessment === a.key ? "#22304A" : "#fff",
+                color: entry.assessment === a.key ? "#fff" : "#6B6552",
+              }}>{a.label}</button>
             ))}
           </div>
 
-          {rows.length > 0 && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+            <select value={entry.score} onChange={(e) => setEntry({ ...entry, score: e.target.value })} style={{ ...darkInput(), width: 110 }}>
+              <option value="">Score…</option>
+              {SCORE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <button onClick={addMark} disabled={!entry.studentId || !entry.subject || entry.score === ""} style={primaryBtn()}>Add mark</button>
+          </div>
+
+          {ranked.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No marks entered for {term} yet.</div>}
+
+          {ranked.length > 0 && (
+            <div style={{ display: "grid", gap: 10 }}>
+              {ranked.map((r) => (
+                <div key={r.student.id} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "11px 13px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontFamily: FONT.body, fontSize: 14, fontWeight: 600, color: "#22304A" }}>
+                      <span style={{ fontFamily: FONT.mono, color: "#8A8368", fontSize: 11.5, marginRight: 7 }}>#{r.position}</span>{r.student.name}
+                    </span>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: gradeInk(r.average) }}>
+                      avg {r.average} · {gradeOf(r.average)}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    {roster.subjects.filter((sub) => grid[r.student.id]?.[sub]).map((sub) => {
+                      const e = normEntry(grid[r.student.id][sub]);
+                      const fin = subjectFinal(e, weights);
+                      return (
+                        <div key={sub} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12.5, fontFamily: FONT.body, color: "#22304A" }}>
+                          <span style={{ minWidth: 78, fontWeight: 500 }}>{sub}</span>
+                          {ASSESSMENTS.map((a) => (
+                            <span key={a.key} style={{ fontFamily: FONT.mono, fontSize: 11, color: typeof e[a.key] === "number" ? "#22304A" : "#B8B2A0" }}>
+                              {a.short} {typeof e[a.key] === "number" ? e[a.key] : "–"}
+                              {typeof e[a.key] === "number" && (
+                                <button onClick={() => removeComponent(r.student.id, sub, a.key)} title={`Remove ${a.label}`} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11, padding: "0 0 0 2px" }}>×</button>
+                              )}
+                            </span>
+                          ))}
+                          <span style={{ marginLeft: "auto", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(fin) }}>
+                            {fin === null ? "—" : `${fin} ${gradeOf(fin)}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {ranked.length > 0 && (
             <div style={{ marginTop: 16 }}>
               {!approved
                 ? <button onClick={() => setApproved(true)} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Publish results</button>
@@ -1040,9 +1330,13 @@ function FamilyView({ roster, studentId, onExit }) {
 
   const cur = roster.settings.currency;
   const passMark = roster.settings.passMark || 50;
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
   const { approved, grid } = getMarksFor(roster, student.classId, term);
   const termMarks = approved ? (grid[student.id] || {}) : {};
-  const avg = approved ? studentAverage(grid, student.id) : null;
+  const classmates = roster.students.filter((s) => s.classId === student.classId);
+  const ranked = approved ? classPositions(grid, classmates, roster.subjects, weights) : [];
+  const rank = approved ? positionOf(ranked, student.id) : null;
+  const avg = rank ? rank.average : null;
 
   const classLog = getAttendanceFor(roster, student.classId);
   const log = [...Array(30)].map((_, i) => {
@@ -1055,7 +1349,7 @@ function FamilyView({ roster, studentId, onExit }) {
   const due = student.feeDue || 0, paid = student.feePaid || 0, balance = due - paid;
 
   if (printDoc === "invoice") return <InvoiceDoc roster={roster} student={student} onBack={() => setPrintDoc(null)} />;
-  if (printDoc === "report") return <ReportDoc roster={roster} student={student} term={term} termMarks={termMarks} avg={avg} rate={rate} onBack={() => setPrintDoc(null)} />;
+  if (printDoc === "report") return <ReportDoc roster={roster} student={student} term={term} termMarks={termMarks} avg={avg} rank={rank} rate={rate} onBack={() => setPrintDoc(null)} />;
 
   return (
     <div>
@@ -1086,17 +1380,45 @@ function FamilyView({ roster, studentId, onExit }) {
           {approved && Object.keys(termMarks).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368", marginBottom: 18 }}>No results recorded for this term.</div>}
           {approved && Object.keys(termMarks).length > 0 && (
             <div style={{ marginBottom: 18 }}>
-              <div style={{ display: "grid", gap: 5, marginBottom: 10 }}>
-                {Object.entries(termMarks).map(([subject, score]) => (
-                  <div key={subject} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3 }}>
-                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{subject}</span>
-                    <span style={{ fontFamily: FONT.mono, fontWeight: 700, color: score >= passMark ? "#3F7A5C" : "#B84C3E" }}>{score}/100</span>
-                  </div>
-                ))}
+              {rank && (
+                <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                  <StatCard label="Position in class" value={`${rank.position} of ${rank.outOf}`} tone={rank.position <= 3 ? "#B8860B" : "#22304A"} />
+                  <StatCard label="Total marks" value={rank.total} />
+                  <StatCard label="Mean grade" value={gradeOf(avg)} tone={gradeInk(avg)} />
+                </div>
+              )}
+              <div style={{ overflowX: "auto", marginBottom: 10 }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 320 }}>
+                  <thead>
+                    <tr>
+                      {["Subject", "CAT 1", "CAT 2", "Exam", "Final", "Gr"].map((h, k) => (
+                        <th key={k} style={{ borderBottom: "1px solid #E4DFCF", padding: "6px 7px", textAlign: k === 0 ? "left" : "right", fontFamily: FONT.mono, fontSize: 9, textTransform: "uppercase", color: "#8A8368", letterSpacing: 0.4 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.keys(termMarks).map((subject) => {
+                      const e = normEntry(termMarks[subject]);
+                      const fin = subjectFinal(e, weights);
+                      return (
+                        <tr key={subject}>
+                          <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 7px", fontFamily: FONT.body, fontSize: 13, color: "#22304A" }}>{subject}</td>
+                          {ASSESSMENTS.map((a) => (
+                            <td key={a.key} style={{ borderBottom: "1px solid #EFEADC", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12, color: typeof e[a.key] === "number" ? "#22304A" : "#B8B2A0" }}>
+                              {typeof e[a.key] === "number" ? e[a.key] : "–"}
+                            </td>
+                          ))}
+                          <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(fin) }}>{fin === null ? "—" : fin}</td>
+                          <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12, color: gradeInk(fin) }}>{gradeOf(fin)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
               {avg !== null && (
                 <div style={{ padding: "10px 12px", borderRadius: 3, background: avg >= passMark ? "#E4F0E8" : "#F7E4E1", border: `1px solid ${avg >= passMark ? "#B8D9C4" : "#E8C4BD"}`, fontFamily: FONT.body, fontSize: 14, color: "#22304A" }}>
-                  Average <strong>{avg}/100</strong> — <strong style={{ color: avg >= passMark ? "#3F7A5C" : "#B84C3E" }}>{avg >= passMark ? "PASS" : "FAIL"}</strong> <span style={{ color: "#8A8368", fontSize: 12 }}>(pass mark {passMark})</span>
+                  Average <strong>{avg}/100</strong> · grade <strong>{gradeOf(avg)}</strong> — <strong style={{ color: avg >= passMark ? "#3F7A5C" : "#B84C3E" }}>{avg >= passMark ? "PASS" : "FAIL"}</strong> <span style={{ color: "#8A8368", fontSize: 12 }}>(pass mark {passMark})</span>
                 </div>
               )}
             </div>
@@ -1212,141 +1534,92 @@ function InvoiceDoc({ roster, student, onBack }) {
   );
 }
 
-function ReportDoc({ roster, student, term, termMarks, avg, rate, onBack }) {
+function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }) {
   const cur = roster.settings.currency;
   const passMark = roster.settings.passMark || 50;
-  const entries = Object.entries(termMarks);
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
+  const subjects = Object.keys(termMarks);
   const due = student.feeDue || 0, paid = student.feePaid || 0;
-  const remark = (s) => (s >= 80 ? "Excellent" : s >= 65 ? "Good" : s >= passMark ? "Fair" : "Needs improvement");
+  const remark = (sc) => (sc >= 80 ? "Excellent" : sc >= 65 ? "Good" : sc >= passMark ? "Fair" : "Needs improvement");
 
   return (
     <DocShell title="Report card" onBack={onBack}>
       <DocHeader subtitle={`Student Report Card — ${term}`} />
       <DocInfo roster={roster} student={student} />
+
       <div style={{ fontWeight: "bold", marginBottom: 8 }}>Academic performance</div>
-      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 16 }}>
-        <thead><tr><th style={docTh}>Subject</th><th style={docTh}>Score</th><th style={docTh}>Remark</th></tr></thead>
+      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 14 }}>
+        <thead>
+          <tr>
+            <th style={docTh}>Subject</th>
+            <th style={{ ...docTh, textAlign: "right" }}>CAT 1<div style={{ fontSize: 8, fontWeight: 400 }}>{weights.cat1}%</div></th>
+            <th style={{ ...docTh, textAlign: "right" }}>CAT 2<div style={{ fontSize: 8, fontWeight: 400 }}>{weights.cat2}%</div></th>
+            <th style={{ ...docTh, textAlign: "right" }}>Exam<div style={{ fontSize: 8, fontWeight: 400 }}>{weights.exam}%</div></th>
+            <th style={{ ...docTh, textAlign: "right" }}>Final</th>
+            <th style={{ ...docTh, textAlign: "center" }}>Grade</th>
+            <th style={docTh}>Remark</th>
+          </tr>
+        </thead>
         <tbody>
-          {entries.length === 0 && <tr><td style={{ ...docTd, color: "#6B6552" }} colSpan={3}>No results recorded.</td></tr>}
-          {entries.map(([subject, score]) => (
-            <tr key={subject}>
-              <td style={docTd}>{subject}</td>
-              <td style={{ ...docTd, fontFamily: FONT.mono, fontWeight: 700 }}>{score}/100</td>
-              <td style={{ ...docTd, color: "#6B6552", fontSize: 12 }}>{remark(score)}</td>
-            </tr>
-          ))}
+          {subjects.length === 0 && <tr><td style={{ ...docTd, color: "#6B6552" }} colSpan={7}>No results recorded.</td></tr>}
+          {subjects.map((sub) => {
+            const e = normEntry(termMarks[sub]);
+            const fin = subjectFinal(e, weights);
+            return (
+              <tr key={sub}>
+                <td style={docTd}>{sub}</td>
+                {ASSESSMENTS.map((a) => (
+                  <td key={a.key} style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 12 }}>
+                    {typeof e[a.key] === "number" ? e[a.key] : "–"}
+                  </td>
+                ))}
+                <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontWeight: 700 }}>{fin === null ? "—" : fin}</td>
+                <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>{gradeOf(fin)}</td>
+                <td style={{ ...docTd, color: "#6B6552", fontSize: 11.5 }}>{fin === null ? "—" : remark(fin)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, margin: "16px 0 24px" }}>
+        {[["POSITION", rank ? `${rank.position} / ${rank.outOf}` : "—"],
+          ["TOTAL", rank ? rank.total : "—"],
+          ["AVERAGE", avg === null || avg === undefined ? "—" : `${avg}/100`],
+          ["MEAN GRADE", gradeOf(avg)]].map(([l, v]) => (
+          <div key={l} style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "9px 10px", background: "#F5F1E6", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#8A8368", letterSpacing: 0.8 }}>{l}</div>
+            <div style={{ fontSize: 16, fontWeight: "bold", marginTop: 3 }}>{v}</div>
+          </div>
+        ))}
+      </div>
+
       {avg !== null && avg !== undefined && (
-        <div style={{ marginBottom: 20, fontSize: 14 }}>
-          <strong>Term average: {avg}/100</strong> — <strong>{avg >= passMark ? "PASS" : "FAIL"}</strong> <span style={{ color: "#6B6552", fontSize: 12 }}>(pass mark {passMark})</span>
+        <div style={{ marginBottom: 18, fontSize: 13.5 }}>
+          Outcome: <strong>{avg >= passMark ? "PASS" : "FAIL"}</strong>
+          <span style={{ color: "#6B6552", fontSize: 11.5 }}> (pass mark {passMark})</span>
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, margin: "18px 0 30px" }}>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 26 }}>
         <div style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "10px 12px", background: "#F5F1E6" }}>
           <div style={{ fontFamily: FONT.mono, fontSize: 9, color: "#8A8368", letterSpacing: 1 }}>ATTENDANCE</div>
           <div style={{ fontSize: 17, fontWeight: "bold", marginTop: 3 }}>{rate === null ? "—" : `${rate}%`}</div>
         </div>
         <div style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "10px 12px", background: "#F5F1E6" }}>
           <div style={{ fontFamily: FONT.mono, fontSize: 9, color: "#8A8368", letterSpacing: 1 }}>FEES DUE / PAID / BALANCE</div>
-          <div style={{ fontSize: 14, fontWeight: "bold", marginTop: 3 }}>{cur}{money(due)} / {cur}{money(paid)} / {cur}{money(due - paid)}</div>
+          <div style={{ fontSize: 13.5, fontWeight: "bold", marginTop: 3 }}>{cur}{money(due)} / {cur}{money(paid)} / {cur}{money(due - paid)}</div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 45 }}>
+
+      <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, marginBottom: 20, fontSize: 11, color: "#6B6552", fontFamily: FONT.mono }}>
+        GRADING: A 80+ · A- 75 · B+ 70 · B 65 · B- 60 · C+ 55 · C 50 · C- 45 · D+ 40 · D 35 · D- 30 · E below 30
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 30 }}>
         <div style={docSig}>Class Teacher's Signature</div>
-        <div style={docSig}>Head Teacher's Signature</div>
+        <div style={docSig}>Principal's Signature</div>
       </div>
     </DocShell>
-  );
-}
-
-// ---------- Backup / restore: an escape hatch so data is never trapped ----------
-function AdminBackup({ roster, saveRoster, syncState, onForceSave }) {
-  const [restoreText, setRestoreText] = useState("");
-  const [copied, setCopied] = useState(false);
-  const json = JSON.stringify(roster, null, 2);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(json);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch (e) {
-      setCopied(false);
-    }
-  };
-
-  const restore = () => {
-    let parsed;
-    try {
-      parsed = JSON.parse(restoreText);
-    } catch (e) {
-      alert("That doesn't look like a valid backup. Paste the whole text you copied earlier.");
-      return;
-    }
-    if (!parsed || !Array.isArray(parsed.students)) {
-      alert("That backup is missing student data — not restoring.");
-      return;
-    }
-    if (!confirm("Replace ALL current data with this backup? This cannot be undone.")) return;
-    saveRoster({ ...EMPTY_ROSTER, ...parsed, settings: { ...EMPTY_ROSTER.settings, ...(parsed.settings || {}) } }, "Backup restored");
-    setRestoreText("");
-  };
-
-  const stateText = {
-    saved: "All changes are saved to the server.",
-    pending: "Saving your latest changes…",
-    saving: "Saving your latest changes…",
-    error: "The server isn't accepting saves right now. Your work is safe on this screen — copy the backup below so you don't lose it.",
-  }[syncState] || "";
-
-  return (
-    <div>
-      <SectionTitle>Backup &amp; restore</SectionTitle>
-
-      <div style={{
-        padding: "10px 13px", borderRadius: 4, marginBottom: 14,
-        background: isShared ? "#E4F0E8" : "#FDF3E0",
-        border: `1px solid ${isShared ? "#B8D9C4" : "#EBD9AE"}`,
-        fontFamily: FONT.body, fontSize: 12.5, color: "#22304A",
-      }}>
-        {isShared
-          ? "Shared database is active — every teacher, parent and admin sees the same data."
-          : "This device only: no shared database is connected yet, so data saved here isn't visible to other people's phones. Keep a copy using the backup below."}
-      </div>
-
-      <div style={{
-        padding: "12px 14px", borderRadius: 4, marginBottom: 18,
-        background: syncState === "error" ? "#F7E4E1" : "#E4F0E8",
-        border: `1px solid ${syncState === "error" ? "#E8C4BD" : "#B8D9C4"}`,
-        fontFamily: FONT.body, fontSize: 13, color: "#22304A",
-      }}>
-        {stateText}
-        {syncState === "error" && (
-          <div style={{ marginTop: 10 }}>
-            <button onClick={onForceSave} style={primaryBtn()}>Try saving again now</button>
-          </div>
-        )}
-      </div>
-
-      <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 8 }}>
-        Copy this text somewhere safe (Notes, WhatsApp to yourself, email). It contains every class, teacher, student, mark, and payment.
-      </div>
-      <textarea readOnly value={json} onFocus={(e) => e.target.select()} style={{
-        width: "100%", height: 120, fontFamily: FONT.mono, fontSize: 11, padding: 10,
-        border: "1px solid #D8D2C2", borderRadius: 3, background: "#F5F1E6", color: "#22304A", resize: "vertical",
-      }} />
-      <button onClick={copy} style={{ ...primaryBtn(), marginTop: 8, marginBottom: 26 }}>{copied ? "✓ Copied" : "Copy backup"}</button>
-
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#B84C3E", marginBottom: 6 }}>Restore from a backup</div>
-      <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 8 }}>
-        Paste a backup here to replace everything currently in the system.
-      </div>
-      <textarea value={restoreText} onChange={(e) => setRestoreText(e.target.value)} placeholder="Paste backup text here…" style={{
-        width: "100%", height: 90, fontFamily: FONT.mono, fontSize: 11, padding: 10,
-        border: "1px solid #D8D2C2", borderRadius: 3, background: "#fff", color: "#22304A", resize: "vertical",
-      }} />
-      <button onClick={restore} disabled={!restoreText.trim()} style={{ ...primaryBtn(), background: "#B84C3E", marginTop: 8, opacity: restoreText.trim() ? 1 : 0.5 }}>Restore this backup</button>
-    </div>
   );
 }
