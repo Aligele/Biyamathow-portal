@@ -7,6 +7,19 @@ const fmtDate = (iso) => {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 };
+// Admission numbers look like STU/2026/001 — sequential within the year.
+// Existing numbers are scanned so removing a student never causes a clash.
+const nextAdmissionNo = (students) => {
+  const year = new Date().getFullYear();
+  const prefix = `STU/${year}/`;
+  let max = 0;
+  (students || []).forEach((s) => {
+    const m = String(s.id || "").match(/^STU\/(\d{4})\/(\d+)$/);
+    if (m && m[1] === String(year)) max = Math.max(max, parseInt(m[2], 10));
+  });
+  return prefix + String(max + 1).padStart(3, "0");
+};
+
 const genId = (prefix, list) => {
   const n = (list?.length || 0) + 1;
   return `${prefix}-${String(n).padStart(3, "0")}-${Math.random().toString(36).slice(2, 5)}`;
@@ -576,7 +589,7 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
             <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#A8BCAC", lineHeight: 1.5, marginBottom: 2 }}>
               Enter the admission number and PIN printed on your child's report card.
             </div>
-            <input placeholder="Admission number (e.g. STU-001-abc)" value={adm}
+            <input placeholder="Admission number (e.g. STU/2026/001)" value={adm}
               onChange={(e) => setAdm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryFamily()} style={inputStyle()} />
             <input placeholder="PIN" type="password" inputMode="numeric" value={pin}
               onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryFamily()} style={inputStyle()} />
@@ -655,7 +668,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
   const addStudent = () => {
     if (!newStudent.name.trim() || !newStudent.classId) return;
     const pin = String(Math.floor(1000 + Math.random() * 9000));
-    const s = { id: genId("STU", roster.students), name: newStudent.name.trim(), classId: newStudent.classId, parentName: newStudent.parentName.trim(), feeDue: Number(newStudent.feeDue) || 0, feePaid: 0, payments: [], pin };
+    const s = { id: nextAdmissionNo(roster.students), name: newStudent.name.trim(), classId: newStudent.classId, parentName: newStudent.parentName.trim(), feeDue: Number(newStudent.feeDue) || 0, feePaid: 0, payments: [], pin };
     saveRoster({ ...roster, students: [...roster.students, s] }, `Added ${s.name} — PIN ${pin}`);
     setNewStudent({ name: "", classId: "", parentName: "", feeDue: "" });
   };
