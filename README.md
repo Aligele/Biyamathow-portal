@@ -82,6 +82,34 @@ Read and write were both tested successfully.
 
 ---
 
+## What the portal does
+
+**Login portal** — polished landing page with the Ministry letterhead and three
+entry points: Teacher, Administration, Student/Parent.
+
+**Assessments** — every subject records **CAT 1**, **CAT 2** and the **Main Exam**
+separately. The final subject mark is weighted (default 15% / 15% / 70%,
+adjustable in Settings) and graded on the KCSE scale (A, A-, B+ … E). If a
+component hasn't been entered yet, the final mark is scaled over what exists.
+
+**Class position** — students are automatically ranked within their class and
+term by average mark, with ties sharing a position. Position shows in Admin
+reports, the parent view and the printed report card.
+
+**Teacher attendance** — Admin → **Staff** marks teachers Present/Absent/Late
+each day; Admin → Reports → **Teacher attendance** shows each teacher's 30-day
+attendance rate.
+
+**Reports (Admin → Reports)**
+- *Fee status* — fully paid / part paid / not paid, with amounts owed
+- *Results & position* — ranked table per class (Pos, Total, Avg, Grade, Pass/Fail)
+- *Teacher attendance* — per-teacher present/late/absent counts and percentage
+
+**Printable documents** — fee invoice and full report card (CATs, exam, final,
+grade, remark, position, attendance, fees, grading key, signature lines).
+
+---
+
 ## 3. First-time setup in the app
 
 1. Open the site, tap **Admin**, passcode `admin123`.
