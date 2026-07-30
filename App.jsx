@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { loadRoster, saveRoster as persistRoster, isShared, isOffline, hasPendingChanges } from "./store.js";
+import {
+  loadRoster, saveRoster as persistRoster, isShared, isOffline, hasPendingChanges,
+  staffLogin, staffLogout, restoreSession, getWho, changeMyPassword,
+  staffList, staffUpsert, staffDeactivate, parentLookup,
+} from "./store.js";
 
 // ---------- helpers ----------
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -68,7 +72,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v8 · safe-save + audit";
+const APP_VERSION = "v9 · secure login";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -202,13 +206,26 @@ const FONT = {
 export default function SchoolRegister() {
   const [loading, setLoading] = useState(true);
   const [roster, setRoster] = useState(EMPTY_ROSTER);
-  const [role, setRole] = useState(null);
+  const [role, setRole] = useState(null);          // "admin" | "teacher" | "family"
+  const [who, setWho] = useState(null);            // signed-in staff { role, name, teacherId }
+  const [parentData, setParentData] = useState(null); // the one child a parent may see
   const [activeTeacherId, setActiveTeacherId] = useState(null);
   const [activeStudentId, setActiveStudentId] = useState(null);
   const [toast, setToast] = useState("");
 
+  // Restore a previous staff session, then load the school if signed in.
   useEffect(() => {
     (async () => {
+      let session = null;
+      try { session = await restoreSession(); } catch (e) { session = getWho(); }
+      if (session) {
+        setWho(session);
+        setRole(session.role);
+        if (session.role === "teacher") setActiveTeacherId(session.teacherId);
+      } else {
+        setLoading(false);
+        return;                       // show the login screen
+      }
       try {
         const p = await loadRoster();
         if (p) {
@@ -315,15 +332,42 @@ export default function SchoolRegister() {
       <SyncBadge state={syncState} offline={offline} onRetry={flush} />
       {!role && (
         <RoleGate
-          roster={roster} saveRoster={saveRoster}
-          onEnterAdmin={() => setRole("admin")}
-          onEnterTeacher={(id) => { setActiveTeacherId(id); setRole("teacher"); }}
-          onEnterFamily={(id) => { setActiveStudentId(id); setRole("family"); }}
+          onStaffSignedIn={async (session) => {
+            setWho(session);
+            setRole(session.role);
+            if (session.role === "teacher") setActiveTeacherId(session.teacherId);
+            const p = await loadRoster();
+            if (p) {
+              const loaded = {
+                ...EMPTY_ROSTER, ...p,
+                subjects: p.subjects?.length ? p.subjects : DEFAULT_SUBJECTS,
+                attendance: p.attendance || {}, staffAttendance: p.staffAttendance || {},
+                marks: p.marks || {}, timetable: p.timetable || {}, duty: p.duty || [],
+                audit: p.audit || [], archives: p.archives || [],
+                settings: {
+                  ...EMPTY_ROSTER.settings, ...(p.settings || {}),
+                  weights: { ...DEFAULT_WEIGHTS, ...(p.settings?.weights || {}) },
+                  periods: p.settings?.periods?.length ? p.settings.periods : DEFAULT_PERIODS,
+                },
+              };
+              rosterRef.current = loaded;
+              setRoster(loaded);
+            }
+          }}
+          onParentSignedIn={(payload) => { setParentData(payload); setRole("family"); }}
         />
       )}
-      {role === "admin" && <AdminView roster={roster} saveRoster={saveRoster} onExit={() => setRole(null)} syncState={syncState} onForceSave={flush} />}
-      {role === "teacher" && <TeacherView roster={roster} saveRoster={saveRoster} teacherId={activeTeacherId} onExit={() => { setRole(null); setActiveTeacherId(null); }} />}
-      {role === "family" && <FamilyView roster={roster} studentId={activeStudentId} onExit={() => { setRole(null); setActiveStudentId(null); }} />}
+      {role === "admin" && (
+        <AdminView roster={roster} saveRoster={saveRoster} who={who} syncState={syncState} onForceSave={flush}
+          onExit={async () => { await staffLogout(); setRole(null); setWho(null); setRoster(EMPTY_ROSTER); }} />
+      )}
+      {role === "teacher" && (
+        <TeacherView roster={roster} saveRoster={saveRoster} teacherId={activeTeacherId} who={who}
+          onExit={async () => { await staffLogout(); setRole(null); setWho(null); setActiveTeacherId(null); setRoster(EMPTY_ROSTER); }} />
+      )}
+      {role === "family" && (
+        <ParentView payload={parentData} onExit={() => { setParentData(null); setRole(null); }} />
+      )}
     </Shell>
   );
 }
@@ -511,40 +555,40 @@ const getAttendanceFor = (roster, classId) => roster.attendance?.[classId] || {}
 const setAttendanceFor = (roster, classId, log) => ({ ...roster, attendance: { ...roster.attendance, [classId]: log } });
 
 // ================= ROLE GATE =================
-function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFamily }) {
+function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
   const [step, setStep] = useState("root");
+  const [creds, setCreds] = useState({ username: "", password: "" });
   const [adm, setAdm] = useState("");
   const [pin, setPin] = useState("");
-  const [creds, setCreds] = useState({ username: "", password: "" });
-  const [adminPass, setAdminPass] = useState("");
   const [err, setErr] = useState("");
-  const [showReset, setShowReset] = useState(false);
-  const [resetConfirm, setResetConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const tryTeacher = () => {
-    const t = roster.teachers.find((x) => x.username?.toLowerCase() === creds.username.trim().toLowerCase());
-    if (!t || t.password !== creds.password) return setErr("Username or password not recognized.");
-    setErr(""); onEnterTeacher(t.id);
-  };
-  const tryAdmin = () => {
-    if (adminPass !== (roster.settings?.adminPassword || DEFAULT_ADMIN_PASSWORD)) return setErr("Incorrect passcode.");
-    setErr(""); onEnterAdmin();
-  };
-  const doReset = async () => {
-    if (resetConfirm.trim().toUpperCase() !== "RESET") return setErr('Type RESET (in capitals) to confirm.');
-    await saveRoster({ ...roster, settings: { ...roster.settings, adminPassword: DEFAULT_ADMIN_PASSWORD } }, `Passcode reset to ${DEFAULT_ADMIN_PASSWORD}`);
-    setShowReset(false); setResetConfirm(""); setErr("");
+  // One sign-in for all staff. The database decides whether this person is
+  // an admin or a teacher — the app no longer takes their word for it.
+  const signIn = async () => {
+    if (!creds.username.trim() || !creds.password) return setErr("Enter your username and password.");
+    setBusy(true); setErr("");
+    try {
+      const session = await staffLogin(creds.username, creds.password);
+      if (!session) { setErr("Username or password not recognised."); setBusy(false); return; }
+      await onStaffSignedIn(session);
+    } catch (e) {
+      setErr(isOffline() ? "You are offline — sign in once with a connection." : "Could not sign in. Try again.");
+      setBusy(false);
+    }
   };
 
-  const tryFamily = () => {
-    const key = adm.trim().toLowerCase();
-    const st = roster.students.find((x) => x.id.toLowerCase() === key || (x.admNo || "").toLowerCase() === key);
-    if (!st) return setErr("Admission number not found.");
-    const expected = String(st.pin || "").trim();
-    if (!expected) return setErr("No PIN set for this student yet — ask the school office.");
-    if (pin.trim() !== expected) return setErr("Incorrect PIN.");
-    setErr("");
-    onEnterFamily(st.id);
+  const parentSignIn = async () => {
+    if (!adm.trim() || !pin.trim()) return setErr("Enter the admission number and PIN.");
+    setBusy(true); setErr("");
+    try {
+      const payload = await parentLookup(adm.trim(), pin.trim());
+      if (!payload) { setErr("Admission number or PIN not recognised."); setBusy(false); return; }
+      onParentSignedIn(payload);
+    } catch (e) {
+      setErr(isOffline() ? "You are offline — a connection is needed to view results." : "Could not check those details.");
+      setBusy(false);
+    }
   };
 
   return (
@@ -565,7 +609,7 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
           <span className="rule" /><span style={{ fontFamily: FONT.mono, color: "#93A899", fontSize: 9.5, letterSpacing: 2, whiteSpace: "nowrap" }}>REPUBLIC OF KENYA</span><span className="rule" />
         </div>
         <div style={{ fontFamily: FONT.mono, color: "#93A899", fontSize: 9.5, letterSpacing: 2, marginTop: 5 }}>MINISTRY OF EDUCATION</div>
-        <h1 style={{ fontFamily: FONT.display, color: "#F7F5EF", fontSize: 25, margin: "12px 0 0", fontWeight: 700, lineHeight: 1.22, letterSpacing: 0.2 }}>{SCHOOL_NAME}</h1>
+        <h1 style={{ fontFamily: FONT.display, color: "#F7F5EF", fontSize: 25, margin: "12px 0 0", fontWeight: 700, lineHeight: 1.22 }}>{SCHOOL_NAME}</h1>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 9, padding: "4px 12px", borderRadius: 20, border: "1px solid #3E6350", background: "rgba(30,55,42,0.6)" }}>
           <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#E8B23D" }} />
           <span style={{ fontFamily: FONT.mono, color: "#E8B23D", fontSize: 11, letterSpacing: 0.8 }}>{SCHOOL_LOCATION}</span>
@@ -574,63 +618,49 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
 
       {step === "root" && (
         <div style={{ display: "grid", gap: 12 }}>
-          <RoleCard glyph="T" title="Teacher Login" desc="Mark attendance, enter CATs and exam results." onClick={() => { setStep("teacher"); setErr(""); }} />
-          <RoleCard glyph="A" title="Administration" desc="Classes, staff, students, fees and full reports." onClick={() => { setStep("admin"); setErr(""); }} />
-          <RoleCard glyph="P" title="Student / Parent" desc="Results with class position, attendance and fees." onClick={() => { setStep("family"); setErr(""); }} />
+          <RoleCard glyph="S" title="Staff Login" desc="Teachers and administration — sign in with your username." onClick={() => { setStep("staff"); setErr(""); }} />
+          <RoleCard glyph="P" title="Student / Parent" desc="Results with class position, attendance and fees." onClick={() => { setStep("parent"); setErr(""); }} />
         </div>
       )}
 
-      {step === "teacher" && (
+      {step === "staff" && (
         <div>
-          <button onClick={() => setStep("root")} style={backBtnStyle()}>← back</button>
+          <button onClick={() => { setStep("root"); setErr(""); }} style={backBtnStyle()}>← back</button>
           <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-            <input placeholder="Username" value={creds.username} onChange={(e) => setCreds({ ...creds, username: e.target.value })} onKeyDown={(e) => e.key === "Enter" && tryTeacher()} style={inputStyle()} />
-            <input placeholder="Password" type="password" value={creds.password} onChange={(e) => setCreds({ ...creds, password: e.target.value })} onKeyDown={(e) => e.key === "Enter" && tryTeacher()} style={inputStyle()} />
+            <input placeholder="Username" autoCapitalize="none" value={creds.username}
+              onChange={(e) => setCreds({ ...creds, username: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && signIn()} style={inputStyle()} />
+            <input placeholder="Password" type="password" value={creds.password}
+              onChange={(e) => setCreds({ ...creds, password: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && signIn()} style={inputStyle()} />
             {err && <div style={{ color: "#E8967D", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
-            <button onClick={tryTeacher} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E" }}>Sign in</button>
+            <button onClick={signIn} disabled={busy} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E", opacity: busy ? 0.6 : 1 }}>
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#7B9585", marginTop: 4, lineHeight: 1.5 }}>
+              Forgotten your password? The school administrator can set a new one.
+            </div>
           </div>
         </div>
       )}
 
-      {step === "admin" && !showReset && (
+      {step === "parent" && (
         <div>
-          <button onClick={() => setStep("root")} style={backBtnStyle()}>← back</button>
+          <button onClick={() => { setStep("root"); setErr(""); }} style={backBtnStyle()}>← back</button>
           <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-            <input placeholder="Admin passcode" type="password" value={adminPass} onChange={(e) => setAdminPass(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryAdmin()} style={inputStyle()} />
-            {err && <div style={{ color: "#E8967D", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
-            <button onClick={tryAdmin} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E" }}>Enter</button>
-            <button onClick={() => { setShowReset(true); setErr(""); }} style={{ ...backBtnStyle(), marginTop: 4, textAlign: "left" }}>Forgot passcode?</button>
-          </div>
-        </div>
-      )}
-
-      {step === "admin" && showReset && (
-        <div>
-          <button onClick={() => { setShowReset(false); setErr(""); }} style={backBtnStyle()}>← back</button>
-          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-            <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#B8C4B9" }}>This resets the admin passcode to <strong>{DEFAULT_ADMIN_PASSWORD}</strong>. Change it again once you're in.</div>
-            <input placeholder='Type "RESET" to confirm' value={resetConfirm} onChange={(e) => setResetConfirm(e.target.value)} style={inputStyle()} />
-            {err && <div style={{ color: "#E8967D", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
-            <button onClick={doReset} style={{ ...primaryBtn(), background: "#B84C3E" }}>Reset passcode</button>
-          </div>
-        </div>
-      )}
-
-      {step === "family" && (
-        <div>
-          <button onClick={() => setStep("root")} style={backBtnStyle()}>← back</button>
-          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#A8BCAC", lineHeight: 1.5, marginBottom: 2 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#A8BCAC", lineHeight: 1.5 }}>
               Enter the admission number and PIN printed on your child's report card.
             </div>
-            <input placeholder="Admission number (e.g. STU/2026/001)" value={adm}
-              onChange={(e) => setAdm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryFamily()} style={inputStyle()} />
+            <input placeholder="Admission number (e.g. STU/2026/001)" autoCapitalize="characters" value={adm}
+              onChange={(e) => setAdm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && parentSignIn()} style={inputStyle()} />
             <input placeholder="PIN" type="password" inputMode="numeric" value={pin}
-              onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryFamily()} style={inputStyle()} />
+              onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === "Enter" && parentSignIn()} style={inputStyle()} />
             {err && <div style={{ color: "#E8967D", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
-            <button onClick={tryFamily} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E" }}>View results</button>
-            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#7B9585", marginTop: 4, lineHeight: 1.5 }}>
-              Lost the PIN? Ask the school office — Admin can look it up or set a new one.
+            <button onClick={parentSignIn} disabled={busy} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E", opacity: busy ? 0.6 : 1 }}>
+              {busy ? "Checking…" : "View results"}
+            </button>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#7B9585", marginTop: 4 }}>
+              Lost the PIN? Ask the school office.
             </div>
           </div>
         </div>
@@ -669,7 +699,7 @@ function RoleCard({ title, desc, onClick, glyph }) {
 }
 
 // ================= ADMIN =================
-function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
+function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) {
   const [tab, setTab] = useState("overview");
   const [newClass, setNewClass] = useState("");
   const [newSubject, setNewSubject] = useState("");
@@ -742,12 +772,14 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
     <div>
       {topBar("Admin", onExit)}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["overview", "approvals", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "year end", "backup", "settings"]} active={tab} onChange={setTab} />
+        <TabBar tabs={["overview", "approvals", "logins", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "year end", "backup", "settings"]} active={tab} onChange={setTab} />
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
 
           {tab === "overview" && <AdminOverview roster={roster} />}
 
           {tab === "approvals" && <Approvals roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "logins" && <StaffAccounts roster={roster} who={who} />}
 
           {tab === "classes" && (
             <div>
@@ -926,10 +958,9 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
           {tab === "settings" && (
             <div>
               <SectionTitle>Settings</SectionTitle>
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 8 }}>Admin passcode</div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                <input value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} placeholder="New admin passcode" style={{ ...darkInput(), flex: 1 }} />
-                <button onClick={() => { if (newAdminPass.trim()) { saveRoster({ ...roster, settings: { ...roster.settings, adminPassword: newAdminPass.trim() } }, "Passcode updated"); setNewAdminPass(""); } }} style={primaryBtn()}>Update</button>
+              <div style={{ padding: "10px 12px", borderRadius: 4, background: "#E4F0E8", border: "1px solid #B8D9C4", fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginBottom: 20 }}>
+                Passwords now live in the <strong>Logins</strong> tab, stored encrypted. The old shared
+                passcode has been retired.
               </div>
 
               <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 8 }}>Pass mark (a student passes at or above this average)</div>
@@ -1539,25 +1570,41 @@ function TeacherAttendance({ roster, saveRoster, classId, students }) {
 }
 
 // ================= FAMILY =================
-function FamilyView({ roster, studentId, onExit }) {
-  const student = roster.students.find((s) => s.id === studentId);
+// Parents only ever receive their own child's payload from the database,
+// so this view never has access to the rest of the school.
+function ParentView({ payload, onExit }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
   const [printDoc, setPrintDoc] = useState(null);
-  if (!student) return <div style={{ color: "#F5F3EE", padding: 30 }}>Student not found. <button onClick={onExit} style={backBtnStyle()}>go back</button></div>;
+  if (!payload) return <div style={{ color: "#F5F3EE", padding: 30 }}>Session ended. <button onClick={onExit} style={backBtnStyle()}>go back</button></div>;
 
-  const cur = roster.settings.currency;
-  const passMark = roster.settings.passMark || 50;
-  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
-  const { approved, grid } = getMarksFor(roster, student.classId, term);
+  const student = payload.student;
+  const settings = payload.settings || {};
+  const cur = settings.currency || "KSh";
+  const passMark = settings.passMark || 50;
+  const weights = settings.weights || DEFAULT_WEIGHTS;
+  const subjects = payload.subjects || [];
+
+  // shim so the shared print components can be reused unchanged
+  const roster = {
+    classes: [{ id: payload.classId, name: payload.className }],
+    students: (payload.classmates || []).map((c) => ({ id: c.id, classId: payload.classId })),
+    subjects,
+    settings: { currency: cur, passMark, weights, periods: settings.periods || DEFAULT_PERIODS },
+    timetable: { [payload.classId]: payload.timetable || {} },
+    teachers: [],
+  };
+
+  const rec = (payload.marks || {})[termKey(term)];
+  const approved = !!rec;
+  const grid = rec?.grid || {};
   const termMarks = approved ? (grid[student.id] || {}) : {};
-  const classmates = roster.students.filter((s) => s.classId === student.classId);
-  const ranked = approved ? classPositions(grid, classmates, roster.subjects, weights) : [];
+  const ranked = approved ? classPositions(grid, roster.students, subjects, weights) : [];
   const rank = approved ? positionOf(ranked, student.id) : null;
   const avg = rank ? rank.average : null;
 
-  const classLog = getAttendanceFor(roster, student.classId);
-  const log = [...Array(30)].map((_, i) => {
-    const d = new Date(); d.setDate(d.getDate() - i);
+  const classLog = payload.attendance || {};
+  const log = [...Array(30)].map((_, i2) => {
+    const d = new Date(); d.setDate(d.getDate() - i2);
     const iso = d.toISOString().slice(0, 10);
     return { d: iso, status: classLog[iso]?.[student.id] };
   }).filter((r) => r.status);
@@ -1565,7 +1612,7 @@ function FamilyView({ roster, studentId, onExit }) {
   const rate = log.length ? Math.round((presentDays / log.length) * 100) : null;
   const due = student.feeDue || 0, paid = student.feePaid || 0, balance = due - paid;
 
-  if (printDoc === "timetable") return <TimetableDoc roster={roster} classId={student.classId} onBack={() => setPrintDoc(null)} />;
+  if (printDoc === "timetable") return <TimetableDoc roster={roster} classId={payload.classId} onBack={() => setPrintDoc(null)} />;
   if (printDoc === "invoice") return <InvoiceDoc roster={roster} student={student} onBack={() => setPrintDoc(null)} />;
   if (printDoc === "report") return <ReportDoc roster={roster} student={student} term={term} termMarks={termMarks} avg={avg} rank={rank} rate={rate} onBack={() => setPrintDoc(null)} />;
 
@@ -1578,7 +1625,7 @@ function FamilyView({ roster, studentId, onExit }) {
             <div>
               <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368" }}>{student.id}</div>
               <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600, color: "#22304A" }}>{student.name}</div>
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>{classNameOf(roster, student.classId)}{student.parentName ? ` · Guardian: ${student.parentName}` : ""}</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>{payload.className}{student.parentName ? ` · Guardian: ${student.parentName}` : ""}</div>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <StatCard label="Attendance" value={rate === null ? "—" : `${rate}%`} />
@@ -1611,11 +1658,9 @@ function FamilyView({ roster, studentId, onExit }) {
               <div style={{ overflowX: "auto", marginBottom: 10 }}>
                 <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 320 }}>
                   <thead>
-                    <tr>
-                      {["Subject", "CAT 1", "CAT 2", "Exam", "Final", "Gr"].map((h, k) => (
-                        <th key={k} style={{ borderBottom: "1px solid #E4DFCF", padding: "6px 7px", textAlign: k === 0 ? "left" : "right", fontFamily: FONT.mono, fontSize: 9, textTransform: "uppercase", color: "#8A8368", letterSpacing: 0.4 }}>{h}</th>
-                      ))}
-                    </tr>
+                    <tr>{["Subject", "CAT 1", "CAT 2", "Exam", "Final", "Gr"].map((h, k) => (
+                      <th key={k} style={{ borderBottom: "1px solid #E4DFCF", padding: "6px 7px", textAlign: k === 0 ? "left" : "right", fontFamily: FONT.mono, fontSize: 9, textTransform: "uppercase", color: "#8A8368" }}>{h}</th>
+                    ))}</tr>
                   </thead>
                   <tbody>
                     {Object.keys(termMarks).map((subject) => {
@@ -1639,7 +1684,7 @@ function FamilyView({ roster, studentId, onExit }) {
               </div>
               {avg !== null && (
                 <div style={{ padding: "10px 12px", borderRadius: 3, background: avg >= passMark ? "#E4F0E8" : "#F7E4E1", border: `1px solid ${avg >= passMark ? "#B8D9C4" : "#E8C4BD"}`, fontFamily: FONT.body, fontSize: 14, color: "#22304A" }}>
-                  Average <strong>{avg}/100</strong> · grade <strong>{gradeOf(avg)}</strong> — <strong style={{ color: avg >= passMark ? "#3F7A5C" : "#B84C3E" }}>{avg >= passMark ? "PASS" : "FAIL"}</strong> <span style={{ color: "#8A8368", fontSize: 12 }}>(pass mark {passMark})</span>
+                  Average <strong>{avg}/100</strong> · grade <strong>{gradeOf(avg)}</strong> — <strong style={{ color: avg >= passMark ? "#3F7A5C" : "#B84C3E" }}>{avg >= passMark ? "PASS" : "FAIL"}</strong>
                 </div>
               )}
             </div>
@@ -1657,508 +1702,6 @@ function FamilyView({ roster, studentId, onExit }) {
             ))}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-
-
-// ---------- Admin: results waiting for approval ----------
-function Approvals({ roster, saveRoster }) {
-  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
-  const pending = [];
-  Object.entries(roster.marks || {}).forEach(([classId, terms]) => {
-    Object.entries(terms || {}).forEach(([tKey, rec]) => {
-      const st = statusOf(rec);
-      if (st === "submitted") pending.push({ classId, tKey, rec });
-    });
-  });
-
-  const act = (classId, tKey, rec, status, msg, note) => {
-    const marks = { ...roster.marks, [classId]: { ...roster.marks[classId], [tKey]: { ...rec, status, note: note ?? "", approved: status === "approved", approvedAt: status === "approved" ? todayISO() : rec.approvedAt } } };
-    saveRoster({ ...roster, marks }, msg);
-  };
-
-  return (
-    <div>
-      <SectionTitle>Approvals</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
-        Results a teacher has sent for approval. Nothing reaches students or parents until you approve it.
-      </div>
-
-      {pending.length === 0 && (
-        <div style={{ padding: "14px 15px", borderRadius: 5, background: "#F5F1E6", border: "1px solid #E4DFCF", fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
-          Nothing waiting for approval right now.
-        </div>
-      )}
-
-      <div style={{ display: "grid", gap: 10 }}>
-        {pending.map(({ classId, tKey, rec }) => {
-          const studentsIn = roster.students.filter((s) => s.classId === classId);
-          const ranked = classPositions(rec.grid || {}, studentsIn, roster.subjects, weights);
-          return (
-            <div key={classId + tKey} style={{ background: "#F5F1E6", border: "1px solid #BCCAE6", borderLeft: "4px solid #3B5998", borderRadius: 5, padding: "12px 14px" }}>
-              <div style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 600, color: "#22304A" }}>
-                {classNameOf(roster, classId)} — {tKey.replace(/_/g, " ")}
-              </div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552", marginTop: 3 }}>
-                Sent by {rec.submittedBy || "a teacher"}{rec.submittedAt ? " · " + fmtDate(rec.submittedAt) : ""} · {ranked.length} student{ranked.length === 1 ? "" : "s"} with results
-              </div>
-
-              {ranked.length > 0 && (
-                <div style={{ display: "grid", gap: 3, margin: "9px 0 11px" }}>
-                  {ranked.slice(0, 5).map((r) => (
-                    <div key={r.student.id} style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT.body, fontSize: 12.5, color: "#22304A" }}>
-                      <span><span style={{ fontFamily: FONT.mono, color: "#8A8368", marginRight: 6 }}>#{r.position}</span>{r.student.name}</span>
-                      <span style={{ fontFamily: FONT.mono, fontWeight: 700, color: gradeInk(r.average) }}>{r.average} {gradeOf(r.average)}</span>
-                    </div>
-                  ))}
-                  {ranked.length > 5 && <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368" }}>…and {ranked.length - 5} more</div>}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => act(classId, tKey, rec, "approved", "Approved & published")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve &amp; publish</button>
-                <button onClick={() => {
-                  const note = window.prompt("Message to the teacher (optional):", "") || "";
-                  act(classId, tKey, rec, "returned", "Returned to teacher", note);
-                }} style={{ ...primaryBtn(), background: "#B84C3E" }}>Return to teacher</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-
-// ---------- Admin: end of year — promote, archive, audit trail ----------
-function YearEnd({ roster, saveRoster }) {
-  const [view, setView] = useState("promote");
-  const [map, setMap] = useState({}); // classId -> destination classId | "graduate" | ""
-  const year = new Date().getFullYear();
-
-  const promote = () => {
-    const moves = Object.entries(map).filter(([, dest]) => dest);
-    if (moves.length === 0) return;
-    const graduating = roster.students.filter((s) => map[s.classId] === "graduate").length;
-    const moving = roster.students.filter((s) => map[s.classId] && map[s.classId] !== "graduate").length;
-    if (!window.confirm(`Promote ${moving} student(s) and graduate ${graduating}? Marks and attendance stay archived against the old year.`)) return;
-
-    const students = roster.students
-      .filter((s) => map[s.classId] !== "graduate")
-      .map((s) => (map[s.classId] ? { ...s, classId: map[s.classId] } : s));
-    const graduates = roster.students.filter((s) => map[s.classId] === "graduate")
-      .map((s) => ({ ...s, graduatedYear: year }));
-
-    const next = {
-      ...roster,
-      students,
-      alumni: [...(roster.alumni || []), ...graduates],
-    };
-    saveRoster(logAction(next, "Admin", `Promoted ${moving}, graduated ${graduating} (${year})`), "Students promoted");
-    setMap({});
-  };
-
-  const archiveYear = () => {
-    if (!window.confirm(`Archive ${year}? A full copy is stored, then marks, attendance and duty are cleared so you can start a fresh year. Students, staff and classes stay.`)) return;
-    const snapshot = { marks: roster.marks, attendance: roster.attendance, staffAttendance: roster.staffAttendance, duty: roster.duty, students: roster.students };
-    const next = {
-      ...roster,
-      archives: [...(roster.archives || []), { year, savedAt: new Date().toISOString(), snapshot }],
-      marks: {}, attendance: {}, staffAttendance: {}, duty: [],
-      students: roster.students.map((s) => ({ ...s, feePaid: 0, payments: [] })),
-    };
-    saveRoster(logAction(next, "Admin", `Archived school year ${year}`), `${year} archived`);
-  };
-
-  const restore = (a) => {
-    if (!window.confirm(`Restore the ${a.year} archive? This replaces current marks, attendance and fees.`)) return;
-    const next = { ...roster, ...a.snapshot };
-    saveRoster(logAction(next, "Admin", `Restored archive ${a.year}`), `${a.year} restored`);
-  };
-
-  return (
-    <div>
-      <SectionTitle>End of year</SectionTitle>
-      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {[["promote", "Promote students"], ["archive", "Archive year"], ["audit", "Activity log"]].map(([v, label]) => (
-          <button key={v} onClick={() => setView(v)} style={{
-            padding: "6px 13px", borderRadius: 3, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
-            border: `1px solid ${view === v ? "#22304A" : "#D8D2C2"}`, background: view === v ? "#22304A" : "#fff", color: view === v ? "#fff" : "#6B6552",
-          }}>{label}</button>
-        ))}
-      </div>
-
-      {view === "promote" && (
-        <div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
-            Choose where each class moves to at the end of the year. Leave blank to keep a class where it is.
-          </div>
-          {roster.classes.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No classes yet.</div>}
-          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-            {roster.classes.map((c) => {
-              const count = roster.students.filter((s) => s.classId === c.id).length;
-              return (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "9px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
-                  <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", minWidth: 110 }}>
-                    {c.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({count})</span>
-                  </span>
-                  <span style={{ fontFamily: FONT.mono, color: "#8A8368" }}>→</span>
-                  <select value={map[c.id] || ""} onChange={(e) => setMap({ ...map, [c.id]: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 130 }}>
-                    <option value="">stays in {c.name}</option>
-                    {roster.classes.filter((x) => x.id !== c.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                    <option value="graduate">graduate / leave school</option>
-                  </select>
-                </div>
-              );
-            })}
-          </div>
-          <button onClick={promote} disabled={Object.values(map).filter(Boolean).length === 0} style={{ ...primaryBtn(), opacity: Object.values(map).filter(Boolean).length ? 1 : 0.5 }}>Promote students</button>
-          {(roster.alumni || []).length > 0 && (
-            <div style={{ marginTop: 18, fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552" }}>
-              {(roster.alumni || []).length} former student{(roster.alumni || []).length === 1 ? "" : "s"} on record.
-            </div>
-          )}
-        </div>
-      )}
-
-      {view === "archive" && (
-        <div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
-            Archiving stores a full copy of {year}, then clears marks, attendance, duty and fee payments so the new year starts clean. Students, staff and classes are kept. Take a Backup copy first as well.
-          </div>
-          <button onClick={archiveYear} style={{ ...primaryBtn(), background: "#B84C3E", marginBottom: 18 }}>Archive {year} and start fresh</button>
-
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>Archived years</div>
-          {(roster.archives || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>None yet.</div>}
-          <div style={{ display: "grid", gap: 6 }}>
-            {(roster.archives || []).slice().reverse().map((a) => (
-              <div key={a.year + a.savedAt} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3, flexWrap: "wrap", gap: 8 }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>
-                  {a.year} <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368" }}>· saved {fmtDate(a.savedAt.slice(0, 10))}</span>
-                </span>
-                <button onClick={() => restore(a)} style={{ background: "none", border: "none", color: "#22304A", fontFamily: FONT.mono, fontSize: 11.5 }}>restore</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {view === "audit" && (
-        <div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
-            Recent changes to results, fees and records — useful if a mark or payment is ever queried.
-          </div>
-          {(roster.audit || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Nothing logged yet.</div>}
-          <div style={{ display: "grid", gap: 4 }}>
-            {(roster.audit || []).slice(0, 120).map((a, i) => (
-              <div key={i} style={{ display: "flex", gap: 10, padding: "7px 11px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", minWidth: 128 }}>
-                  {new Date(a.ts).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                </span>
-                <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", flex: 1 }}>{a.action}</span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552" }}>{a.actor}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ================= TIMETABLE =================
-function TimetableAdmin({ roster, saveRoster }) {
-  const [classId, setClassId] = useState("");
-  const [entry, setEntry] = useState({ day: "Mon", periodId: "", subject: "", teacherId: "" });
-  const [showPeriods, setShowPeriods] = useState(false);
-  const [printing, setPrinting] = useState(false);
-  const periods = roster.settings.periods || DEFAULT_PERIODS;
-  const tt = getTimetable(roster, classId);
-
-  const addLesson = () => {
-    if (!classId || !entry.periodId || !entry.subject) return;
-    saveRoster(setLessonIn(roster, classId, entry.day, entry.periodId, { subject: entry.subject, teacherId: entry.teacherId || "" }), "Lesson added");
-    setEntry({ ...entry, subject: "", teacherId: "" });
-  };
-  const removeLesson = (day, periodId) => saveRoster(setLessonIn(roster, classId, day, periodId, null), "Lesson removed");
-
-  const updatePeriod = (id, field, value) => {
-    saveRoster({ ...roster, settings: { ...roster.settings, periods: periods.map((p) => p.id === id ? { ...p, [field]: value } : p) } });
-  };
-  const addPeriod = () => {
-    const n = periods.length + 1;
-    saveRoster({ ...roster, settings: { ...roster.settings, periods: [...periods, { id: "p" + Date.now(), label: String(n), time: "" }] } }, "Period added");
-  };
-  const removePeriod = (id) => saveRoster({ ...roster, settings: { ...roster.settings, periods: periods.filter((p) => p.id !== id) } }, "Period removed");
-
-  if (printing && classId) {
-    return <TimetableDoc roster={roster} classId={classId} onBack={() => setPrinting(false)} />;
-  }
-
-  return (
-    <div>
-      <SectionTitle>Class timetable</SectionTitle>
-      <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ ...darkInput(), marginBottom: 14, width: "100%", maxWidth: 320 }}>
-        <option value="">Choose a class…</option>
-        {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
-
-      {!classId && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Select a class to build its timetable.</div>}
-
-      {classId && (
-        <>
-          <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <select value={entry.day} onChange={(e) => setEntry({ ...entry, day: e.target.value })} style={{ ...darkInput(), minWidth: 110 }}>
-              {DAYS.map((d) => <option key={d} value={d}>{DAY_FULL[d]}</option>)}
-            </select>
-            <select value={entry.periodId} onChange={(e) => setEntry({ ...entry, periodId: e.target.value })} style={{ ...darkInput(), minWidth: 130 }}>
-              <option value="">Period…</option>
-              {periods.map((p) => <option key={p.id} value={p.id}>Period {p.label}{p.time ? ` (${p.time})` : ""}</option>)}
-            </select>
-          </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-            <select value={entry.subject} onChange={(e) => setEntry({ ...entry, subject: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
-              <option value="">Subject…</option>
-              {roster.subjects.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
-            </select>
-            <select value={entry.teacherId} onChange={(e) => setEntry({ ...entry, teacherId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
-              <option value="">Teacher (optional)…</option>
-              {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-            <button onClick={addLesson} disabled={!entry.periodId || !entry.subject} style={primaryBtn()}>Add lesson</button>
-          </div>
-
-          <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-            {DAYS.map((day) => {
-              const lessons = periods.map((p) => ({ p, l: tt[day]?.[p.id] })).filter((x) => x.l);
-              return (
-                <div key={day} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "10px 12px" }}>
-                  <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#22304A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
-                  {lessons.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#8A8368" }}>No lessons set.</div>}
-                  <div style={{ display: "grid", gap: 4 }}>
-                    {lessons.map(({ p, l }) => (
-                      <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#22304A" }}>
-                        <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", minWidth: 92 }}>P{p.label} {p.time}</span>
-                        <span style={{ fontWeight: 600 }}>{l.subject}</span>
-                        <span style={{ color: "#6B6552", fontSize: 12 }}>{l.teacherId ? roster.teachers.find((t) => t.id === l.teacherId)?.name || "" : ""}</span>
-                        <button onClick={() => removeLesson(day, p.id)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), marginBottom: 18 }}>Open printable timetable</button>
-
-          <div>
-            <button onClick={() => setShowPeriods(!showPeriods)} style={{ ...backBtnStyle(), color: "#22304A", fontSize: 12.5 }}>
-              {showPeriods ? "▾" : "▸"} Edit period times
-            </button>
-            {showPeriods && (
-              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                {periods.map((p) => (
-                  <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <input value={p.label} onChange={(e) => updatePeriod(p.id, "label", e.target.value)} style={{ ...darkInput(), width: 60, padding: "6px 8px" }} />
-                    <input value={p.time} onChange={(e) => updatePeriod(p.id, "time", e.target.value)} placeholder="8:00–8:40" style={{ ...darkInput(), flex: 1, minWidth: 120, padding: "6px 8px" }} />
-                    <button onClick={() => removePeriod(p.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
-                  </div>
-                ))}
-                <button onClick={addPeriod} style={{ ...primaryBtn(), justifySelf: "start" }}>Add period</button>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function TimetableDoc({ roster, classId, onBack }) {
-  const periods = roster.settings.periods || DEFAULT_PERIODS;
-  const tt = getTimetable(roster, classId);
-  const nameOf = (id) => roster.teachers.find((t) => t.id === id)?.name || "";
-
-  return (
-    <DocShell title="Class timetable" onBack={onBack}>
-      <DocHeader subtitle={`Class Timetable — ${classNameOf(roster, classId)}`} />
-      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 16 }}>
-        <thead>
-          <tr>
-            <th style={docTh}>Period</th>
-            {DAYS.map((d) => <th key={d} style={docTh}>{d}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {periods.map((p) => (
-            <tr key={p.id}>
-              <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5, whiteSpace: "nowrap" }}>
-                <strong>P{p.label}</strong>{p.time ? <div style={{ color: "#8A8368" }}>{p.time}</div> : null}
-              </td>
-              {DAYS.map((d) => {
-                const l = tt[d]?.[p.id];
-                return (
-                  <td key={d} style={{ ...docTd, fontSize: 11.5 }}>
-                    {l ? <><strong>{l.subject}</strong>{l.teacherId ? <div style={{ color: "#6B6552", fontSize: 10 }}>{nameOf(l.teacherId)}</div> : null}</> : <span style={{ color: "#C8C2B0" }}>—</span>}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 40 }}>
-        <div style={docSig}>Class Teacher's Signature</div>
-        <div style={docSig}>Principal's Signature</div>
-      </div>
-    </DocShell>
-  );
-}
-
-// ================= DUTY ROSTER =================
-function DutyRoster({ roster, saveRoster }) {
-  const [entry, setEntry] = useState({ weekStart: mondayOf(todayISO()), teacherId: "", note: "" });
-  const duty = [...(roster.duty || [])].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
-  const thisWeek = mondayOf(todayISO());
-
-  const add = () => {
-    if (!entry.teacherId || !entry.weekStart) return;
-    const rec = { id: genId("DTY", roster.duty || []), weekStart: mondayOf(entry.weekStart), teacherId: entry.teacherId, note: entry.note.trim() };
-    saveRoster({ ...roster, duty: [...(roster.duty || []), rec] }, "Duty added");
-    setEntry({ ...entry, teacherId: "", note: "" });
-  };
-  const remove = (id) => saveRoster({ ...roster, duty: (roster.duty || []).filter((d) => d.id !== id) }, "Duty removed");
-
-  const onDutyNow = duty.filter((d) => d.weekStart === thisWeek);
-
-  return (
-    <div>
-      <SectionTitle>Duty roster</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
-        Assign the teacher on duty for each week (weeks run Monday to Friday).
-      </div>
-
-      <div style={{
-        padding: "12px 14px", borderRadius: 5, marginBottom: 18,
-        background: onDutyNow.length ? "#E4F0E8" : "#F5F1E6",
-        border: `1px solid ${onDutyNow.length ? "#B8D9C4" : "#E4DFCF"}`,
-      }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", letterSpacing: 1 }}>THIS WEEK · {weekLabel(thisWeek)}</div>
-        {onDutyNow.length === 0
-          ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368", marginTop: 4 }}>Nobody assigned yet.</div>
-          : onDutyNow.map((d) => (
-              <div key={d.id} style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#22304A", marginTop: 3 }}>
-                {roster.teachers.find((t) => t.id === d.teacherId)?.name || "—"}
-                {d.note && <span style={{ fontFamily: FONT.body, fontSize: 12.5, fontWeight: 400, color: "#6B6552" }}> · {d.note}</span>}
-              </div>
-            ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        <input type="date" value={entry.weekStart} onChange={(e) => setEntry({ ...entry, weekStart: e.target.value })} style={{ ...darkInput(), minWidth: 150 }} />
-        <select value={entry.teacherId} onChange={(e) => setEntry({ ...entry, teacherId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 140 }}>
-          <option value="">Teacher on duty…</option>
-          {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
-        <input value={entry.note} onChange={(e) => setEntry({ ...entry, note: e.target.value })} placeholder="Note (optional) — e.g. assembly, games" style={{ ...darkInput(), flex: 1, minWidth: 160 }} />
-        <button onClick={add} disabled={!entry.teacherId} style={primaryBtn()}>Add duty</button>
-      </div>
-
-      {duty.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No duties assigned yet.</div>}
-      <div style={{ display: "grid", gap: 6 }}>
-        {duty.map((d) => {
-          const current = d.weekStart === thisWeek;
-          const past = d.weekStart < thisWeek;
-          return (
-            <div key={d.id} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
-              padding: "9px 12px", background: "#F5F1E6", borderRadius: 3,
-              border: `1px solid ${current ? "#3F7A5C" : "#E4DFCF"}`,
-              borderLeft: `4px solid ${current ? "#3F7A5C" : past ? "#D8D2C2" : "#C98A2C"}`,
-              opacity: past ? 0.75 : 1,
-            }}>
-              <span>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>
-                  {roster.teachers.find((t) => t.id === d.teacherId)?.name || "—"}
-                </span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", marginLeft: 8 }}>{weekLabel(d.weekStart)}</span>
-                {current && <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#3F7A5C", marginLeft: 8 }}>THIS WEEK</span>}
-                {d.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginTop: 2 }}>{d.note}</div>}
-              </span>
-              <button onClick={() => remove(d.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ---------- Teacher's own timetable + duty ----------
-function MyTimetable({ roster, teacher }) {
-  const periods = roster.settings.periods || DEFAULT_PERIODS;
-  const thisWeek = mondayOf(todayISO());
-  const myDuty = (roster.duty || []).filter((d) => d.teacherId === teacher.id && d.weekStart >= thisWeek)
-    .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
-
-  // every lesson across all classes assigned to this teacher, plus their own class
-  const rows = {};
-  DAYS.forEach((d) => { rows[d] = []; });
-  roster.classes.forEach((c) => {
-    const tt = getTimetable(roster, c.id);
-    DAYS.forEach((day) => {
-      periods.forEach((p) => {
-        const l = tt[day]?.[p.id];
-        if (l && (l.teacherId === teacher.id || (!l.teacherId && c.id === teacher.classId))) {
-          rows[day].push({ p, subject: l.subject, cls: c.name });
-        }
-      });
-    });
-  });
-  DAYS.forEach((d) => rows[d].sort((a, b) => periods.findIndex((x) => x.id === a.p.id) - periods.findIndex((x) => x.id === b.p.id)));
-  const hasAny = DAYS.some((d) => rows[d].length > 0);
-
-  return (
-    <div>
-      <SectionTitle>My timetable</SectionTitle>
-
-      {myDuty.length > 0 && (
-        <div style={{ padding: "11px 13px", borderRadius: 5, marginBottom: 16, background: myDuty[0].weekStart === thisWeek ? "#E4F0E8" : "#F5F1E6", border: `1px solid ${myDuty[0].weekStart === thisWeek ? "#B8D9C4" : "#E4DFCF"}` }}>
-          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", letterSpacing: 1 }}>YOUR DUTY WEEKS</div>
-          {myDuty.slice(0, 3).map((d) => (
-            <div key={d.id} style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", marginTop: 3 }}>
-              {weekLabel(d.weekStart)}
-              {d.weekStart === thisWeek && <strong style={{ color: "#3F7A5C" }}> — THIS WEEK</strong>}
-              {d.note && <span style={{ color: "#6B6552", fontSize: 12 }}> · {d.note}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!hasAny && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No lessons assigned to you yet — ask admin to build the class timetable.</div>}
-
-      <div style={{ display: "grid", gap: 10 }}>
-        {DAYS.filter((d) => rows[d].length > 0).map((day) => (
-          <div key={day} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "10px 12px" }}>
-            <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#22304A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
-            <div style={{ display: "grid", gap: 4 }}>
-              {rows[day].map((r, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#22304A" }}>
-                  <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", minWidth: 92 }}>P{r.p.label} {r.p.time}</span>
-                  <span style={{ fontWeight: 600 }}>{r.subject}</span>
-                  <span style={{ color: "#6B6552", fontSize: 12, marginLeft: "auto" }}>{r.cls}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
