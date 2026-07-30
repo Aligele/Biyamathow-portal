@@ -16,7 +16,8 @@ All 7 files sit at the **top level** — there are no folders to recreate.
 1. Extract the zip using your phone's **Files / My Files** app (tap the zip →
    Extract). You should see these 7 files:
    `package.json`, `vite.config.js`, `index.html`, `main.jsx`, `store.js`,
-   `App.jsx`, `README.md`
+   `App.jsx`, `README.md` — plus a `public` folder holding `robots.txt`,
+   `sitemap.xml` and `manifest.webmanifest`
 2. On GitHub, tap **+ → New repository**. Name it `biyamathow-portal`,
    keep it **Private** if you prefer, then **Create repository**.
 3. On the new empty repo page, tap **uploading an existing file**
@@ -107,6 +108,49 @@ attendance rate.
 
 **Printable documents** — fee invoice and full report card (CATs, exam, final,
 grade, remark, position, attendance, fees, grading key, signature lines).
+
+---
+
+## Parent access & privacy
+
+Student records are **not** publicly browsable. Each student gets a **4-digit PIN**,
+auto-generated when you add them. Parents sign in with the **admission number +
+PIN** and see only their own child.
+
+- Admin → **Students** shows each PIN, with a **new PIN** button to reset it
+- The PIN and admission number are printed at the bottom of the **report card**,
+  so parents get their login when they receive results
+- Anyone visiting the site sees only the login screen — no names, no lists
+
+**Honest limitation:** this stops casual snooping, which is what matters day to
+day. It is not bank-grade — the database key lives in the browser (that's how the
+app reads data), so a technically skilled person could still query the database
+directly. If that ever matters to you, the fix is tightening the Supabase row
+policies to require authentication.
+
+## Getting found on Google
+
+The site includes an SEO title, description, School structured data,
+`robots.txt`, `sitemap.xml` and a web app manifest.
+
+**After deploying, do these two things:**
+
+1. **Google Search Console** — https://search.google.com/search-console
+   - Add your site as a **URL prefix** property using your full Vercel address
+   - Verify with the **HTML tag** method: copy the `<meta name="google-site-verification" ...>`
+     tag it gives you into `index.html` inside `<head>`, re-upload, redeploy, then press Verify
+   - Then use **URL Inspection** → paste your homepage → **Request Indexing**
+
+2. **Fix the two placeholder URLs.** In `public/robots.txt` and
+   `public/sitemap.xml`, replace `https://biyamathow-school.vercel.app` with your
+   real address.
+
+Indexing usually takes a few days to two weeks. Because "Biyamathow" is a
+distinctive name, you should rank first for it once indexed.
+
+**A cleaner web address** helps a lot for a school. In Vercel → Settings →
+Domains you can attach something like `biyamathow.sc.ke` (Kenyan school domains
+are registered through a KENIC-accredited registrar).
 
 ---
 

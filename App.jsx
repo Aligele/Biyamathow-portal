@@ -407,7 +407,8 @@ const setAttendanceFor = (roster, classId, log) => ({ ...roster, attendance: { .
 // ================= ROLE GATE =================
 function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFamily }) {
   const [step, setStep] = useState("root");
-  const [search, setSearch] = useState("");
+  const [adm, setAdm] = useState("");
+  const [pin, setPin] = useState("");
   const [creds, setCreds] = useState({ username: "", password: "" });
   const [adminPass, setAdminPass] = useState("");
   const [err, setErr] = useState("");
@@ -429,7 +430,16 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
     setShowReset(false); setResetConfirm(""); setErr("");
   };
 
-  const matches = roster.students.filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
+  const tryFamily = () => {
+    const key = adm.trim().toLowerCase();
+    const st = roster.students.find((x) => x.id.toLowerCase() === key || (x.admNo || "").toLowerCase() === key);
+    if (!st) return setErr("Admission number not found.");
+    const expected = String(st.pin || "").trim();
+    if (!expected) return setErr("No PIN set for this student yet — ask the school office.");
+    if (pin.trim() !== expected) return setErr("Incorrect PIN.");
+    setErr("");
+    onEnterFamily(st.id);
+  };
 
   return (
     <>
@@ -503,14 +513,19 @@ function RoleGate({ roster, saveRoster, onEnterAdmin, onEnterTeacher, onEnterFam
       {step === "family" && (
         <div>
           <button onClick={() => setStep("root")} style={backBtnStyle()}>← back</button>
-          <input placeholder="Search student by name…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle(), marginTop: 12 }} />
-          <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-            {matches.map((s) => (
-              <button key={s.id} onClick={() => onEnterFamily(s.id)} style={{ textAlign: "left", background: "#243F31", border: "1px solid #345645", borderRadius: 4, padding: "12px 14px", color: "#F5F3EE", fontFamily: FONT.body, fontSize: 14 }}>
-                {s.name} · {classNameOf(roster, s.classId)}
-              </button>
-            ))}
-            {search && matches.length === 0 && <div style={{ fontFamily: FONT.body, color: "#B8C4B9", fontSize: 13 }}>No matching students.</div>}
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#A8BCAC", lineHeight: 1.5, marginBottom: 2 }}>
+              Enter the admission number and PIN printed on your child's report card.
+            </div>
+            <input placeholder="Admission number (e.g. STU-001-abc)" value={adm}
+              onChange={(e) => setAdm(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryFamily()} style={inputStyle()} />
+            <input placeholder="PIN" type="password" inputMode="numeric" value={pin}
+              onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === "Enter" && tryFamily()} style={inputStyle()} />
+            {err && <div style={{ color: "#E8967D", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
+            <button onClick={tryFamily} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E" }}>View results</button>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#7B9585", marginTop: 4, lineHeight: 1.5 }}>
+              Lost the PIN? Ask the school office — Admin can look it up or set a new one.
+            </div>
           </div>
         </div>
       )}
@@ -580,8 +595,9 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
   };
   const addStudent = () => {
     if (!newStudent.name.trim() || !newStudent.classId) return;
-    const s = { id: genId("STU", roster.students), name: newStudent.name.trim(), classId: newStudent.classId, parentName: newStudent.parentName.trim(), feeDue: Number(newStudent.feeDue) || 0, feePaid: 0, payments: [] };
-    saveRoster({ ...roster, students: [...roster.students, s] }, `Added ${s.name}`);
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const s = { id: genId("STU", roster.students), name: newStudent.name.trim(), classId: newStudent.classId, parentName: newStudent.parentName.trim(), feeDue: Number(newStudent.feeDue) || 0, feePaid: 0, payments: [], pin };
+    saveRoster({ ...roster, students: [...roster.students, s] }, `Added ${s.name} — PIN ${pin}`);
     setNewStudent({ name: "", classId: "", parentName: "", feeDue: "" });
   };
   const removeItem = (kind, id) => saveRoster({ ...roster, [kind]: roster[kind].filter((x) => x.id !== id) }, "Removed");
@@ -708,7 +724,32 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
                 <input value={newStudent.feeDue} onChange={(e) => setNewStudent({ ...newStudent, feeDue: e.target.value })} placeholder="Fee due" type="number" style={{ ...darkInput(), width: 100 }} />
                 <button onClick={addStudent} style={primaryBtn()}>Add student</button>
               </div>
-              <RowList items={roster.students} render={(s) => `${s.name} — ${classNameOf(roster, s.classId)}${s.parentName ? " · guardian: " + s.parentName : ""}`} onRemove={(id) => removeItem("students", id)} />
+              <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 8 }}>
+                Each student gets a PIN. Parents sign in with the admission number + PIN, so only they can see their child's results.
+              </div>
+              {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No students yet.</div>}
+              <div style={{ display: "grid", gap: 6 }}>
+                {roster.students.map((st) => (
+                  <div key={st.id} style={{ padding: "10px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                      <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>{st.name}</span>
+                      <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <span style={{ fontFamily: FONT.mono, fontSize: 12.5, background: "#fff", border: "1px solid #D8D2C2", borderRadius: 3, padding: "2px 8px", color: "#22304A" }}>
+                          PIN {st.pin || "—"}
+                        </span>
+                        <button onClick={() => {
+                          const np = String(Math.floor(1000 + Math.random() * 9000));
+                          saveRoster({ ...roster, students: roster.students.map((x) => x.id === st.id ? { ...x, pin: np } : x) }, `${st.name}'s new PIN: ${np}`);
+                        }} style={{ background: "none", border: "none", color: "#22304A", fontFamily: FONT.mono, fontSize: 11.5 }}>new PIN</button>
+                        <button onClick={() => removeItem("students", st.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
+                      </span>
+                    </div>
+                    <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", marginTop: 3 }}>
+                      {st.id} · {classNameOf(roster, st.classId)}{st.parentName ? " · guardian: " + st.parentName : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1612,8 +1653,13 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
         </div>
       </div>
 
-      <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, marginBottom: 20, fontSize: 11, color: "#6B6552", fontFamily: FONT.mono }}>
+      <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, marginBottom: 14, fontSize: 11, color: "#6B6552", fontFamily: FONT.mono }}>
         GRADING: A 80+ · A- 75 · B+ 70 · B 65 · B- 60 · C+ 55 · C 50 · C- 45 · D+ 40 · D 35 · D- 30 · E below 30
+      </div>
+
+      <div style={{ border: "1px dashed #B8B2A0", borderRadius: 4, padding: "9px 11px", marginBottom: 20, fontSize: 11.5, fontFamily: FONT.mono, color: "#22304A" }}>
+        PARENT PORTAL LOGIN — Admission No: <strong>{student.id}</strong> · PIN: <strong>{student.pin || "—"}</strong>
+        <div style={{ color: "#8A8368", marginTop: 3 }}>Keep this private. It shows only this student's records.</div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 30 }}>
