@@ -20,6 +20,17 @@ const nextAdmissionNo = (students) => {
   return prefix + String(max + 1).padStart(3, "0");
 };
 
+// Sequential receipt numbers, e.g. RCP/2026/001
+const nextReceiptNo = (roster) => {
+  const year = new Date().getFullYear();
+  let max = 0;
+  (roster.students || []).forEach((s) => (s.payments || []).forEach((p) => {
+    const m = String(p.receiptNo || "").match(/^RCP\/(\d{4})\/(\d+)$/);
+    if (m && m[1] === String(year)) max = Math.max(max, parseInt(m[2], 10));
+  }));
+  return `RCP/${year}/` + String(max + 1).padStart(3, "0");
+};
+
 const genId = (prefix, list) => {
   const n = (list?.length || 0) + 1;
   return `${prefix}-${String(n).padStart(3, "0")}-${Math.random().toString(36).slice(2, 5)}`;
@@ -57,7 +68,14 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v7 · approvals + timetable";
+const APP_VERSION = "v8 · safe-save + audit";
+
+// Keeps the last 400 actions so the school can see who changed what.
+const logAction = (roster, actor, action) => {
+  const entry = { ts: new Date().toISOString(), actor: actor || "—", action };
+  const audit = [entry, ...(roster.audit || [])].slice(0, 400);
+  return { ...roster, audit };
+};
 const SCHOOL_NAME = "Biyamathow Mixed Day and Boarding Senior School";
 const SCHOOL_LOCATION = "Sabuli, Wajir County";
 const DEFAULT_ADMIN_PASSWORD = "admin123";
@@ -170,6 +188,8 @@ const EMPTY_ROSTER = {
   marks: {},           // { [classId]: { [termKey]: { approved, grid: { [studentId]: { [subject]: {cat1,cat2,exam} } } } } }
   timetable: {},       // { [classId]: { [day]: { [periodId]: { subject, teacherId } } } }
   duty: [],            // [ { id, weekStart, teacherId, note } ]
+  audit: [],           // [ { ts, actor, action } ] — who changed what
+  archives: [],        // [ { year, savedAt, snapshot } ] — closed school years
   settings: { adminPassword: DEFAULT_ADMIN_PASSWORD, currency: "KSh", passMark: 50, weights: DEFAULT_WEIGHTS, periods: DEFAULT_PERIODS },
 };
 
@@ -201,6 +221,8 @@ export default function SchoolRegister() {
             marks: p.marks || {},
             timetable: p.timetable || {},
             duty: p.duty || [],
+            audit: p.audit || [],
+            archives: p.archives || [],
             settings: {
               ...EMPTY_ROSTER.settings, ...(p.settings || {}),
               weights: { ...DEFAULT_WEIGHTS, ...(p.settings?.weights || {}) },
@@ -238,7 +260,8 @@ export default function SchoolRegister() {
     savingRef.current = true;
     setSyncState("saving");
     try {
-      await persistRoster(snapshot);
+      const merged = await persistRoster(snapshot);
+      if (merged) { rosterRef.current = merged; setRoster(merged); } // another device had saved; keep both sets of changes
       savingRef.current = false;
       if (rosterRef.current === snapshot) {
         setSyncState("saved");
@@ -681,7 +704,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
     if (!newStudent.name.trim() || !newStudent.classId) return;
     const pin = String(Math.floor(1000 + Math.random() * 9000));
     const s = { id: nextAdmissionNo(roster.students), name: newStudent.name.trim(), classId: newStudent.classId, parentName: newStudent.parentName.trim(), feeDue: Number(newStudent.feeDue) || 0, feePaid: 0, payments: [], pin };
-    saveRoster({ ...roster, students: [...roster.students, s] }, `Added ${s.name} — PIN ${pin}`);
+    saveRoster(logAction({ ...roster, students: [...roster.students, s] }, "Admin", `Added student ${s.name} (${s.id})`), `Added ${s.name} — PIN ${pin}`);
     setNewStudent({ name: "", classId: "", parentName: "", feeDue: "" });
   };
   const removeItem = (kind, id) => saveRoster({ ...roster, [kind]: roster[kind].filter((x) => x.id !== id) }, "Removed");
@@ -705,11 +728,13 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
     const amt = Number(payment.amount);
     if (!payment.studentId || !amt || amt <= 0) return;
     const st = roster.students.find((s) => s.id === payment.studentId);
-    saveRoster({
+    const receiptNo = nextReceiptNo(roster);
+    const next = {
       ...roster,
       students: roster.students.map((s) => s.id === payment.studentId
-        ? { ...s, feePaid: (s.feePaid || 0) + amt, payments: [...(s.payments || []), { date: todayISO(), amount: amt }] } : s),
-    }, `Recorded ${cur}${money(amt)} from ${st?.name}`);
+        ? { ...s, feePaid: (s.feePaid || 0) + amt, payments: [...(s.payments || []), { date: todayISO(), amount: amt, receiptNo }] } : s),
+    };
+    saveRoster(logAction(next, "Admin", `Receipt ${receiptNo} — ${cur}${money(amt)} from ${st?.name}`), `${receiptNo} · ${cur}${money(amt)} from ${st?.name}`);
     setPayment({ studentId: "", amount: "" });
   };
 
@@ -717,7 +742,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
     <div>
       {topBar("Admin", onExit)}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["overview", "approvals", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "backup", "settings"]} active={tab} onChange={setTab} />
+        <TabBar tabs={["overview", "approvals", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "year end", "backup", "settings"]} active={tab} onChange={setTab} />
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
 
           {tab === "overview" && <AdminOverview roster={roster} />}
@@ -893,6 +918,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
           {tab === "duty" && <DutyRoster roster={roster} saveRoster={saveRoster} />}
 
           {tab === "reports" && <AdminReports roster={roster} />}
+
+          {tab === "year end" && <YearEnd roster={roster} saveRoster={saveRoster} />}
 
           {tab === "backup" && <AdminBackup roster={roster} saveRoster={saveRoster} syncState={syncState} onForceSave={onForceSave} />}
 
@@ -1233,11 +1260,16 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
   const weights = roster.settings.weights || DEFAULT_WEIGHTS;
   const passMark = roster.settings.passMark || 50;
 
-  const writeRecord = (patch, msg) =>
-    saveRoster(setMarksFor(roster, classId, term, {
+  const writeRecord = (patch, msg) => {
+    const next = setMarksFor(roster, classId, term, {
       ...record, grid, ...patch,
       approved: (patch.status || status) === "approved",
-    }), msg);
+    });
+    const who = role === "teacher" ? (actorName || "Teacher") : "Admin";
+    const verb = { submitted: "sent for approval", approved: "APPROVED & published", returned: "returned to teacher", draft: "unpublished/withdrew" }[patch.status];
+    const logged = verb ? logAction(next, who, `${classNameOf(roster, classId)} ${term} results ${verb}`) : next;
+    return saveRoster(logged, msg);
+  };
 
   const addMark = () => {
     if (locked) return;
@@ -1701,6 +1733,143 @@ function Approvals({ roster, saveRoster }) {
   );
 }
 
+
+// ---------- Admin: end of year — promote, archive, audit trail ----------
+function YearEnd({ roster, saveRoster }) {
+  const [view, setView] = useState("promote");
+  const [map, setMap] = useState({}); // classId -> destination classId | "graduate" | ""
+  const year = new Date().getFullYear();
+
+  const promote = () => {
+    const moves = Object.entries(map).filter(([, dest]) => dest);
+    if (moves.length === 0) return;
+    const graduating = roster.students.filter((s) => map[s.classId] === "graduate").length;
+    const moving = roster.students.filter((s) => map[s.classId] && map[s.classId] !== "graduate").length;
+    if (!window.confirm(`Promote ${moving} student(s) and graduate ${graduating}? Marks and attendance stay archived against the old year.`)) return;
+
+    const students = roster.students
+      .filter((s) => map[s.classId] !== "graduate")
+      .map((s) => (map[s.classId] ? { ...s, classId: map[s.classId] } : s));
+    const graduates = roster.students.filter((s) => map[s.classId] === "graduate")
+      .map((s) => ({ ...s, graduatedYear: year }));
+
+    const next = {
+      ...roster,
+      students,
+      alumni: [...(roster.alumni || []), ...graduates],
+    };
+    saveRoster(logAction(next, "Admin", `Promoted ${moving}, graduated ${graduating} (${year})`), "Students promoted");
+    setMap({});
+  };
+
+  const archiveYear = () => {
+    if (!window.confirm(`Archive ${year}? A full copy is stored, then marks, attendance and duty are cleared so you can start a fresh year. Students, staff and classes stay.`)) return;
+    const snapshot = { marks: roster.marks, attendance: roster.attendance, staffAttendance: roster.staffAttendance, duty: roster.duty, students: roster.students };
+    const next = {
+      ...roster,
+      archives: [...(roster.archives || []), { year, savedAt: new Date().toISOString(), snapshot }],
+      marks: {}, attendance: {}, staffAttendance: {}, duty: [],
+      students: roster.students.map((s) => ({ ...s, feePaid: 0, payments: [] })),
+    };
+    saveRoster(logAction(next, "Admin", `Archived school year ${year}`), `${year} archived`);
+  };
+
+  const restore = (a) => {
+    if (!window.confirm(`Restore the ${a.year} archive? This replaces current marks, attendance and fees.`)) return;
+    const next = { ...roster, ...a.snapshot };
+    saveRoster(logAction(next, "Admin", `Restored archive ${a.year}`), `${a.year} restored`);
+  };
+
+  return (
+    <div>
+      <SectionTitle>End of year</SectionTitle>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {[["promote", "Promote students"], ["archive", "Archive year"], ["audit", "Activity log"]].map(([v, label]) => (
+          <button key={v} onClick={() => setView(v)} style={{
+            padding: "6px 13px", borderRadius: 3, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
+            border: `1px solid ${view === v ? "#22304A" : "#D8D2C2"}`, background: view === v ? "#22304A" : "#fff", color: view === v ? "#fff" : "#6B6552",
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {view === "promote" && (
+        <div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+            Choose where each class moves to at the end of the year. Leave blank to keep a class where it is.
+          </div>
+          {roster.classes.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No classes yet.</div>}
+          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+            {roster.classes.map((c) => {
+              const count = roster.students.filter((s) => s.classId === c.id).length;
+              return (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "9px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", minWidth: 110 }}>
+                    {c.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({count})</span>
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, color: "#8A8368" }}>→</span>
+                  <select value={map[c.id] || ""} onChange={(e) => setMap({ ...map, [c.id]: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 130 }}>
+                    <option value="">stays in {c.name}</option>
+                    {roster.classes.filter((x) => x.id !== c.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    <option value="graduate">graduate / leave school</option>
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={promote} disabled={Object.values(map).filter(Boolean).length === 0} style={{ ...primaryBtn(), opacity: Object.values(map).filter(Boolean).length ? 1 : 0.5 }}>Promote students</button>
+          {(roster.alumni || []).length > 0 && (
+            <div style={{ marginTop: 18, fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552" }}>
+              {(roster.alumni || []).length} former student{(roster.alumni || []).length === 1 ? "" : "s"} on record.
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === "archive" && (
+        <div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+            Archiving stores a full copy of {year}, then clears marks, attendance, duty and fee payments so the new year starts clean. Students, staff and classes are kept. Take a Backup copy first as well.
+          </div>
+          <button onClick={archiveYear} style={{ ...primaryBtn(), background: "#B84C3E", marginBottom: 18 }}>Archive {year} and start fresh</button>
+
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>Archived years</div>
+          {(roster.archives || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>None yet.</div>}
+          <div style={{ display: "grid", gap: 6 }}>
+            {(roster.archives || []).slice().reverse().map((a) => (
+              <div key={a.year + a.savedAt} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3, flexWrap: "wrap", gap: 8 }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>
+                  {a.year} <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368" }}>· saved {fmtDate(a.savedAt.slice(0, 10))}</span>
+                </span>
+                <button onClick={() => restore(a)} style={{ background: "none", border: "none", color: "#22304A", fontFamily: FONT.mono, fontSize: 11.5 }}>restore</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === "audit" && (
+        <div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+            Recent changes to results, fees and records — useful if a mark or payment is ever queried.
+          </div>
+          {(roster.audit || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Nothing logged yet.</div>}
+          <div style={{ display: "grid", gap: 4 }}>
+            {(roster.audit || []).slice(0, 120).map((a, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, padding: "7px 11px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", minWidth: 128 }}>
+                  {new Date(a.ts).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", flex: 1 }}>{a.action}</span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552" }}>{a.actor}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ================= TIMETABLE =================
 function TimetableAdmin({ roster, saveRoster }) {
   const [classId, setClassId] = useState("");
@@ -2067,7 +2236,7 @@ function InvoiceDoc({ roster, student, onBack }) {
             <tr key={i}>
               <td style={docTd}>{i + 1}</td>
               <td style={docTd}>{fmtDate(p.date)}</td>
-              <td style={{ ...docTd, color: "#6B6552" }}>Fee payment</td>
+              <td style={{ ...docTd, color: "#6B6552" }}>{p.receiptNo ? `Receipt ${p.receiptNo}` : "Fee payment"}</td>
               <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontWeight: 700 }}>{cur}{money(p.amount)}</td>
             </tr>
           ))}
