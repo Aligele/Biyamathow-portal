@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { loadRoster, saveRoster as persistRoster, isShared } from "./store.js";
+import { loadRoster, saveRoster as persistRoster, isShared, isOffline, hasPendingChanges } from "./store.js";
 
 // ---------- helpers ----------
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -209,6 +209,17 @@ export default function SchoolRegister() {
     return true;
   }, [scheduleSave]);
 
+  // Offline awareness: report it honestly, and push pending work the moment
+  // the connection comes back rather than waiting for the next retry tick.
+  const [offline, setOffline] = useState(isOffline());
+  useEffect(() => {
+    const goOnline = () => { setOffline(false); flush(); };
+    const goOffline = () => setOffline(true);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => { window.removeEventListener("online", goOnline); window.removeEventListener("offline", goOffline); };
+  }, [flush]);
+
   useEffect(() => () => { clearTimeout(debounceRef.current); clearTimeout(retryRef.current); }, []);
 
   if (loading) {
@@ -218,7 +229,7 @@ export default function SchoolRegister() {
   return (
     <Shell>
       {toast && <Toast msg={toast} />}
-      <SyncBadge state={syncState} onRetry={flush} />
+      <SyncBadge state={syncState} offline={offline} onRetry={flush} />
       {!role && (
         <RoleGate
           roster={roster} saveRoster={saveRoster}
@@ -234,14 +245,16 @@ export default function SchoolRegister() {
   );
 }
 
-function SyncBadge({ state, onRetry }) {
+function SyncBadge({ state, offline, onRetry }) {
   const map = {
     saved:   { text: "✓ All changes saved",   bg: "#24402F", fg: "#8FD3A8", border: "#3A6B4C" },
     pending: { text: "• Saving…",             bg: "#24402F", fg: "#B8C4B9", border: "#3A6B4C" },
     saving:  { text: "• Saving…",             bg: "#24402F", fg: "#B8C4B9", border: "#3A6B4C" },
     error:   { text: "⚠ Not saved yet — retrying", bg: "#4A2620", fg: "#F0A99B", border: "#7A3E33" },
   };
-  const s = map[state] || map.saved;
+  // Offline is not a fault — work is held on the device and syncs later.
+  const offlineSaved = { text: "⛅ Offline — saved on this phone", bg: "#3D3722", fg: "#E8C97A", border: "#6B5F35" };
+  const s = offline ? offlineSaved : (map[state] || map.saved);
   return (
     <div className="no-print" style={{
       position: "fixed", bottom: 12, left: "50%", transform: "translateX(-50%)", zIndex: 90,
@@ -251,7 +264,7 @@ function SyncBadge({ state, onRetry }) {
       boxShadow: "0 3px 12px rgba(0,0,0,0.3)", maxWidth: "92vw",
     }}>
       <span>{s.text}</span>
-      {state === "error" && (
+      {state === "error" && !offline && (
         <button onClick={onRetry} style={{ background: "#E8B23D", color: "#1F3A2E", border: "none", borderRadius: 12, padding: "3px 10px", fontFamily: FONT.mono, fontSize: 11, fontWeight: 700 }}>Retry now</button>
       )}
     </div>
