@@ -51,6 +51,44 @@ const DEFAULT_TERM = "Term 1";
 const DEFAULT_SUBJECTS = ["Math", "English", "Science", "Social", "IRE", "Kiswahili"];
 const SCORE_OPTIONS = Array.from({ length: 100 }, (_, i) => i + 1);
 
+// ---- Timetable & duty roster ----
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const DAY_FULL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday" };
+const DEFAULT_PERIODS = [
+  { id: "p1", label: "1", time: "8:00–8:40" },
+  { id: "p2", label: "2", time: "8:40–9:20" },
+  { id: "p3", label: "3", time: "9:20–10:00" },
+  { id: "p4", label: "4", time: "10:20–11:00" },
+  { id: "p5", label: "5", time: "11:00–11:40" },
+  { id: "p6", label: "6", time: "11:40–12:20" },
+  { id: "p7", label: "7", time: "2:00–2:40" },
+  { id: "p8", label: "8", time: "2:40–3:20" },
+];
+
+const getTimetable = (roster, classId) => roster.timetable?.[classId] || {};
+const setLessonIn = (roster, classId, day, periodId, lesson) => {
+  const cls = { ...(roster.timetable?.[classId] || {}) };
+  const dayMap = { ...(cls[day] || {}) };
+  if (lesson) dayMap[periodId] = lesson; else delete dayMap[periodId];
+  cls[day] = dayMap;
+  return { ...roster, timetable: { ...roster.timetable, [classId]: cls } };
+};
+
+// Monday of the week containing a given date
+const mondayOf = (iso) => {
+  const d = new Date(iso + "T00:00:00");
+  const shift = (d.getDay() + 6) % 7; // Sun=0 -> 6
+  d.setDate(d.getDate() - shift);
+  return d.toISOString().slice(0, 10);
+};
+const weekLabel = (iso) => {
+  const start = new Date(iso + "T00:00:00");
+  const end = new Date(start); end.setDate(end.getDate() + 4);
+  const f = (d) => d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return `${f(start)} – ${f(end)}`;
+};
+
+
 // ---- Assessments: two CATs plus the main exam, combined by weight ----
 const ASSESSMENTS = [
   { key: "cat1", label: "CAT 1", short: "CAT 1" },
@@ -116,7 +154,9 @@ const EMPTY_ROSTER = {
   attendance: {},      // { [classId]: { [date]: { [studentId]: status } } }
   staffAttendance: {}, // { [date]: { [teacherId]: status } }
   marks: {},           // { [classId]: { [termKey]: { approved, grid: { [studentId]: { [subject]: {cat1,cat2,exam} } } } } }
-  settings: { adminPassword: DEFAULT_ADMIN_PASSWORD, currency: "KSh", passMark: 50, weights: DEFAULT_WEIGHTS },
+  timetable: {},       // { [classId]: { [day]: { [periodId]: { subject, teacherId } } } }
+  duty: [],            // [ { id, weekStart, teacherId, note } ]
+  settings: { adminPassword: DEFAULT_ADMIN_PASSWORD, currency: "KSh", passMark: 50, weights: DEFAULT_WEIGHTS, periods: DEFAULT_PERIODS },
 };
 
 const FONT = {
@@ -145,7 +185,13 @@ export default function SchoolRegister() {
             attendance: p.attendance || {},
             staffAttendance: p.staffAttendance || {},
             marks: p.marks || {},
-            settings: { ...EMPTY_ROSTER.settings, ...(p.settings || {}), weights: { ...DEFAULT_WEIGHTS, ...(p.settings?.weights || {}) } },
+            timetable: p.timetable || {},
+            duty: p.duty || [],
+            settings: {
+              ...EMPTY_ROSTER.settings, ...(p.settings || {}),
+              weights: { ...DEFAULT_WEIGHTS, ...(p.settings?.weights || {}) },
+              periods: p.settings?.periods?.length ? p.settings.periods : DEFAULT_PERIODS,
+            },
           };
           rosterRef.current = loaded;
           setRoster(loaded);
@@ -646,7 +692,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
     <div>
       {topBar("Admin", onExit)}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["overview", "classes", "subjects", "teachers", "staff", "students", "marks", "fees", "reports", "backup", "settings"]} active={tab} onChange={setTab} />
+        <TabBar tabs={["overview", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "backup", "settings"]} active={tab} onChange={setTab} />
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
 
           {tab === "overview" && <AdminOverview roster={roster} />}
@@ -814,6 +860,10 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave }) {
           )}
 
           {tab === "staff" && <StaffAttendance roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "timetable" && <TimetableAdmin roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "duty" && <DutyRoster roster={roster} saveRoster={saveRoster} />}
 
           {tab === "reports" && <AdminReports roster={roster} />}
 
@@ -1294,9 +1344,11 @@ function TeacherView({ roster, saveRoster, teacherId, onExit }) {
     <div>
       {topBar(`${teacher.name} · ${classNameOf(roster, classId)}`, onExit)}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["attendance", "results"]} active={tab} onChange={setTab} />
+        <TabBar tabs={["attendance", "results", "timetable"]} active={tab} onChange={setTab} />
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
           {tab === "attendance" && <TeacherAttendance roster={roster} saveRoster={saveRoster} classId={classId} students={students} />}
+          {tab === "timetable" && <MyTimetable roster={roster} teacher={teacher} />}
+
           {tab === "results" && (
             <div>
               <SectionTitle>Exam results</SectionTitle>
@@ -1402,6 +1454,7 @@ function FamilyView({ roster, studentId, onExit }) {
   const rate = log.length ? Math.round((presentDays / log.length) * 100) : null;
   const due = student.feeDue || 0, paid = student.feePaid || 0, balance = due - paid;
 
+  if (printDoc === "timetable") return <TimetableDoc roster={roster} classId={student.classId} onBack={() => setPrintDoc(null)} />;
   if (printDoc === "invoice") return <InvoiceDoc roster={roster} student={student} onBack={() => setPrintDoc(null)} />;
   if (printDoc === "report") return <ReportDoc roster={roster} student={student} term={term} termMarks={termMarks} avg={avg} rank={rank} rate={rate} onBack={() => setPrintDoc(null)} />;
 
@@ -1422,7 +1475,10 @@ function FamilyView({ roster, studentId, onExit }) {
             </div>
           </div>
 
-          <button onClick={() => setPrintDoc("invoice")} style={{ ...primaryBtn(), marginBottom: 22 }}>Open printable fee invoice</button>
+          <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
+            <button onClick={() => setPrintDoc("invoice")} style={primaryBtn()}>Fee invoice</button>
+            <button onClick={() => setPrintDoc("timetable")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Class timetable</button>
+          </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <SectionTitle>Results — {term}</SectionTitle>
@@ -1490,6 +1546,301 @@ function FamilyView({ roster, studentId, onExit }) {
             ))}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ================= TIMETABLE =================
+function TimetableAdmin({ roster, saveRoster }) {
+  const [classId, setClassId] = useState("");
+  const [entry, setEntry] = useState({ day: "Mon", periodId: "", subject: "", teacherId: "" });
+  const [showPeriods, setShowPeriods] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const periods = roster.settings.periods || DEFAULT_PERIODS;
+  const tt = getTimetable(roster, classId);
+
+  const addLesson = () => {
+    if (!classId || !entry.periodId || !entry.subject) return;
+    saveRoster(setLessonIn(roster, classId, entry.day, entry.periodId, { subject: entry.subject, teacherId: entry.teacherId || "" }), "Lesson added");
+    setEntry({ ...entry, subject: "", teacherId: "" });
+  };
+  const removeLesson = (day, periodId) => saveRoster(setLessonIn(roster, classId, day, periodId, null), "Lesson removed");
+
+  const updatePeriod = (id, field, value) => {
+    saveRoster({ ...roster, settings: { ...roster.settings, periods: periods.map((p) => p.id === id ? { ...p, [field]: value } : p) } });
+  };
+  const addPeriod = () => {
+    const n = periods.length + 1;
+    saveRoster({ ...roster, settings: { ...roster.settings, periods: [...periods, { id: "p" + Date.now(), label: String(n), time: "" }] } }, "Period added");
+  };
+  const removePeriod = (id) => saveRoster({ ...roster, settings: { ...roster.settings, periods: periods.filter((p) => p.id !== id) } }, "Period removed");
+
+  if (printing && classId) {
+    return <TimetableDoc roster={roster} classId={classId} onBack={() => setPrinting(false)} />;
+  }
+
+  return (
+    <div>
+      <SectionTitle>Class timetable</SectionTitle>
+      <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ ...darkInput(), marginBottom: 14, width: "100%", maxWidth: 320 }}>
+        <option value="">Choose a class…</option>
+        {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+
+      {!classId && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Select a class to build its timetable.</div>}
+
+      {classId && (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <select value={entry.day} onChange={(e) => setEntry({ ...entry, day: e.target.value })} style={{ ...darkInput(), minWidth: 110 }}>
+              {DAYS.map((d) => <option key={d} value={d}>{DAY_FULL[d]}</option>)}
+            </select>
+            <select value={entry.periodId} onChange={(e) => setEntry({ ...entry, periodId: e.target.value })} style={{ ...darkInput(), minWidth: 130 }}>
+              <option value="">Period…</option>
+              {periods.map((p) => <option key={p.id} value={p.id}>Period {p.label}{p.time ? ` (${p.time})` : ""}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            <select value={entry.subject} onChange={(e) => setEntry({ ...entry, subject: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
+              <option value="">Subject…</option>
+              {roster.subjects.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
+            </select>
+            <select value={entry.teacherId} onChange={(e) => setEntry({ ...entry, teacherId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
+              <option value="">Teacher (optional)…</option>
+              {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <button onClick={addLesson} disabled={!entry.periodId || !entry.subject} style={primaryBtn()}>Add lesson</button>
+          </div>
+
+          <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
+            {DAYS.map((day) => {
+              const lessons = periods.map((p) => ({ p, l: tt[day]?.[p.id] })).filter((x) => x.l);
+              return (
+                <div key={day} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "10px 12px" }}>
+                  <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#22304A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
+                  {lessons.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#8A8368" }}>No lessons set.</div>}
+                  <div style={{ display: "grid", gap: 4 }}>
+                    {lessons.map(({ p, l }) => (
+                      <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#22304A" }}>
+                        <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", minWidth: 92 }}>P{p.label} {p.time}</span>
+                        <span style={{ fontWeight: 600 }}>{l.subject}</span>
+                        <span style={{ color: "#6B6552", fontSize: 12 }}>{l.teacherId ? roster.teachers.find((t) => t.id === l.teacherId)?.name || "" : ""}</span>
+                        <button onClick={() => removeLesson(day, p.id)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), marginBottom: 18 }}>Open printable timetable</button>
+
+          <div>
+            <button onClick={() => setShowPeriods(!showPeriods)} style={{ ...backBtnStyle(), color: "#22304A", fontSize: 12.5 }}>
+              {showPeriods ? "▾" : "▸"} Edit period times
+            </button>
+            {showPeriods && (
+              <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                {periods.map((p) => (
+                  <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <input value={p.label} onChange={(e) => updatePeriod(p.id, "label", e.target.value)} style={{ ...darkInput(), width: 60, padding: "6px 8px" }} />
+                    <input value={p.time} onChange={(e) => updatePeriod(p.id, "time", e.target.value)} placeholder="8:00–8:40" style={{ ...darkInput(), flex: 1, minWidth: 120, padding: "6px 8px" }} />
+                    <button onClick={() => removePeriod(p.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
+                  </div>
+                ))}
+                <button onClick={addPeriod} style={{ ...primaryBtn(), justifySelf: "start" }}>Add period</button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TimetableDoc({ roster, classId, onBack }) {
+  const periods = roster.settings.periods || DEFAULT_PERIODS;
+  const tt = getTimetable(roster, classId);
+  const nameOf = (id) => roster.teachers.find((t) => t.id === id)?.name || "";
+
+  return (
+    <DocShell title="Class timetable" onBack={onBack}>
+      <DocHeader subtitle={`Class Timetable — ${classNameOf(roster, classId)}`} />
+      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 16 }}>
+        <thead>
+          <tr>
+            <th style={docTh}>Period</th>
+            {DAYS.map((d) => <th key={d} style={docTh}>{d}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {periods.map((p) => (
+            <tr key={p.id}>
+              <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5, whiteSpace: "nowrap" }}>
+                <strong>P{p.label}</strong>{p.time ? <div style={{ color: "#8A8368" }}>{p.time}</div> : null}
+              </td>
+              {DAYS.map((d) => {
+                const l = tt[d]?.[p.id];
+                return (
+                  <td key={d} style={{ ...docTd, fontSize: 11.5 }}>
+                    {l ? <><strong>{l.subject}</strong>{l.teacherId ? <div style={{ color: "#6B6552", fontSize: 10 }}>{nameOf(l.teacherId)}</div> : null}</> : <span style={{ color: "#C8C2B0" }}>—</span>}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 40 }}>
+        <div style={docSig}>Class Teacher's Signature</div>
+        <div style={docSig}>Principal's Signature</div>
+      </div>
+    </DocShell>
+  );
+}
+
+// ================= DUTY ROSTER =================
+function DutyRoster({ roster, saveRoster }) {
+  const [entry, setEntry] = useState({ weekStart: mondayOf(todayISO()), teacherId: "", note: "" });
+  const duty = [...(roster.duty || [])].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+  const thisWeek = mondayOf(todayISO());
+
+  const add = () => {
+    if (!entry.teacherId || !entry.weekStart) return;
+    const rec = { id: genId("DTY", roster.duty || []), weekStart: mondayOf(entry.weekStart), teacherId: entry.teacherId, note: entry.note.trim() };
+    saveRoster({ ...roster, duty: [...(roster.duty || []), rec] }, "Duty added");
+    setEntry({ ...entry, teacherId: "", note: "" });
+  };
+  const remove = (id) => saveRoster({ ...roster, duty: (roster.duty || []).filter((d) => d.id !== id) }, "Duty removed");
+
+  const onDutyNow = duty.filter((d) => d.weekStart === thisWeek);
+
+  return (
+    <div>
+      <SectionTitle>Duty roster</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+        Assign the teacher on duty for each week (weeks run Monday to Friday).
+      </div>
+
+      <div style={{
+        padding: "12px 14px", borderRadius: 5, marginBottom: 18,
+        background: onDutyNow.length ? "#E4F0E8" : "#F5F1E6",
+        border: `1px solid ${onDutyNow.length ? "#B8D9C4" : "#E4DFCF"}`,
+      }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", letterSpacing: 1 }}>THIS WEEK · {weekLabel(thisWeek)}</div>
+        {onDutyNow.length === 0
+          ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368", marginTop: 4 }}>Nobody assigned yet.</div>
+          : onDutyNow.map((d) => (
+              <div key={d.id} style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#22304A", marginTop: 3 }}>
+                {roster.teachers.find((t) => t.id === d.teacherId)?.name || "—"}
+                {d.note && <span style={{ fontFamily: FONT.body, fontSize: 12.5, fontWeight: 400, color: "#6B6552" }}> · {d.note}</span>}
+              </div>
+            ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+        <input type="date" value={entry.weekStart} onChange={(e) => setEntry({ ...entry, weekStart: e.target.value })} style={{ ...darkInput(), minWidth: 150 }} />
+        <select value={entry.teacherId} onChange={(e) => setEntry({ ...entry, teacherId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 140 }}>
+          <option value="">Teacher on duty…</option>
+          {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        <input value={entry.note} onChange={(e) => setEntry({ ...entry, note: e.target.value })} placeholder="Note (optional) — e.g. assembly, games" style={{ ...darkInput(), flex: 1, minWidth: 160 }} />
+        <button onClick={add} disabled={!entry.teacherId} style={primaryBtn()}>Add duty</button>
+      </div>
+
+      {duty.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No duties assigned yet.</div>}
+      <div style={{ display: "grid", gap: 6 }}>
+        {duty.map((d) => {
+          const current = d.weekStart === thisWeek;
+          const past = d.weekStart < thisWeek;
+          return (
+            <div key={d.id} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
+              padding: "9px 12px", background: "#F5F1E6", borderRadius: 3,
+              border: `1px solid ${current ? "#3F7A5C" : "#E4DFCF"}`,
+              borderLeft: `4px solid ${current ? "#3F7A5C" : past ? "#D8D2C2" : "#C98A2C"}`,
+              opacity: past ? 0.75 : 1,
+            }}>
+              <span>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>
+                  {roster.teachers.find((t) => t.id === d.teacherId)?.name || "—"}
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", marginLeft: 8 }}>{weekLabel(d.weekStart)}</span>
+                {current && <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#3F7A5C", marginLeft: 8 }}>THIS WEEK</span>}
+                {d.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginTop: 2 }}>{d.note}</div>}
+              </span>
+              <button onClick={() => remove(d.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Teacher's own timetable + duty ----------
+function MyTimetable({ roster, teacher }) {
+  const periods = roster.settings.periods || DEFAULT_PERIODS;
+  const thisWeek = mondayOf(todayISO());
+  const myDuty = (roster.duty || []).filter((d) => d.teacherId === teacher.id && d.weekStart >= thisWeek)
+    .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+
+  // every lesson across all classes assigned to this teacher, plus their own class
+  const rows = {};
+  DAYS.forEach((d) => { rows[d] = []; });
+  roster.classes.forEach((c) => {
+    const tt = getTimetable(roster, c.id);
+    DAYS.forEach((day) => {
+      periods.forEach((p) => {
+        const l = tt[day]?.[p.id];
+        if (l && (l.teacherId === teacher.id || (!l.teacherId && c.id === teacher.classId))) {
+          rows[day].push({ p, subject: l.subject, cls: c.name });
+        }
+      });
+    });
+  });
+  DAYS.forEach((d) => rows[d].sort((a, b) => periods.findIndex((x) => x.id === a.p.id) - periods.findIndex((x) => x.id === b.p.id)));
+  const hasAny = DAYS.some((d) => rows[d].length > 0);
+
+  return (
+    <div>
+      <SectionTitle>My timetable</SectionTitle>
+
+      {myDuty.length > 0 && (
+        <div style={{ padding: "11px 13px", borderRadius: 5, marginBottom: 16, background: myDuty[0].weekStart === thisWeek ? "#E4F0E8" : "#F5F1E6", border: `1px solid ${myDuty[0].weekStart === thisWeek ? "#B8D9C4" : "#E4DFCF"}` }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", letterSpacing: 1 }}>YOUR DUTY WEEKS</div>
+          {myDuty.slice(0, 3).map((d) => (
+            <div key={d.id} style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", marginTop: 3 }}>
+              {weekLabel(d.weekStart)}
+              {d.weekStart === thisWeek && <strong style={{ color: "#3F7A5C" }}> — THIS WEEK</strong>}
+              {d.note && <span style={{ color: "#6B6552", fontSize: 12 }}> · {d.note}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!hasAny && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No lessons assigned to you yet — ask admin to build the class timetable.</div>}
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {DAYS.filter((d) => rows[d].length > 0).map((day) => (
+          <div key={day} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "10px 12px" }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#22304A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
+            <div style={{ display: "grid", gap: 4 }}>
+              {rows[day].map((r, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#22304A" }}>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", minWidth: 92 }}>P{r.p.label} {r.p.time}</span>
+                  <span style={{ fontWeight: 600 }}>{r.subject}</span>
+                  <span style={{ color: "#6B6552", fontSize: 12, marginLeft: "auto" }}>{r.cls}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
