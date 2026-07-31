@@ -72,7 +72,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v9 · secure login";
+const APP_VERSION = "v10 · portal navigation";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -703,6 +703,111 @@ function RoleCard({ title, desc, onClick, glyph }) {
   );
 }
 
+
+// ---------- Icons for the navigation drawer ----------
+const NavIcon = ({ d, size = 17 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}>
+    {d}
+  </svg>
+);
+const ICONS = {
+  overview:  <><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></>,
+  approvals: <><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>,
+  logins:    <><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+  classes:   <><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></>,
+  subjects:  <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
+  teachers:  <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></>,
+  staff:     <><path d="M9 11H3v10h6z"/><path d="M15 3H9v18h6z"/><path d="M21 7h-6v14h6z"/></>,
+  students:  <><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></>,
+  marks:     <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
+  timetable: <><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>,
+  duty:      <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+  fees:      <><circle cx="12" cy="12" r="9"/><path d="M15 9.5a3 3 0 0 0-3-1.5c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2a3 3 0 0 1-3-1.5"/><path d="M12 6v12"/></>,
+  reports:   <><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></>,
+  yearend:   <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></>,
+  backup:    <><path d="M21 8v13H3V8"/><rect x="1" y="3" width="22" height="5" rx="1"/><path d="M10 12h4"/></>,
+  settings:  <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></>,
+  attendance:<><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>,
+};
+
+// Grouped navigation drawer, in the style of a university student portal.
+function Sidebar({ open, onClose, groups, active, onPick, heading, subheading }) {
+  return (
+    <>
+      <div onClick={onClose} className="no-print" style={{
+        position: "fixed", inset: 0, background: "rgba(10,20,15,0.55)", zIndex: 200,
+        opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none", transition: "opacity .22s ease",
+      }} />
+      <nav className="no-print" style={{
+        position: "fixed", top: 0, left: 0, bottom: 0, width: 268, maxWidth: "84vw", zIndex: 201,
+        background: "linear-gradient(180deg,#1B3327,#16281F)", borderRight: "1px solid #2E4B3A",
+        transform: open ? "translateX(0)" : "translateX(-102%)", transition: "transform .24s cubic-bezier(.2,.7,.3,1)",
+        overflowY: "auto", boxShadow: open ? "6px 0 24px rgba(0,0,0,0.35)" : "none",
+      }}>
+        <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #2E4B3A", display: "flex", alignItems: "center", gap: 11 }}>
+          <Seal size={34} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.display, color: "#F5F3EE", fontSize: 15, fontWeight: 600, lineHeight: 1.2 }}>{heading}</div>
+            <div style={{ fontFamily: FONT.mono, color: "#8AA090", fontSize: 10, marginTop: 2 }}>{subheading}</div>
+          </div>
+        </div>
+
+        <div style={{ padding: "10px 0 26px" }}>
+          {groups.map((g) => (
+            <div key={g.title} style={{ marginBottom: 6 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.4, color: "#E8B23D", padding: "12px 18px 6px" }}>
+                {g.title}
+              </div>
+              {g.items.map((it) => {
+                const on = active === it.key;
+                return (
+                  <button key={it.key} onClick={() => { onPick(it.key); onClose(); }} style={{
+                    display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left",
+                    padding: "11px 18px", border: "none", background: on ? "#2A4636" : "transparent",
+                    borderLeft: `3px solid ${on ? "#E8B23D" : "transparent"}`,
+                    color: on ? "#F5F3EE" : "#B8C4B9", fontFamily: FONT.body, fontSize: 13.5,
+                    fontWeight: on ? 600 : 400,
+                  }}>
+                    <span style={{ color: on ? "#E8B23D" : "#7B9585", display: "flex" }}><NavIcon d={ICONS[it.icon] || ICONS.overview} /></span>
+                    <span style={{ flex: 1 }}>{it.label}</span>
+                    {it.badge > 0 && (
+                      <span style={{ background: "#B84C3E", color: "#fff", borderRadius: 10, padding: "1px 7px", fontFamily: FONT.mono, fontSize: 10, fontWeight: 700 }}>{it.badge}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </nav>
+    </>
+  );
+}
+
+// Header bar with the menu button and the current section name.
+function PortalHeader({ title, section, onMenu, onExit }) {
+  return (
+    <div className="no-print" style={{
+      display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+      background: "rgba(27,51,39,0.92)", borderBottom: "1px solid #2E4B3A",
+      position: "sticky", top: 0, zIndex: 120, backdropFilter: "blur(6px)",
+    }}>
+      <button onClick={onMenu} aria-label="Menu" style={{
+        display: "flex", flexDirection: "column", gap: 4, background: "transparent",
+        border: "1px solid #3E6350", borderRadius: 6, padding: "9px 10px",
+      }}>
+        {[0, 1, 2].map((i) => <span key={i} style={{ width: 16, height: 2, background: "#E8B23D", borderRadius: 2, display: "block" }} />)}
+      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: FONT.mono, color: "#8AA090", fontSize: 9.5, letterSpacing: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
+        <div style={{ fontFamily: FONT.display, color: "#F5F3EE", fontSize: 17, fontWeight: 600, textTransform: "capitalize" }}>{section}</div>
+      </div>
+      <button onClick={onExit} style={{ background: "transparent", border: "1px solid #4A6E58", color: "#F5F3EE", borderRadius: 4, padding: "7px 12px", fontFamily: FONT.body, fontSize: 12, whiteSpace: "nowrap" }}>Sign out</button>
+    </div>
+  );
+}
+
 // ================= ADMIN =================
 function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) {
   const [tab, setTab] = useState("overview");
@@ -713,7 +818,43 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
   const [newAdminPass, setNewAdminPass] = useState("");
   const [payment, setPayment] = useState({ studentId: "", amount: "" });
   const [marksClassId, setMarksClassId] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
   const cur = roster.settings.currency;
+
+  let pendingCount = 0;
+  Object.values(roster.marks || {}).forEach((terms) =>
+    Object.values(terms || {}).forEach((rec) => { if (statusOf(rec) === "submitted") pendingCount++; }));
+
+  const NAV = [
+    { title: "DASHBOARD", items: [
+      { key: "overview", label: "Overview", icon: "overview" },
+      { key: "approvals", label: "Approvals", icon: "approvals", badge: pendingCount },
+    ]},
+    { title: "ACADEMICS", items: [
+      { key: "marks", label: "Exam results", icon: "marks" },
+      { key: "timetable", label: "Timetable", icon: "timetable" },
+      { key: "subjects", label: "Subjects", icon: "subjects" },
+      { key: "classes", label: "Classes", icon: "classes" },
+    ]},
+    { title: "PEOPLE", items: [
+      { key: "students", label: "Students", icon: "students" },
+      { key: "teachers", label: "Teachers", icon: "teachers" },
+      { key: "logins", label: "Staff logins", icon: "logins" },
+      { key: "staff", label: "Staff attendance", icon: "staff" },
+      { key: "duty", label: "Duty roster", icon: "duty" },
+    ]},
+    { title: "FINANCIALS", items: [
+      { key: "fees", label: "Fees & receipts", icon: "fees" },
+    ]},
+    { title: "REPORTS", items: [
+      { key: "reports", label: "Reports", icon: "reports" },
+      { key: "year end", label: "End of year", icon: "yearend" },
+    ]},
+    { title: "SYSTEM", items: [
+      { key: "backup", label: "Backup", icon: "backup" },
+      { key: "settings", label: "Settings", icon: "settings" },
+    ]},
+  ];
 
   const addClass = () => {
     if (!newClass.trim()) return;
@@ -775,9 +916,11 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
 
   return (
     <div>
-      {topBar("Admin", onExit)}
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["overview", "approvals", "logins", "classes", "subjects", "teachers", "staff", "students", "marks", "timetable", "duty", "fees", "reports", "year end", "backup", "settings"]} active={tab} onChange={setTab} />
+      <PortalHeader title={SCHOOL_NAME.toUpperCase()} section={NAV.flatMap((g) => g.items).find((i) => i.key === tab)?.label || tab}
+        onMenu={() => setMenuOpen(true)} onExit={onExit} />
+      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} groups={NAV} active={tab} onPick={setTab}
+        heading="Administration" subheading={who?.name || "Signed in"} />
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
 
           {tab === "overview" && <AdminOverview roster={roster} />}
@@ -1479,9 +1622,10 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
 }
 
 // ================= TEACHER =================
-function TeacherView({ roster, saveRoster, teacherId, onExit }) {
+function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
   const teacher = roster.teachers.find((t) => t.id === teacherId);
   const [tab, setTab] = useState("attendance");
+  const [menuOpen, setMenuOpen] = useState(false);
   if (!teacher) return <div style={{ color: "#F5F3EE", padding: 30 }}>Teacher not found. <button onClick={onExit} style={backBtnStyle()}>go back</button></div>;
   const classId = teacher.classId;
   const students = roster.students.filter((s) => s.classId === classId);
@@ -1489,9 +1633,19 @@ function TeacherView({ roster, saveRoster, teacherId, onExit }) {
 
   return (
     <div>
-      {topBar(`${teacher.name} · ${classNameOf(roster, classId)}`, onExit)}
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 6px 60px" }}>
-        <TabBar tabs={["attendance", "results", "timetable"]} active={tab} onChange={setTab} />
+      <PortalHeader title={`${classNameOf(roster, classId).toUpperCase()} · ${teacher.name.toUpperCase()}`}
+        section={{ attendance: "Attendance", results: "Exam results", timetable: "My timetable" }[tab]}
+        onMenu={() => setMenuOpen(true)} onExit={onExit} />
+      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} active={tab} onPick={setTab}
+        heading={teacher.name} subheading={classNameOf(roster, classId)}
+        groups={[
+          { title: "DAILY", items: [{ key: "attendance", label: "Attendance", icon: "attendance" }] },
+          { title: "ACADEMICS", items: [
+            { key: "results", label: "Exam results", icon: "marks" },
+            { key: "timetable", label: "My timetable", icon: "timetable" },
+          ]},
+        ]} />
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
           {tab === "attendance" && <TeacherAttendance roster={roster} saveRoster={saveRoster} classId={classId} students={students} />}
           {tab === "timetable" && <MyTimetable roster={roster} teacher={teacher} />}
