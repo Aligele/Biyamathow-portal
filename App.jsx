@@ -3,6 +3,7 @@ import {
   loadRoster, saveRoster as persistRoster, isShared, isOffline, hasPendingChanges,
   staffLogin, staffLogout, restoreSession, getWho, changeMyPassword,
   staffList, staffUpsert, staffDeactivate, parentLookup,
+  requestReset, confirmReset, staffSetEmail,
 } from "./store.js";
 
 // ---------- helpers ----------
@@ -72,7 +73,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v10 · portal navigation";
+const APP_VERSION = "v11 · password reset";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -562,6 +563,40 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reset, setReset] = useState({ stage: "ask", username: "", code: "", pw1: "", pw2: "" });
+  const [note, setNote] = useState("");
+
+  const sendCode = async () => {
+    const u = reset.username.trim() || creds.username.trim();
+    if (!u) return setErr("Enter your username or email first.");
+    setBusy(true); setErr(""); setNote("");
+    try {
+      await requestReset(u);
+      setReset({ ...reset, username: u, stage: "code" });
+      setNote("If that account has an email on file, a 6-digit code is on its way. It expires in 20 minutes.");
+    } catch (e) {
+      setErr(String(e.message || e).slice(0, 180));
+    }
+    setBusy(false);
+  };
+
+  const applyReset = async () => {
+    if (!reset.code.trim()) return setErr("Enter the code from the email.");
+    if (reset.pw1.length < 6) return setErr("New password must be at least 6 characters.");
+    if (reset.pw1 !== reset.pw2) return setErr("The two passwords do not match.");
+    setBusy(true); setErr(""); setNote("");
+    try {
+      const ok = await confirmReset(reset.username, reset.code, reset.pw1);
+      if (!ok) { setErr("That code is wrong or has expired."); setBusy(false); return; }
+      setNote("Password changed. You can sign in now.");
+      setCreds({ username: reset.username, password: "" });
+      setReset({ stage: "ask", username: "", code: "", pw1: "", pw2: "" });
+      setStep("staff");
+    } catch (e) {
+      setErr(String(e.message || e).slice(0, 180));
+    }
+    setBusy(false);
+  };
 
   // One sign-in for all staff. The database decides whether this person is
   // an admin or a teacher — the app no longer takes their word for it.
@@ -642,9 +677,57 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
             <button onClick={signIn} disabled={busy} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E", opacity: busy ? 0.6 : 1 }}>
               {busy ? "Signing in…" : "Sign in"}
             </button>
-            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#7B9585", marginTop: 4, lineHeight: 1.5 }}>
-              Forgotten your password? The school administrator can set a new one.
-            </div>
+            {note && <div style={{ color: "#8FD3A8", fontFamily: FONT.body, fontSize: 12, lineHeight: 1.5 }}>{note}</div>}
+            <button onClick={() => { setStep("forgot"); setErr(""); setNote(""); setReset({ ...reset, username: creds.username, stage: "ask" }); }}
+              style={{ ...backBtnStyle(), marginTop: 6, textAlign: "left" }}>
+              Forgotten your password?
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === "forgot" && (
+        <div>
+          <button onClick={() => { setStep("staff"); setErr(""); }} style={backBtnStyle()}>← back to sign in</button>
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            <div style={{ fontFamily: FONT.display, color: "#F5F3EE", fontSize: 17, fontWeight: 600 }}>Reset your password</div>
+
+            {reset.stage === "ask" && (
+              <>
+                <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#A8BCAC", lineHeight: 1.5 }}>
+                  Enter your username. If an email address is on file for it, we'll send a 6-digit code.
+                </div>
+                <input placeholder="Username or email" autoCapitalize="none" value={reset.username}
+                  onChange={(e) => setReset({ ...reset, username: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && sendCode()} style={inputStyle()} />
+                {err && <div style={{ color: "#E8967D", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
+                {note && <div style={{ color: "#8FD3A8", fontFamily: FONT.body, fontSize: 12, lineHeight: 1.5 }}>{note}</div>}
+                <button onClick={sendCode} disabled={busy} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E", opacity: busy ? 0.6 : 1 }}>
+                  {busy ? "Sending…" : "Send code"}
+                </button>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#7B9585", marginTop: 4, lineHeight: 1.5 }}>
+                  No email on your account? The school administrator can set a new password for you.
+                </div>
+              </>
+            )}
+
+            {reset.stage === "code" && (
+              <>
+                {note && <div style={{ color: "#8FD3A8", fontFamily: FONT.body, fontSize: 12, lineHeight: 1.5 }}>{note}</div>}
+                <input placeholder="6-digit code" inputMode="numeric" value={reset.code}
+                  onChange={(e) => setReset({ ...reset, code: e.target.value })} style={inputStyle()} />
+                <input placeholder="New password" type="password" value={reset.pw1}
+                  onChange={(e) => setReset({ ...reset, pw1: e.target.value })} style={inputStyle()} />
+                <input placeholder="Repeat new password" type="password" value={reset.pw2}
+                  onChange={(e) => setReset({ ...reset, pw2: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && applyReset()} style={inputStyle()} />
+                {err && <div style={{ color: "#E8967D", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
+                <button onClick={applyReset} disabled={busy} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E", opacity: busy ? 0.6 : 1 }}>
+                  {busy ? "Saving…" : "Set new password"}
+                </button>
+                <button onClick={sendCode} disabled={busy} style={{ ...backBtnStyle(), marginTop: 4, textAlign: "left" }}>Send another code</button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2017,7 +2100,7 @@ function StaffAccounts({ roster, who }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({ username: "", name: "", role: "teacher", password: "", teacherId: "" });
+  const [form, setForm] = useState({ username: "", name: "", role: "teacher", password: "", teacherId: "", email: "" });
   const [pw, setPw] = useState({ old: "", next: "" });
 
   const refresh = async () => {
@@ -2030,8 +2113,9 @@ function StaffAccounts({ roster, who }) {
     if (!form.username.trim() || !form.name.trim()) return setErr("Username and name are required.");
     try {
       await staffUpsert(form.username.trim(), form.name.trim(), form.role, form.password.trim() || null, form.teacherId || null);
+      if (form.email.trim()) await staffSetEmail(form.username.trim(), form.email.trim());
       setMsg(`Saved ${form.username.trim()}${form.password ? " — password set" : ""}`);
-      setForm({ username: "", name: "", role: "teacher", password: "", teacherId: "" });
+      setForm({ username: "", name: "", role: "teacher", password: "", teacherId: "", email: "" });
       setErr(""); refresh();
       setTimeout(() => setMsg(""), 4000);
     } catch (e) { setErr(String(e.message || e).slice(0, 160)); }
@@ -2085,6 +2169,7 @@ function StaffAccounts({ roster, who }) {
           {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name} · {classNameOf(roster, t.classId)}</option>)}
         </select>
         <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password" style={{ ...darkInput(), flex: 1, minWidth: 120 }} />
+        <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email (for password reset)" inputMode="email" autoCapitalize="none" style={{ ...darkInput(), flex: 1, minWidth: 160 }} />
         <button onClick={save} style={primaryBtn()}>Save account</button>
       </div>
 
@@ -2097,6 +2182,7 @@ function StaffAccounts({ roster, who }) {
               <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", marginLeft: 8 }}>{r.username}</span>
               <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: r.role === "admin" ? "#B8860B" : "#6B6552", marginTop: 2 }}>
                 {r.role === "admin" ? "ADMINISTRATOR" : "TEACHER"}{!r.active ? " · DISABLED" : ""}
+                {r.email ? " · " + r.email : " · no email (cannot self-reset)"}
               </div>
             </span>
             <span style={{ display: "flex", gap: 12 }}>

@@ -51,7 +51,9 @@ async function rpc(fn, args) {
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`${fn} failed (${res.status})${txt ? ": " + txt.slice(0, 140) : ""}`);
+    let detail = txt;
+    try { const j = JSON.parse(txt); detail = j.message || j.hint || j.details || txt; } catch (e) {}
+    throw new Error(`${fn} ${res.status}: ${String(detail).slice(0, 160)}`);
   }
   return res.json();
 }
@@ -189,3 +191,25 @@ export async function saveRoster(data) {
     throw e;
   }
 }
+
+// ---------- password reset ----------
+export async function requestReset(username) {
+  const res = await fetch("/api/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error || `Reset request failed (${res.status})`);
+  }
+  return true;
+}
+
+export async function confirmReset(username, code, newPassword) {
+  const r = await rpc("reset_confirm", { p_username: username, p_code: code, p_new: newPassword });
+  return r === true;
+}
+
+export const staffSetEmail = (username, email) =>
+  rpc("staff_set_email", { p_token: getToken(), p_username: username, p_email: email });
