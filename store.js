@@ -20,11 +20,11 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isShared = Boolean(URL_BASE && ANON_KEY);
 
-const MIRROR_KEY  = "biyamathow_mirror_v2";
-const BASE_KEY    = "biyamathow_base_v2";
-const PENDING_KEY = "biyamathow_pending_v2";
-const TOKEN_KEY   = "biyamathow_token_v1";
-const WHO_KEY     = "biyamathow_who_v1";
+const MIRROR_KEY  = "school_mirror_v2";
+const BASE_KEY    = "school_base_v2";
+const PENDING_KEY = "school_pending_v2";
+const TOKEN_KEY   = "school_token_v1";
+const WHO_KEY     = "school_who_v1";
 
 const readJSON  = (k) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : null; } catch (e) { return null; } };
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
@@ -213,3 +213,18 @@ export async function confirmReset(username, code, newPassword) {
 
 export const staffSetEmail = (username, email) =>
   rpc("staff_set_email", { p_token: getToken(), p_username: username, p_email: email });
+
+export const staffSetContact = (username, email, phone) =>
+  rpc("staff_set_contact", { p_token: getToken(), p_username: username, p_email: email || null, p_phone: phone || null });
+
+// Public: the login screen needs the school name before anyone signs in.
+export async function schoolInfo() {
+  if (!isShared) return null;
+  try {
+    const rows = await rpc("school_info", {});
+    const r = Array.isArray(rows) ? rows[0] : rows;
+    return r ? { name: r.name, location: r.location, motto: r.motto } : null;
+  } catch (e) {
+    return null;
+  }
+}

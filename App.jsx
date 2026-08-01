@@ -3,7 +3,7 @@ import {
   loadRoster, saveRoster as persistRoster, isShared, isOffline, hasPendingChanges,
   staffLogin, staffLogout, restoreSession, getWho, changeMyPassword,
   staffList, staffUpsert, staffDeactivate, parentLookup,
-  requestReset, confirmReset, staffSetEmail,
+  requestReset, confirmReset, staffSetEmail, staffSetContact, schoolInfo,
 } from "./store.js";
 
 // ---------- helpers ----------
@@ -73,7 +73,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v11 · password reset";
+const APP_VERSION = "v13 · CBC + printing";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -81,8 +81,21 @@ const logAction = (roster, actor, action) => {
   const audit = [entry, ...(roster.audit || [])].slice(0, 400);
   return { ...roster, audit };
 };
-const SCHOOL_NAME = "Biyamathow Mixed Day and Boarding Senior School";
-const SCHOOL_LOCATION = "Sabuli, Wajir County";
+// The school's identity is stored in Settings so the portal can serve any
+// school. These are only fallbacks used before the details load.
+const DEFAULT_SCHOOL_NAME = "Banane Shantral Primary School";
+const DEFAULT_SCHOOL_LOCATION = "Sabuli, Wajir County";
+const DEFAULT_MOTTO = "ROLL · RECORD · REGISTER";
+
+// Shared across the app so every screen and printed document agrees.
+let SCHOOL_NAME = DEFAULT_SCHOOL_NAME;
+let SCHOOL_LOCATION = DEFAULT_SCHOOL_LOCATION;
+let SCHOOL_MOTTO = DEFAULT_MOTTO;
+const applySchoolIdentity = (s) => {
+  SCHOOL_NAME = s?.schoolName || s?.name || DEFAULT_SCHOOL_NAME;
+  SCHOOL_LOCATION = s?.schoolLocation || s?.location || DEFAULT_SCHOOL_LOCATION;
+  SCHOOL_MOTTO = s?.schoolMotto || s?.motto || DEFAULT_MOTTO;
+};
 const DEFAULT_ADMIN_PASSWORD = "admin123";
 const DEFAULT_TERM = "Term 1";
 const DEFAULT_SUBJECTS = ["Math", "English", "Science", "Social", "IRE", "Kiswahili"];
@@ -135,13 +148,23 @@ const ASSESSMENTS = [
 const DEFAULT_WEIGHTS = { cat1: 15, cat2: 15, exam: 70 };
 
 // KCSE-style grading used by Kenyan senior schools
-const GRADE_BANDS = [[80,"A"],[75,"A-"],[70,"B+"],[65,"B"],[60,"B-"],[55,"C+"],[50,"C"],[45,"C-"],[40,"D+"],[35,"D"],[30,"D-"],[0,"E"]];
-const gradeOf = (score) => {
-  if (score === null || score === undefined) return "—";
-  for (const [min, g] of GRADE_BANDS) if (score >= min) return g;
-  return "E";
+// CBC performance levels (Competency Based Curriculum, Kenya).
+// Primary schools report levels 1–4 rather than KCSE letter grades.
+const CBC_BANDS = [
+  { min: 76, level: 4, code: "EE", label: "Exceeding Expectation",   ink: "#2E6B4F" },
+  { min: 51, level: 3, code: "ME", label: "Meeting Expectation",     ink: "#3F7A5C" },
+  { min: 26, level: 2, code: "AE", label: "Approaching Expectation", ink: "#C98A2C" },
+  { min: 0,  level: 1, code: "BE", label: "Below Expectation",       ink: "#B84C3E" },
+];
+const cbcBand = (score) => {
+  if (score === null || score === undefined) return null;
+  return CBC_BANDS.find((b) => score >= b.min) || CBC_BANDS[CBC_BANDS.length - 1];
 };
-const gradeInk = (score) => (score === null || score === undefined) ? "#8A8368" : score >= 65 ? "#3F7A5C" : score >= 50 ? "#C98A2C" : "#B84C3E";
+// Short code shown in tables, e.g. "ME"; full wording used on report cards.
+const gradeOf = (score) => cbcBand(score)?.code || "—";
+const gradeLevel = (score) => cbcBand(score)?.level ?? null;
+const gradeLabel = (score) => cbcBand(score)?.label || "—";
+const gradeInk = (score) => cbcBand(score)?.ink || "#8A8368";
 
 // Older records stored a single number; treat that as the main exam mark.
 const normEntry = (e) => (typeof e === "number" ? { exam: e } : (e || {}));
@@ -195,7 +218,8 @@ const EMPTY_ROSTER = {
   duty: [],            // [ { id, weekStart, teacherId, note } ]
   audit: [],           // [ { ts, actor, action } ] — who changed what
   archives: [],        // [ { year, savedAt, snapshot } ] — closed school years
-  settings: { adminPassword: DEFAULT_ADMIN_PASSWORD, currency: "KSh", passMark: 50, weights: DEFAULT_WEIGHTS, periods: DEFAULT_PERIODS },
+  settings: { currency: "KSh", passMark: 51, weights: DEFAULT_WEIGHTS, periods: DEFAULT_PERIODS,
+              schoolName: DEFAULT_SCHOOL_NAME, schoolLocation: DEFAULT_SCHOOL_LOCATION, schoolMotto: DEFAULT_MOTTO },
 };
 
 const FONT = {
@@ -247,6 +271,7 @@ export default function SchoolRegister() {
               periods: p.settings?.periods?.length ? p.settings.periods : DEFAULT_PERIODS,
             },
           };
+          applySchoolIdentity(loaded.settings);
           rosterRef.current = loaded;
           setRoster(loaded);
         }
@@ -565,6 +590,16 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
   const [busy, setBusy] = useState(false);
   const [reset, setReset] = useState({ stage: "ask", username: "", code: "", pw1: "", pw2: "" });
   const [note, setNote] = useState("");
+  const [, forceRender] = useState(0);
+
+  // The school's name lives in the database, so fetch it before sign-in.
+  useEffect(() => {
+    let cancelled = false;
+    schoolInfo().then((info) => {
+      if (!cancelled && info) { applySchoolIdentity(info); forceRender((n) => n + 1); }
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const sendCode = async () => {
     const u = reset.username.trim() || creds.username.trim();
@@ -755,7 +790,7 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
       )}
 
       <div style={{ textAlign: "center", marginTop: 34, fontFamily: FONT.mono, fontSize: 9.5, color: "#5F7A68", letterSpacing: 1 }}>
-        ROLL · RECORD · REGISTER
+        {SCHOOL_MOTTO}
         <div style={{ marginTop: 5, fontSize: 8.5, color: "#4A6355", letterSpacing: 0.5 }}>{APP_VERSION}</div>
       </div>
     </div>
@@ -902,6 +937,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
   const [payment, setPayment] = useState({ studentId: "", amount: "" });
   const [marksClassId, setMarksClassId] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [receipt, setReceipt] = useState(null);   // { student, payment } to print
   const cur = roster.settings.currency;
 
   let pendingCount = 0;
@@ -996,6 +1032,11 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     saveRoster(logAction(next, "Admin", `Receipt ${receiptNo} — ${cur}${money(amt)} from ${st?.name}`), `${receiptNo} · ${cur}${money(amt)} from ${st?.name}`);
     setPayment({ studentId: "", amount: "" });
   };
+
+  if (receipt) {
+    return <ReceiptDoc roster={roster} student={receipt.student} payment={receipt.payment}
+             onBack={() => setReceipt(null)} />;
+  }
 
   return (
     <div>
@@ -1156,17 +1197,36 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                 <button onClick={recordPayment} style={primaryBtn()}>Record payment</button>
               </div>
               {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Add students first.</div>}
-              <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ display: "grid", gap: 8 }}>
                 {roster.students.map((s) => {
                   const due = s.feeDue || 0, paid = s.feePaid || 0, bal = due - paid;
+                  const pays = [...(s.payments || [])].reverse();
                   return (
-                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3, flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <input type="number" defaultValue={due} onBlur={(e) => setFeeDue(s.id, e.target.value)} style={{ ...darkInput(), width: 90, padding: "5px 8px" }} />
-                        <span style={{ fontFamily: FONT.mono, fontSize: 12, color: "#3F7A5C" }}>paid {cur}{money(paid)}</span>
-                        <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: bal > 0 ? "#B84C3E" : "#3F7A5C" }}>{bal > 0 ? `owes ${cur}${money(bal)}` : "cleared"}</span>
-                      </span>
+                    <div key={s.id} style={{ padding: "10px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name} <span style={{ color: "#8A8368", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <input type="number" defaultValue={due} onBlur={(e) => setFeeDue(s.id, e.target.value)} style={{ ...darkInput(), width: 90, padding: "5px 8px" }} />
+                          <span style={{ fontFamily: FONT.mono, fontSize: 12, color: "#3F7A5C" }}>paid {cur}{money(paid)}</span>
+                          <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: bal > 0 ? "#B84C3E" : "#3F7A5C" }}>{bal > 0 ? `owes ${cur}${money(bal)}` : "cleared"}</span>
+                        </span>
+                      </div>
+
+                      {pays.length > 0 && (
+                        <div style={{ marginTop: 8, borderTop: "1px solid #E4DFCF", paddingTop: 7, display: "grid", gap: 4 }}>
+                          {pays.map((p, i) => (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552" }}>
+                                {p.receiptNo || "receipt —"} · {fmtDate(p.date)} · {cur}{money(p.amount)}
+                              </span>
+                              <button onClick={() => setReceipt({ student: s, payment: p })}
+                                style={{ background: "none", border: "none", color: "#22304A", fontFamily: FONT.mono, fontSize: 11, textDecoration: "underline" }}>
+                                print receipt
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1200,6 +1260,25 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                   {SCORE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
                 <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>out of 100</span>
+              </div>
+
+              <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>School identity</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 10 }}>
+                Shown on the login screen, every page header, report cards and invoices.
+              </div>
+              <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+                <input defaultValue={roster.settings.schoolName || DEFAULT_SCHOOL_NAME}
+                  onBlur={(e) => saveRoster({ ...roster, settings: { ...roster.settings, schoolName: e.target.value.trim() || DEFAULT_SCHOOL_NAME } }, "School name updated")}
+                  placeholder="School name" style={darkInput()} />
+                <input defaultValue={roster.settings.schoolLocation || DEFAULT_SCHOOL_LOCATION}
+                  onBlur={(e) => saveRoster({ ...roster, settings: { ...roster.settings, schoolLocation: e.target.value.trim() || DEFAULT_SCHOOL_LOCATION } }, "Location updated")}
+                  placeholder="Location, e.g. Sabuli, Wajir County" style={darkInput()} />
+                <input defaultValue={roster.settings.schoolMotto || DEFAULT_MOTTO}
+                  onBlur={(e) => saveRoster({ ...roster, settings: { ...roster.settings, schoolMotto: e.target.value.trim() || DEFAULT_MOTTO } }, "Motto updated")}
+                  placeholder="Motto (shown small on the login screen)" style={darkInput()} />
+              </div>
+              <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8368", marginBottom: 22 }}>
+                Changes appear after the next page reload.
               </div>
 
               <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 8 }}>
@@ -1409,7 +1488,7 @@ function AdminReports({ roster }) {
                             <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.total}</td>
                             <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.average}</td>
                             <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(r.average) }}>{gradeOf(r.average)}</td>
-                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: r.average >= passMark ? "#3F7A5C" : "#B84C3E" }}>{r.average >= passMark ? "PASS" : "FAIL"}</td>
+                            <td style={{ borderBottom: "1px solid #EFEADC", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: gradeInk(r.average) }}>L{gradeLevel(r.average)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1515,6 +1594,7 @@ function StaffAttendance({ roster, saveRoster }) {
 function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, role = "admin", actorName = "" }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
   const [entry, setEntry] = useState({ studentId: "", subject: "", assessment: "exam", score: "" });
+  const [printing, setPrinting] = useState(false);
   const record = getMarksFor(roster, classId, term);
   const { grid } = record;
   const status = statusOf(record);
@@ -1569,6 +1649,8 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
   };
 
   const ranked = classPositions(grid, students, roster.subjects, weights);
+
+  if (printing) return <ClassMarksheetDoc roster={roster} classId={classId} term={term} onBack={() => setPrinting(false)} />;
 
   return (
     <div>
@@ -1696,6 +1778,9 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
               {role === "admin" && status === "approved" && (
                 <button onClick={unpublish} style={{ ...primaryBtn(), background: "#B84C3E" }}>Unpublish</button>
               )}
+              <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), background: "#22304A" }}>
+                Print class marksheet
+              </button>
             </div>
           )}
         </>
@@ -1894,7 +1979,7 @@ function ParentView({ payload, onExit }) {
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                   <StatCard label="Position in class" value={`${rank.position} of ${rank.outOf}`} tone={rank.position <= 3 ? "#B8860B" : "#22304A"} />
                   <StatCard label="Total marks" value={rank.total} />
-                  <StatCard label="Mean grade" value={gradeOf(avg)} tone={gradeInk(avg)} />
+                  <StatCard label="Performance level" value={avg === null ? "—" : `L${gradeLevel(avg)} ${gradeOf(avg)}`} tone={gradeInk(avg)} />
                 </div>
               )}
               <div style={{ overflowX: "auto", marginBottom: 10 }}>
@@ -1926,7 +2011,7 @@ function ParentView({ payload, onExit }) {
               </div>
               {avg !== null && (
                 <div style={{ padding: "10px 12px", borderRadius: 3, background: avg >= passMark ? "#E4F0E8" : "#F7E4E1", border: `1px solid ${avg >= passMark ? "#B8D9C4" : "#E8C4BD"}`, fontFamily: FONT.body, fontSize: 14, color: "#22304A" }}>
-                  Average <strong>{avg}/100</strong> · grade <strong>{gradeOf(avg)}</strong> — <strong style={{ color: avg >= passMark ? "#3F7A5C" : "#B84C3E" }}>{avg >= passMark ? "PASS" : "FAIL"}</strong>
+                  Average <strong>{avg}/100</strong> — <strong style={{ color: gradeInk(avg) }}>Level {gradeLevel(avg)}: {gradeLabel(avg)}</strong>
                 </div>
               )}
             </div>
@@ -2100,7 +2185,7 @@ function StaffAccounts({ roster, who }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({ username: "", name: "", role: "teacher", password: "", teacherId: "", email: "" });
+  const [form, setForm] = useState({ username: "", name: "", role: "teacher", password: "", teacherId: "", email: "", phone: "" });
   const [pw, setPw] = useState({ old: "", next: "" });
 
   const refresh = async () => {
@@ -2113,9 +2198,11 @@ function StaffAccounts({ roster, who }) {
     if (!form.username.trim() || !form.name.trim()) return setErr("Username and name are required.");
     try {
       await staffUpsert(form.username.trim(), form.name.trim(), form.role, form.password.trim() || null, form.teacherId || null);
-      if (form.email.trim()) await staffSetEmail(form.username.trim(), form.email.trim());
+      if (form.email.trim() || form.phone.trim()) {
+        await staffSetContact(form.username.trim(), form.email.trim(), form.phone.trim());
+      }
       setMsg(`Saved ${form.username.trim()}${form.password ? " — password set" : ""}`);
-      setForm({ username: "", name: "", role: "teacher", password: "", teacherId: "", email: "" });
+      setForm({ username: "", name: "", role: "teacher", password: "", teacherId: "", email: "", phone: "" });
       setErr(""); refresh();
       setTimeout(() => setMsg(""), 4000);
     } catch (e) { setErr(String(e.message || e).slice(0, 160)); }
@@ -2170,6 +2257,7 @@ function StaffAccounts({ roster, who }) {
         </select>
         <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Password" style={{ ...darkInput(), flex: 1, minWidth: 120 }} />
         <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email (for password reset)" inputMode="email" autoCapitalize="none" style={{ ...darkInput(), flex: 1, minWidth: 160 }} />
+        <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone (e.g. 0722 000000)" inputMode="tel" style={{ ...darkInput(), flex: 1, minWidth: 140 }} />
         <button onClick={save} style={primaryBtn()}>Save account</button>
       </div>
 
@@ -2183,6 +2271,7 @@ function StaffAccounts({ roster, who }) {
               <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: r.role === "admin" ? "#B8860B" : "#6B6552", marginTop: 2 }}>
                 {r.role === "admin" ? "ADMINISTRATOR" : "TEACHER"}{!r.active ? " · DISABLED" : ""}
                 {r.email ? " · " + r.email : " · no email (cannot self-reset)"}
+                {r.phone ? " · " + r.phone : ""}
               </div>
             </span>
             <span style={{ display: "flex", gap: 12 }}>
@@ -2636,6 +2725,189 @@ function MyTimetable({ roster, teacher }) {
 }
 
 // ================= PRINTABLE DOCUMENTS (inline, no pop-up) =================
+
+// ---------- Printable class marksheet: whole class, all subjects, one page ----------
+function ClassMarksheetDoc({ roster, classId, term, onBack }) {
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
+  const students = roster.students.filter((s) => s.classId === classId);
+  const record = getMarksFor(roster, classId, term);
+  const grid = record.grid || {};
+  const status = statusOf(record);
+
+  // only subjects that actually have marks, to keep the sheet narrow enough to read
+  const subjects = roster.subjects.filter((sub) =>
+    students.some((s) => subjectFinal(grid[s.id]?.[sub], weights) !== null));
+
+  const ranked = classPositions(grid, students, roster.subjects, weights);
+  const posOf = (id) => ranked.find((r) => r.student.id === id)?.position ?? "—";
+
+  const classMean = ranked.length
+    ? Math.round(ranked.reduce((a, r) => a + r.average, 0) / ranked.length) : null;
+
+  const subjectMean = (sub) => {
+    const vals = students.map((s) => subjectFinal(grid[s.id]?.[sub], weights)).filter((v) => v !== null);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  };
+
+  const th = { ...docTh, padding: "5px 4px", fontSize: 8 };
+  const td = { ...docTd, padding: "5px 4px", fontSize: 10 };
+
+  return (
+    <DocShell title="Class marksheet" onBack={onBack}>
+      <DocHeader subtitle={`Class Marksheet — ${classNameOf(roster, classId)} — ${term}`} />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14, fontSize: 12 }}>
+        <div><strong>Pupils:</strong> {students.length} &nbsp;·&nbsp; <strong>With results:</strong> {ranked.length}</div>
+        <div><strong>Class mean:</strong> {classMean === null ? "—" : `${classMean} (Level ${gradeLevel(classMean)})`}</div>
+        <div><strong>Status:</strong> {status === "approved" ? "Approved" : status === "submitted" ? "Awaiting approval" : "Draft"}</div>
+      </div>
+
+      {subjects.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#6B6552" }}>No marks entered for {term} yet.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, textAlign: "center" }}>Pos</th>
+                <th style={th}>Pupil</th>
+                <th style={th}>Adm No</th>
+                {subjects.map((sub) => (
+                  <th key={sub} style={{ ...th, textAlign: "center" }}>{sub.slice(0, 8)}</th>
+                ))}
+                <th style={{ ...th, textAlign: "center" }}>Total</th>
+                <th style={{ ...th, textAlign: "center" }}>Mean</th>
+                <th style={{ ...th, textAlign: "center" }}>Level</th>
+              </tr>
+            </thead>
+            <tbody>
+              {students.map((s) => {
+                const sum = studentSummary(grid, s.id, roster.subjects, weights);
+                return (
+                  <tr key={s.id}>
+                    <td style={{ ...td, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>{posOf(s.id)}</td>
+                    <td style={td}>{s.name}</td>
+                    <td style={{ ...td, fontFamily: FONT.mono, fontSize: 8.5, color: "#6B6552" }}>{s.id}</td>
+                    {subjects.map((sub) => {
+                      const fin = subjectFinal(grid[s.id]?.[sub], weights);
+                      return (
+                        <td key={sub} style={{ ...td, textAlign: "center", fontFamily: FONT.mono, color: fin === null ? "#B8B2A0" : gradeInk(fin) }}>
+                          {fin === null ? "–" : fin}
+                        </td>
+                      );
+                    })}
+                    <td style={{ ...td, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>{sum.count ? sum.total : "–"}</td>
+                    <td style={{ ...td, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>{sum.average ?? "–"}</td>
+                    <td style={{ ...td, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700, color: gradeInk(sum.average) }}>
+                      {sum.average === null ? "–" : `L${gradeLevel(sum.average)}`}
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr>
+                <td style={{ ...td, borderTop: "2px solid #22304A" }} colSpan={3}><strong>Subject mean</strong></td>
+                {subjects.map((sub) => (
+                  <td key={sub} style={{ ...td, borderTop: "2px solid #22304A", textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>
+                    {subjectMean(sub) ?? "–"}
+                  </td>
+                ))}
+                <td style={{ ...td, borderTop: "2px solid #22304A" }} colSpan={2}></td>
+                <td style={{ ...td, borderTop: "2px solid #22304A", textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>
+                  {classMean === null ? "–" : `L${gradeLevel(classMean)}`}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, marginTop: 16, fontSize: 10, color: "#6B6552", fontFamily: FONT.mono }}>
+        CBC PERFORMANCE LEVELS — 4 Exceeding (76–100) · 3 Meeting (51–75) · 2 Approaching (26–50) · 1 Below (0–25)
+        <div style={{ marginTop: 3 }}>
+          Marks weighted: CAT 1 {weights.cat1}% + CAT 2 {weights.cat2}% + Exam {weights.exam}%
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 34 }}>
+        <div style={docSig}>Class Teacher's Signature</div>
+        <div style={docSig}>Head Teacher's Signature</div>
+      </div>
+    </DocShell>
+  );
+}
+
+// ---------- Printable receipt for a single fee payment ----------
+function ReceiptDoc({ roster, student, payment, onBack }) {
+  const cur = roster.settings.currency;
+  const paidToDate = (student.payments || [])
+    .filter((p) => p.date <= payment.date)
+    .reduce((a, p) => a + (p.amount || 0), 0);
+  const balanceAfter = (student.feeDue || 0) - paidToDate;
+
+  const row = { display: "flex", justifyContent: "space-between", padding: "7px 0", fontSize: 13, borderBottom: "1px solid #EFEADC" };
+
+  return (
+    <DocShell title="Fee receipt" onBack={onBack}>
+      <DocHeader subtitle="Official Fee Receipt" />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 18, fontSize: 12.5 }}>
+        <div><strong>Receipt No:</strong> {payment.receiptNo || "—"}</div>
+        <div><strong>Date:</strong> {fmtDate(payment.date)}</div>
+      </div>
+
+      <DocInfo roster={roster} student={student} />
+
+      <div style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "14px 16px", background: "#F5F1E6", margin: "10px 0 18px" }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#8A8368", letterSpacing: 1 }}>AMOUNT RECEIVED</div>
+        <div style={{ fontSize: 30, fontWeight: "bold", marginTop: 4 }}>{cur}{money(payment.amount)}</div>
+        <div style={{ fontSize: 11.5, color: "#6B6552", marginTop: 4 }}>
+          {amountInWords(payment.amount)} {cur === "KSh" ? "shillings" : ""} only
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={row}><span>Total fee due</span><strong>{cur}{money(student.feeDue || 0)}</strong></div>
+        <div style={row}><span>Paid to date (including this payment)</span><strong>{cur}{money(paidToDate)}</strong></div>
+        <div style={{ ...row, borderBottom: "none", borderTop: "2px solid #22304A", paddingTop: 10, fontSize: 15 }}>
+          <span><strong>Balance outstanding</strong></span>
+          <strong style={{ color: balanceAfter > 0 ? "#B84C3E" : "#3F7A5C" }}>{cur}{money(balanceAfter)}</strong>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11, color: "#6B6552", marginBottom: 26 }}>
+        This receipt confirms the amount stated above has been received by the school.
+        Please retain it as proof of payment.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 20 }}>
+        <div style={docSig}>Received by (Bursar)</div>
+        <div style={docSig}>Official School Stamp</div>
+      </div>
+    </DocShell>
+  );
+}
+
+// Writes an amount in words, for the receipt.
+function amountInWords(n) {
+  n = Math.floor(Number(n) || 0);
+  if (n === 0) return "Zero";
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const under1000 = (x) => {
+    let out = "";
+    if (x >= 100) { out += ones[Math.floor(x / 100)] + " Hundred"; x %= 100; if (x) out += " and "; }
+    if (x >= 20) { out += tens[Math.floor(x / 10)]; x %= 10; if (x) out += "-"; }
+    if (x > 0 && x < 20) out += ones[x];
+    return out;
+  };
+  let out = "";
+  if (n >= 1000000) { out += under1000(Math.floor(n / 1000000)) + " Million "; n %= 1000000; }
+  if (n >= 1000) { out += under1000(Math.floor(n / 1000)) + " Thousand "; n %= 1000; }
+  if (n > 0) out += under1000(n);
+  return out.trim();
+}
+
 function DocShell({ title, onBack, children }) {
   return (
     <div style={{ minHeight: "100vh", background: "#1F3A2E" }}>
@@ -2734,7 +3006,7 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
   const weights = roster.settings.weights || DEFAULT_WEIGHTS;
   const subjects = Object.keys(termMarks);
   const due = student.feeDue || 0, paid = student.feePaid || 0;
-  const remark = (sc) => (sc >= 80 ? "Excellent" : sc >= 65 ? "Good" : sc >= passMark ? "Fair" : "Needs improvement");
+  const remark = (sc) => gradeLabel(sc);
 
   return (
     <DocShell title="Report card" onBack={onBack}>
@@ -2780,7 +3052,7 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
         {[["POSITION", rank ? `${rank.position} / ${rank.outOf}` : "—"],
           ["TOTAL", rank ? rank.total : "—"],
           ["AVERAGE", avg === null || avg === undefined ? "—" : `${avg}/100`],
-          ["MEAN GRADE", gradeOf(avg)]].map(([l, v]) => (
+          ["PERFORMANCE LEVEL", avg === null || avg === undefined ? "—" : "L" + gradeLevel(avg)]].map(([l, v]) => (
           <div key={l} style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "9px 10px", background: "#F5F1E6", textAlign: "center" }}>
             <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#8A8368", letterSpacing: 0.8 }}>{l}</div>
             <div style={{ fontSize: 16, fontWeight: "bold", marginTop: 3 }}>{v}</div>
@@ -2790,7 +3062,7 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
 
       {avg !== null && avg !== undefined && (
         <div style={{ marginBottom: 18, fontSize: 13.5 }}>
-          Outcome: <strong>{avg >= passMark ? "PASS" : "FAIL"}</strong>
+          Overall: <strong>Level {gradeLevel(avg)} — {gradeLabel(avg)}</strong>
           <span style={{ color: "#6B6552", fontSize: 11.5 }}> (pass mark {passMark})</span>
         </div>
       )}
@@ -2807,7 +3079,7 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
       </div>
 
       <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, marginBottom: 14, fontSize: 11, color: "#6B6552", fontFamily: FONT.mono }}>
-        GRADING: A 80+ · A- 75 · B+ 70 · B 65 · B- 60 · C+ 55 · C 50 · C- 45 · D+ 40 · D 35 · D- 30 · E below 30
+        CBC PERFORMANCE LEVELS — 4 Exceeding Expectation (76–100) · 3 Meeting Expectation (51–75) · 2 Approaching Expectation (26–50) · 1 Below Expectation (0–25)
       </div>
 
       <div style={{ border: "1px dashed #B8B2A0", borderRadius: 4, padding: "9px 11px", marginBottom: 20, fontSize: 11.5, fontFamily: FONT.mono, color: "#22304A" }}>
