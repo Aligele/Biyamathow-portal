@@ -55,7 +55,14 @@ async function rpc(fn, args) {
     try { const j = JSON.parse(txt); detail = j.message || j.hint || j.details || txt; } catch (e) {}
     throw new Error(`${fn} ${res.status}: ${String(detail).slice(0, 160)}`);
   }
-  return res.json();
+
+  // Functions that return nothing send an empty body (HTTP 204). Parsing that
+  // as JSON throws "Unexpected end of JSON input", which looked like a failure
+  // even though the work had already succeeded.
+  if (res.status === 204) return null;
+  const text = await res.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch (e) { return null; }
 }
 
 // ---------- authentication ----------
