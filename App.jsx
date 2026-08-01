@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { qrMatrix, qrSvgPath } from "./qr.js";
 import {
   loadRoster, saveRoster as persistRoster, isShared, isOffline, hasPendingChanges,
   staffLogin, staffLogout, restoreSession, getWho, changeMyPassword,
@@ -73,7 +74,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v14 · discipline + arrivals";
+const APP_VERSION = "v16 · student ID cards";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -103,11 +104,18 @@ const SCORE_OPTIONS = Array.from({ length: 100 }, (_, i) => i + 1);
 
 // Staff must sign in at school by this time; later counts as late.
 const ARRIVAL_CUTOFF = { hour: 8, minute: 0 };
+// Staff may not sign out before this time without a reason for admin to approve.
+const DEPARTURE_TIME = { hour: 16, minute: 0 };
 const nowHM = () => { const d = new Date(); return { h: d.getHours(), m: d.getMinutes() }; };
 const fmtHM = (h, m) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 const isLateNow = () => {
   const { h, m } = nowHM();
   return h > ARRIVAL_CUTOFF.hour || (h === ARRIVAL_CUTOFF.hour && m > ARRIVAL_CUTOFF.minute);
+};
+// True when it is still before the 16:00 close of day — leaving now is "early".
+const isEarlyDeparture = () => {
+  const { h, m } = nowHM();
+  return h < DEPARTURE_TIME.hour || (h === DEPARTURE_TIME.hour && m < DEPARTURE_TIME.minute);
 };
 
 const DISCIPLINE_CATEGORIES = [
@@ -982,6 +990,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     { title: "PEOPLE", items: [
       { key: "students", label: "Students", icon: "students" },
       { key: "discipline", label: "Discipline cases", icon: "approvals" },
+      { key: "idcards", label: "Student ID cards", icon: "logins" },
       { key: "signins", label: "Arrival sign-ins", icon: "duty" },
       { key: "teachers", label: "Teachers", icon: "teachers" },
       { key: "logins", label: "Staff logins", icon: "logins" },
@@ -1082,6 +1091,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "discipline" && <DisciplineReport roster={roster} saveRoster={saveRoster} classId={null} actorName="Admin" role="admin" />}
 
           {tab === "signins" && <CheckInApprovals roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "idcards" && <IdCardDashboard roster={roster} />}
 
           {tab === "classes" && (
             <div>
@@ -2962,6 +2973,7 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
   const today = todayISO();
   const mine = roster.checkins?.[today]?.[teacherId];
   const [note, setNote] = useState("");
+  const [outNote, setOutNote] = useState("");
 
   const signIn = () => {
     const { h, m } = nowHM();
@@ -2982,6 +2994,30 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
       teacherName, `Signed in at ${rec.time} (${rec.status})`);
     saveRoster(next, late ? `Signed in ${rec.time} — marked LATE, sent to admin` : `Signed in ${rec.time} — on time`);
     setNote("");
+  };
+
+  // Signing out. Before 16:00 counts as leaving early and needs a reason that
+  // the administrator must approve.
+  const signOut = () => {
+    const { h, m } = nowHM();
+    const early = isEarlyDeparture();
+    if (early && !outNote.trim()) {
+      window.alert("The school day ends at 16:00. Give a genuine reason for leaving early — the administrator must approve it.");
+      return;
+    }
+    const rec = {
+      ...mine,
+      outTime: fmtHM(h, m),
+      outStatus: early ? "early" : "full-day",
+      outNote: outNote.trim(),
+      outApproved: early ? null : true,   // a full day needs no approval
+      outTs: new Date().toISOString(),
+    };
+    const day = { ...(roster.checkins?.[today] || {}), [teacherId]: rec };
+    const next = logAction({ ...roster, checkins: { ...(roster.checkins || {}), [today]: day } },
+      teacherName, `Signed out at ${rec.outTime} (${rec.outStatus})${early ? " — reason: " + rec.outNote : ""}`);
+    saveRoster(next, early ? `Signed out ${rec.outTime} — EARLY, sent to admin` : `Signed out ${rec.outTime} — full day`);
+    setOutNote("");
   };
 
   // last 7 days for this teacher
@@ -3015,8 +3051,9 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
       )}
 
       {mine ? (
+        <>
         <div style={{
-          padding: "13px 15px", borderRadius: 5, marginBottom: 16,
+          padding: "13px 15px", borderRadius: 5, marginBottom: 12,
           background: mine.status === "late" ? "#F7E4E1" : "#E4F0E8",
           border: `1px solid ${mine.status === "late" ? "#E8C4BD" : "#B8D9C4"}`,
         }}>
@@ -3031,6 +3068,50 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
               : "AWAITING ADMIN APPROVAL"}
           </div>
         </div>
+
+        {/* Sign-out half of the day */}
+        {mine.outTime ? (
+          <div style={{
+            padding: "13px 15px", borderRadius: 5, marginBottom: 16,
+            background: mine.outStatus === "early" ? "#F7E4E1" : "#E4F0E8",
+            border: `1px solid ${mine.outStatus === "early" ? "#E8C4BD" : "#B8D9C4"}`,
+          }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#22304A" }}>
+              Signed out at {mine.outTime} — {mine.outStatus === "early" ? "LEFT EARLY" : "full day"}
+            </div>
+            {mine.outNote && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginTop: 4 }}>Reason: {mine.outNote}</div>}
+            {mine.outStatus === "early" && (
+              <div style={{ fontFamily: FONT.mono, fontSize: 11, marginTop: 6,
+                            color: mine.outApproved === true ? "#3F7A5C" : mine.outApproved === false ? "#B84C3E" : "#C98A2C" }}>
+                {mine.outApproved === true ? "EARLY DEPARTURE APPROVED"
+                  : mine.outApproved === false ? "NOT APPROVED — see admin"
+                  : "AWAITING ADMIN APPROVAL"}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{
+            padding: "13px 15px", borderRadius: 5, marginBottom: 16,
+            background: isEarlyDeparture() ? "#F5E8DC" : "#E4F0E8",
+            border: `1px solid ${isEarlyDeparture() ? "#E8CBA0" : "#B8D9C4"}`,
+          }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", letterSpacing: 1 }}>END OF DAY</div>
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", margin: "5px 0 9px", lineHeight: 1.5 }}>
+              {isEarlyDeparture()
+                ? `The school day ends at ${fmtHM(DEPARTURE_TIME.hour, DEPARTURE_TIME.minute)}. Leaving now is early — give a genuine reason and the administrator must approve it.`
+                : `It is after ${fmtHM(DEPARTURE_TIME.hour, DEPARTURE_TIME.minute)}. You may sign out for the day.`}
+            </div>
+            {isEarlyDeparture() && (
+              <textarea value={outNote} onChange={(e) => setOutNote(e.target.value)}
+                placeholder="Reason for leaving before 16:00 (required)"
+                style={{ ...darkInput(), width: "100%", height: 62, marginBottom: 9, resize: "vertical" }} />
+            )}
+            <button onClick={signOut} style={{ ...primaryBtn(), background: isEarlyDeparture() ? "#C98A2C" : "#3F7A5C" }}>
+              {isEarlyDeparture() ? "Sign out EARLY — needs approval" : "Sign out — full day"}
+            </button>
+          </div>
+        )}
+        </>
       ) : (
         <>
           {late && (
@@ -3050,9 +3131,11 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
           <div key={d} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
                                  padding: "8px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3 }}>
             <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#22304A" }}>{fmtDate(d)}</span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 11.5,
-                           color: !rec ? "#8A8368" : rec.status === "late" ? "#B84C3E" : "#3F7A5C" }}>
-              {rec ? `${rec.time} · ${rec.status}${rec.approved === true ? " ✓" : rec.approved === false ? " ✗" : ""}` : "not signed in"}
+            <span style={{ fontFamily: FONT.mono, fontSize: 11,
+                           color: !rec ? "#8A8368" : (rec.status === "late" || rec.outStatus === "early") ? "#B84C3E" : "#3F7A5C" }}>
+              {rec
+                ? `in ${rec.time}${rec.status === "late" ? " (late)" : ""} · ${rec.outTime ? `out ${rec.outTime}${rec.outStatus === "early" ? " (early)" : ""}` : "not signed out"}`
+                : "not signed in"}
             </span>
           </div>
         ))}
@@ -3068,21 +3151,23 @@ function CheckInApprovals({ roster, saveRoster }) {
   const nameOf = (id) => roster.teachers.find((t) => t.id === id)?.name
     || roster.teachers.find((t) => t.id === id)?.name || id;
 
-  const decide = (teacherId, ok) => {
+  const decide = (teacherId, ok, which = "in") => {
     const rec = day[teacherId];
     if (!rec) return;
+    const patch = which === "in" ? { approved: ok } : { outApproved: ok };
     const next = {
       ...roster,
-      checkins: { ...roster.checkins, [date]: { ...day, [teacherId]: { ...rec, approved: ok } } },
+      checkins: { ...roster.checkins, [date]: { ...day, [teacherId]: { ...rec, ...patch } } },
     };
     saveRoster(logAction(next, "Admin",
-      `${ok ? "Approved" : "Rejected"} ${nameOf(teacherId)}'s ${rec.status} sign-in on ${fmtDate(date)}`),
+      `${ok ? "Approved" : "Rejected"} ${nameOf(teacherId)}'s ${which === "in" ? rec.status + " arrival" : "early departure"} on ${fmtDate(date)}`),
       ok ? "Approved" : "Not approved");
   };
 
   const rows = roster.teachers.map((t) => ({ t, rec: day[t.id] }));
-  const pending = rows.filter((r) => r.rec && r.rec.approved === null).length;
+  const pending = rows.filter((r) => r.rec && (r.rec.approved === null || r.rec.outApproved === null)).length;
   const lateCount = rows.filter((r) => r.rec?.status === "late").length;
+  const earlyCount = rows.filter((r) => r.rec?.outStatus === "early").length;
   const absent = rows.filter((r) => !r.rec).length;
 
   return (
@@ -3092,12 +3177,14 @@ function CheckInApprovals({ roster, saveRoster }) {
         <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} style={darkInput()} />
       </div>
       <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
-        Staff sign in on arrival. After <strong>08:00</strong> the system records them as late and asks you to approve.
+        Staff sign in on arrival and out at the end of the day. Arriving after <strong>08:00</strong> is recorded
+        as late, and leaving before <strong>16:00</strong> is recorded as an early departure — both need your approval.
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: 10, marginBottom: 16 }}>
         <StatCard label="Awaiting you" value={pending} tone={pending ? "#3B5998" : "#22304A"} />
         <StatCard label="Late today" value={lateCount} tone={lateCount ? "#B84C3E" : "#3F7A5C"} />
+        <StatCard label="Left early" value={earlyCount} tone={earlyCount ? "#B84C3E" : "#3F7A5C"} />
         <StatCard label="Not signed in" value={absent} tone={absent ? "#C98A2C" : "#3F7A5C"} />
       </div>
 
@@ -3116,19 +3203,46 @@ function CheckInApprovals({ roster, saveRoster }) {
                 {rec ? `${rec.time} · ${rec.status.toUpperCase()}` : "NOT SIGNED IN"}
               </span>
             </div>
-            {rec?.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginTop: 4 }}>Reason: {rec.note}</div>}
             {rec && (
-              rec.approved === null ? (
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  <button onClick={() => decide(t.id, true)} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve</button>
-                  <button onClick={() => decide(t.id, false)} style={{ ...primaryBtn(), background: "#B84C3E" }}>Not approved</button>
-                </div>
-              ) : (
-                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, marginTop: 5,
-                              color: rec.approved ? "#3F7A5C" : "#B84C3E" }}>
-                  {rec.approved ? "APPROVED" : "NOT APPROVED"}
-                </div>
-              )
+              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552", marginTop: 4 }}>
+                {rec.outTime
+                  ? `out ${rec.outTime}${rec.outStatus === "early" ? " · LEFT EARLY" : " · full day"}`
+                  : "still on duty — not signed out"}
+              </div>
+            )}
+            {rec?.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginTop: 4 }}>Arrival reason: {rec.note}</div>}
+            {rec?.outNote && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginTop: 3 }}>Departure reason: {rec.outNote}</div>}
+
+            {rec && (
+              <div style={{ marginTop: 8, display: "grid", gap: 7 }}>
+                {/* arrival decision */}
+                {rec.approved === null ? (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", minWidth: 58 }}>ARRIVAL</span>
+                    <button onClick={() => decide(t.id, true, "in")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve</button>
+                    <button onClick={() => decide(t.id, false, "in")} style={{ ...primaryBtn(), background: "#B84C3E" }}>Not approved</button>
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: rec.approved ? "#3F7A5C" : "#B84C3E" }}>
+                    ARRIVAL {rec.approved ? "APPROVED" : "NOT APPROVED"}
+                  </div>
+                )}
+
+                {/* early departure decision */}
+                {rec.outStatus === "early" && (
+                  rec.outApproved === null ? (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", minWidth: 58 }}>DEPARTURE</span>
+                      <button onClick={() => decide(t.id, true, "out")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve</button>
+                      <button onClick={() => decide(t.id, false, "out")} style={{ ...primaryBtn(), background: "#B84C3E" }}>Not approved</button>
+                    </div>
+                  ) : (
+                    <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: rec.outApproved ? "#3F7A5C" : "#B84C3E" }}>
+                      EARLY DEPARTURE {rec.outApproved ? "APPROVED" : "NOT APPROVED"}
+                    </div>
+                  )
+                )}
+              </div>
             )}
           </div>
         ))}
@@ -3138,6 +3252,194 @@ function CheckInApprovals({ roster, saveRoster }) {
 }
 
 // ================= PRINTABLE DOCUMENTS (inline, no pop-up) =================
+// ---------- Printable student ID cards with a scannable QR code ----------
+// Cards are laid out two per row at roughly bank-card size, so a sheet of A4
+// yields eight. The QR carries the pupil's key details, so a phone camera or
+// any scanner at the gate reads them without needing the portal open.
+function StudentIdCards({ roster, students, onBack, title }) {
+  const cur = roster.settings.currency;
+
+  // What the scanner sees. Pipe-separated so it is readable even in a plain
+  // text scanner app, and short enough to stay a small, crisp QR.
+  const payload = (s) => [
+    SCHOOL_NAME,
+    SCHOOL_LOCATION,
+    `ADM:${s.id}`,
+    `NAME:${s.name}`,
+    `CLASS:${classNameOf(roster, s.classId)}`,
+    s.parentName ? `GUARDIAN:${s.parentName}` : "",
+  ].filter(Boolean).join(" | ");
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#1F3A2E" }}>
+      <div className="no-print" style={{ maxWidth: 800, margin: "0 auto", padding: "14px 12px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #4A6E58", color: "#F5F3EE", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
+        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E" }}>Print cards</button>
+        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8AA090" }}>
+          {students.length} card{students.length === 1 ? "" : "s"} · {title}
+        </span>
+      </div>
+
+      {students.length === 0 && (
+        <div className="no-print" style={{ maxWidth: 800, margin: "0 auto", padding: "0 12px 40px", fontFamily: FONT.body, fontSize: 13, color: "#B8C4B9" }}>
+          No pupils to print.
+        </div>
+      )}
+
+      <div className="print-doc" style={{
+        maxWidth: 800, margin: "0 auto 30px", background: "#fff", padding: "18px",
+        borderRadius: 4, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))",
+        gap: 14, alignContent: "start",
+      }}>
+        {students.map((s) => {
+          const m = qrMatrix(payload(s));
+          const size = m ? m.length : 0;
+          return (
+            <div key={s.id} className="id-card" style={{
+              border: "1.5px solid #22304A", borderRadius: 7, padding: "11px 12px",
+              background: "linear-gradient(135deg,#FFFFFF 0%,#F5F1E6 100%)",
+              color: "#22304A", fontFamily: "Georgia, 'Times New Roman', serif",
+              display: "flex", gap: 11, minHeight: 190, breakInside: "avoid",
+            }}>
+              {/* left: school + pupil details */}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, borderBottom: "1px solid #D8D2C2", paddingBottom: 6 }}>
+                  <Seal size={26} ink="#22304A" />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 9.5, fontWeight: "bold", lineHeight: 1.15, textTransform: "uppercase" }}>{SCHOOL_NAME}</div>
+                    <div style={{ fontSize: 7.5, color: "#6B6552", fontFamily: FONT.mono }}>{SCHOOL_LOCATION}</div>
+                  </div>
+                </div>
+
+                <div style={{ fontFamily: FONT.mono, fontSize: 7, letterSpacing: 1.2, color: "#8A8368", marginTop: 7 }}>PUPIL IDENTITY CARD</div>
+
+                <div style={{ fontSize: 15, fontWeight: "bold", lineHeight: 1.2, marginTop: 3 }}>{s.name}</div>
+
+                <div style={{ marginTop: 6, display: "grid", gap: 2.5, fontSize: 9.5 }}>
+                  <div><span style={{ color: "#8A8368" }}>Adm No:</span> <strong style={{ fontFamily: FONT.mono }}>{s.id}</strong></div>
+                  <div><span style={{ color: "#8A8368" }}>Class:</span> <strong>{classNameOf(roster, s.classId)}</strong></div>
+                  {s.parentName && <div><span style={{ color: "#8A8368" }}>Guardian:</span> {s.parentName}</div>}
+                </div>
+
+                <div style={{ marginTop: "auto", paddingTop: 7, borderTop: "1px dashed #C8C2B0", fontSize: 7.5, color: "#6B6552", fontFamily: FONT.mono, lineHeight: 1.35 }}>
+                  If found, please return to the school office.
+                </div>
+              </div>
+
+              {/* right: scannable code */}
+              <div style={{ width: 92, flex: "0 0 92px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                {m ? (
+                  <svg viewBox={`-2 -2 ${size + 4} ${size + 4}`} width="88" height="88"
+                       style={{ background: "#fff", border: "1px solid #E4DFCF", borderRadius: 3 }} shapeRendering="crispEdges">
+                    <path d={qrSvgPath(m)} fill="#22304A" />
+                  </svg>
+                ) : (
+                  <div style={{ fontSize: 8, color: "#B84C3E", textAlign: "center" }}>QR too long</div>
+                )}
+                <div style={{ fontFamily: FONT.mono, fontSize: 6.5, color: "#8A8368", marginTop: 4, textAlign: "center", lineHeight: 1.3 }}>
+                  SCAN TO VERIFY
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 7, color: "#22304A", marginTop: 3, textAlign: "center" }}>
+                  {s.id}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="no-print" style={{ maxWidth: 800, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#8AA090", lineHeight: 1.5 }}>
+        Print on card stock if you have it. Scanning any card with a phone camera shows the school name,
+        admission number, pupil's name, class and guardian.
+        <div style={{ marginTop: 6, color: "#C9A227" }}>
+          Note: the parent PIN is deliberately <strong>not</strong> on the card — a lost card would otherwise
+          give a stranger access to that child's records. PINs stay on the report card.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Admin dashboard for issuing ID cards ----------
+function IdCardDashboard({ roster }) {
+  const [classId, setClassId] = useState("");
+  const [picked, setPicked] = useState({});     // studentId -> true
+  const [printing, setPrinting] = useState(null);
+
+  const pool = classId ? roster.students.filter((s) => s.classId === classId) : roster.students;
+  const chosen = pool.filter((s) => picked[s.id]);
+
+  if (printing) {
+    return <StudentIdCards roster={roster} students={printing.students}
+             title={printing.title} onBack={() => setPrinting(null)} />;
+  }
+
+  return (
+    <div>
+      <SectionTitle>Student ID cards</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+        Each card carries a scannable code holding the school name, admission number, pupil's name,
+        class and guardian — readable with any phone camera.
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        <select value={classId} onChange={(e) => { setClassId(e.target.value); setPicked({}); }}
+          style={{ ...darkInput(), flex: 1, minWidth: 160 }}>
+          <option value="">All classes ({roster.students.length} pupils)</option>
+          {roster.classes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} ({roster.students.filter((s) => s.classId === c.id).length})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <button onClick={() => setPrinting({ students: pool, title: classId ? classNameOf(roster, classId) : "All classes" })}
+          disabled={pool.length === 0}
+          style={{ ...primaryBtn(), opacity: pool.length ? 1 : 0.5 }}>
+          Print all {pool.length} card{pool.length === 1 ? "" : "s"}
+        </button>
+        <button onClick={() => setPrinting({ students: chosen, title: `${chosen.length} selected` })}
+          disabled={chosen.length === 0}
+          style={{ ...primaryBtn(), background: "#3F7A5C", opacity: chosen.length ? 1 : 0.45 }}>
+          Print {chosen.length} selected
+        </button>
+        {chosen.length > 0 && (
+          <button onClick={() => setPicked({})} style={{ ...backBtnStyle(), color: "#B84C3E" }}>clear selection</button>
+        )}
+      </div>
+
+      {pool.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No pupils to show.</div>}
+
+      <div style={{ display: "grid", gap: 5 }}>
+        {pool.map((s) => (
+          <button key={s.id} onClick={() => setPicked({ ...picked, [s.id]: !picked[s.id] })}
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+              textAlign: "left", padding: "9px 12px", borderRadius: 3,
+              background: picked[s.id] ? "#E4F0E8" : "#F5F1E6",
+              border: `1px solid ${picked[s.id] ? "#3F7A5C" : "#E4DFCF"}`,
+            }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+              <span style={{
+                width: 17, height: 17, borderRadius: 3, flex: "0 0 17px",
+                border: `1.5px solid ${picked[s.id] ? "#3F7A5C" : "#B8B2A0"}`,
+                background: picked[s.id] ? "#3F7A5C" : "transparent",
+                color: "#fff", fontSize: 12, lineHeight: "15px", textAlign: "center",
+              }}>{picked[s.id] ? "✓" : ""}</span>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name}</span>
+            </span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552" }}>
+              {s.id} · {classNameOf(roster, s.classId)}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 // Small wrapper: lets a teacher choose a term, then print every pupil's card.
 function TeacherReportCards({ roster, classId }) {
