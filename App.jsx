@@ -6,6 +6,7 @@ import {
   staffList, staffUpsert, staffDeactivate, parentLookup,
   requestReset, confirmReset, staffSetEmail, staffSetContact, schoolInfo,
   photoSet, photoDelete, photosGet, photosWhich,
+  healthCheck, backupsList, backupNow, backupRestore,
 } from "./store.js";
 
 // ---------- helpers ----------
@@ -75,7 +76,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v18 · teacher link fix";
+const APP_VERSION = "v19 · hardened";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -1007,6 +1008,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
       { key: "year end", label: "End of year", icon: "yearend" },
     ]},
     { title: "SYSTEM", items: [
+      { key: "health", label: "System health", icon: "approvals" },
       { key: "backup", label: "Backup", icon: "backup" },
       { key: "settings", label: "Settings", icon: "settings" },
     ]},
@@ -1288,6 +1290,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "reports" && <AdminReports roster={roster} />}
 
           {tab === "year end" && <YearEnd roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "health" && <SystemHealth roster={roster} />}
 
           {tab === "backup" && <AdminBackup roster={roster} saveRoster={saveRoster} syncState={syncState} onForceSave={onForceSave} />}
 
@@ -3284,6 +3288,128 @@ function CheckInApprovals({ roster, saveRoster }) {
                 )}
               </div>
             )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Admin: system health and automatic snapshots ----------
+// Surfaces the quiet problems that break things weeks later, and lists the
+// snapshots the database takes on its own.
+function SystemHealth({ roster }) {
+  const [rows, setRows] = useState(null);
+  const [snaps, setSnaps] = useState(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = async () => {
+    setErr("");
+    try { setRows(await healthCheck()); } catch (e) { setErr("Could not run the checks."); setRows([]); }
+    try { setSnaps(await backupsList()); } catch (e) { setSnaps([]); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const takeOne = async () => {
+    setBusy(true); setMsg("");
+    try { await backupNow("taken by admin"); setMsg("Snapshot saved."); await load(); }
+    catch (e) { setErr(String(e.message || e).slice(0, 160)); }
+    setBusy(false);
+  };
+
+  const restore = async (b) => {
+    const when = new Date(b.taken_at).toLocaleString();
+    if (!window.confirm(`Restore the snapshot from ${when}?\\n\\nEverything currently in the portal will be replaced. A safety copy of today's data is taken first, so this can be undone.`)) return;
+    setBusy(true); setMsg("");
+    try {
+      await backupRestore(b.id);
+      setMsg("Restored. Reload the page to see the restored data.");
+      await load();
+    } catch (e) { setErr(String(e.message || e).slice(0, 160)); }
+    setBusy(false);
+  };
+
+  const problems = (rows || []).filter((r) => r.severity === "problem");
+  const warnings = (rows || []).filter((r) => r.severity === "warning");
+  const TONE = { problem: "#B84C3E", warning: "#C98A2C", ok: "#3F7A5C" };
+
+  return (
+    <div>
+      <SectionTitle>System health</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+        Checks for the quiet problems that cause trouble later — a login with no teacher record,
+        a pupil in a deleted class, staff who cannot recover a password.
+      </div>
+
+      {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1", border: "1px solid #E8C4BD",
+                            fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+      {msg && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#E4F0E8", border: "1px solid #B8D9C4",
+                            fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginBottom: 12 }}>{msg}</div>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 16 }}>
+        <StatCard label="Problems" value={rows ? problems.length : "…"} tone={problems.length ? "#B84C3E" : "#3F7A5C"} />
+        <StatCard label="Warnings" value={rows ? warnings.length : "…"} tone={warnings.length ? "#C98A2C" : "#3F7A5C"} />
+        <StatCard label="Snapshots" value={snaps ? snaps.length : "…"} />
+      </div>
+
+      {rows && rows.length === 0 && (
+        <div style={{ padding: "13px 15px", borderRadius: 5, background: "#E4F0E8", border: "1px solid #B8D9C4",
+                      fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", marginBottom: 18 }}>
+          Everything checks out — nothing needs attention.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 7, marginBottom: 22 }}>
+        {(rows || []).filter((r) => r.severity !== "ok").map((r, i) => (
+          <div key={i} style={{ padding: "10px 12px", background: "#F5F1E6", borderRadius: 4,
+                border: "1px solid #E4DFCF", borderLeft: `4px solid ${TONE[r.severity]}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#22304A", fontWeight: 600 }}>{r.detail}</span>
+              <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: TONE[r.severity] }}>{r.severity.toUpperCase()}</span>
+            </div>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 4 }}>
+              {r.area} — {r.fix}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={load} style={{ ...backBtnStyle(), color: "#22304A", marginBottom: 22 }}>↻ run checks again</button>
+
+      <SectionTitle>Snapshots</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+        The database takes these on its own — hourly while the portal is in use, plus one kept for each
+        day and each month. Nothing to remember.
+      </div>
+      <button onClick={takeOne} disabled={busy} style={{ ...primaryBtn(), marginBottom: 14, opacity: busy ? 0.5 : 1 }}>
+        Take a snapshot now
+      </button>
+
+      {snaps === null && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Loading…</div>}
+      {snaps && snaps.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>None yet — the first save will create one.</div>}
+
+      <div style={{ display: "grid", gap: 5 }}>
+        {(snaps || []).map((b) => (
+          <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                gap: 10, flexWrap: "wrap", padding: "9px 12px", background: "#F5F1E6",
+                border: "1px solid #E4DFCF", borderRadius: 3,
+                borderLeft: `4px solid ${b.kind === "monthly" ? "#22304A" : b.kind === "daily" ? "#3F7A5C" : "#D8D2C2"}` }}>
+            <span>
+              <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#22304A" }}>
+                {new Date(b.taken_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", marginLeft: 8 }}>
+                {b.kind} · {b.size_kb}KB
+              </span>
+              {b.reason && <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#8A8368", marginTop: 2 }}>{b.reason}</div>}
+            </span>
+            <button onClick={() => restore(b)} disabled={busy}
+              style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>
+              restore
+            </button>
           </div>
         ))}
       </div>

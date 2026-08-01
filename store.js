@@ -242,3 +242,9 @@ export async function photosGet(studentIds) {
   (rows || []).forEach((r) => { out[r.student_id] = r.data; });
   return out;
 }
+
+// ---------- system health & snapshots ----------
+export const healthCheck   = ()            => rpc("health_check",   { p_token: getToken() });
+export const backupsList   = ()            => rpc("backups_list",   { p_token: getToken() });
+export const backupNow     = (reason)      => rpc("backup_now",     { p_token: getToken(), p_reason: reason || "manual" });
+export const backupRestore = (id)          => rpc("backup_restore", { p_token: getToken(), p_id: id });
