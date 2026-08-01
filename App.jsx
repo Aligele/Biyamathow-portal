@@ -73,7 +73,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v13 · CBC + printing";
+const APP_VERSION = "v14 · discipline + arrivals";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -100,6 +100,24 @@ const DEFAULT_ADMIN_PASSWORD = "admin123";
 const DEFAULT_TERM = "Term 1";
 const DEFAULT_SUBJECTS = ["Math", "English", "Science", "Social", "IRE", "Kiswahili"];
 const SCORE_OPTIONS = Array.from({ length: 100 }, (_, i) => i + 1);
+
+// Staff must sign in at school by this time; later counts as late.
+const ARRIVAL_CUTOFF = { hour: 8, minute: 0 };
+const nowHM = () => { const d = new Date(); return { h: d.getHours(), m: d.getMinutes() }; };
+const fmtHM = (h, m) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+const isLateNow = () => {
+  const { h, m } = nowHM();
+  return h > ARRIVAL_CUTOFF.hour || (h === ARRIVAL_CUTOFF.hour && m > ARRIVAL_CUTOFF.minute);
+};
+
+const DISCIPLINE_CATEGORIES = [
+  "Lateness", "Absenteeism", "Noise making", "Bullying", "Fighting",
+  "Dishonesty", "Damage to property", "Uniform", "Homework not done", "Other",
+];
+const DISCIPLINE_ACTIONS = [
+  "Verbal warning", "Written warning", "Parent to be called",
+  "Counselling recommended", "Referred to admin", "Other",
+];
 
 // ---- Timetable & duty roster ----
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
@@ -216,6 +234,8 @@ const EMPTY_ROSTER = {
   marks: {},           // { [classId]: { [termKey]: { approved, grid: { [studentId]: { [subject]: {cat1,cat2,exam} } } } } }
   timetable: {},       // { [classId]: { [day]: { [periodId]: { subject, teacherId } } } }
   duty: [],            // [ { id, weekStart, teacherId, note } ]
+  discipline: [],      // [ { id, ts, studentId, classId, byTeacher, category, detail, action, status, adminNote } ]
+  checkins: {},        // { [date]: { [teacherId]: { time, status, note, approved } } }
   audit: [],           // [ { ts, actor, action } ] — who changed what
   archives: [],        // [ { year, savedAt, snapshot } ] — closed school years
   settings: { currency: "KSh", passMark: 51, weights: DEFAULT_WEIGHTS, periods: DEFAULT_PERIODS,
@@ -263,6 +283,8 @@ export default function SchoolRegister() {
             marks: p.marks || {},
             timetable: p.timetable || {},
             duty: p.duty || [],
+            discipline: p.discipline || [],
+            checkins: p.checkins || {},
             audit: p.audit || [],
             archives: p.archives || [],
             settings: {
@@ -456,6 +478,8 @@ function Shell({ children }) {
           .no-print { display: none !important; }
           html, body { background: #fff !important; }
           .print-doc { box-shadow: none !important; border: none !important; margin: 0 !important; max-width: none !important; padding: 0 !important; }
+          .report-page { page-break-after: always; }
+          .report-page:last-child { page-break-after: auto; }
         }
       `}</style>
       {children}
@@ -957,6 +981,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     ]},
     { title: "PEOPLE", items: [
       { key: "students", label: "Students", icon: "students" },
+      { key: "discipline", label: "Discipline cases", icon: "approvals" },
+      { key: "signins", label: "Arrival sign-ins", icon: "duty" },
       { key: "teachers", label: "Teachers", icon: "teachers" },
       { key: "logins", label: "Staff logins", icon: "logins" },
       { key: "staff", label: "Staff attendance", icon: "staff" },
@@ -1052,6 +1078,10 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "approvals" && <Approvals roster={roster} saveRoster={saveRoster} />}
 
           {tab === "logins" && <StaffAccounts roster={roster} who={who} />}
+
+          {tab === "discipline" && <DisciplineReport roster={roster} saveRoster={saveRoster} classId={null} actorName="Admin" role="admin" />}
+
+          {tab === "signins" && <CheckInApprovals roster={roster} saveRoster={saveRoster} />}
 
           {tab === "classes" && (
             <div>
@@ -1802,20 +1832,38 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
   return (
     <div>
       <PortalHeader title={`${classNameOf(roster, classId).toUpperCase()} · ${teacher.name.toUpperCase()}`}
-        section={{ attendance: "Attendance", results: "Exam results", timetable: "My timetable" }[tab]}
+        section={{ signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
+                   reportcards: "Report cards", timetable: "My timetable",
+                   register: "Register a pupil", discipline: "Discipline report" }[tab] || tab}
         onMenu={() => setMenuOpen(true)} onExit={onExit} />
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} active={tab} onPick={setTab}
         heading={teacher.name} subheading={classNameOf(roster, classId)}
         groups={[
-          { title: "DAILY", items: [{ key: "attendance", label: "Attendance", icon: "attendance" }] },
+          { title: "DAILY", items: [
+            { key: "signin", label: "Sign in (arrival)", icon: "duty" },
+            { key: "attendance", label: "Pupil attendance", icon: "attendance" },
+          ]},
           { title: "ACADEMICS", items: [
             { key: "results", label: "Exam results", icon: "marks" },
+            { key: "reportcards", label: "Print report cards", icon: "reports" },
             { key: "timetable", label: "My timetable", icon: "timetable" },
+          ]},
+          { title: "MY CLASS", items: [
+            { key: "register", label: "Register a pupil", icon: "students" },
+            { key: "discipline", label: "Discipline report", icon: "approvals" },
           ]},
         ]} />
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
           {tab === "attendance" && <TeacherAttendance roster={roster} saveRoster={saveRoster} classId={classId} students={students} />}
+          {tab === "signin" && <StaffCheckIn roster={roster} saveRoster={saveRoster} teacherId={teacher.id} teacherName={teacher.name} />}
+
+          {tab === "register" && <TeacherAddStudent roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} />}
+
+          {tab === "discipline" && <DisciplineReport roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} role="teacher" />}
+
+          {tab === "reportcards" && <TeacherReportCards roster={roster} classId={classId} />}
+
           {tab === "timetable" && <MyTimetable roster={roster} teacher={teacher} />}
 
           {tab === "results" && (
@@ -2724,7 +2772,567 @@ function MyTimetable({ roster, teacher }) {
   );
 }
 
+
+// ---------- Teacher: register a pupil into their own class ----------
+function TeacherAddStudent({ roster, saveRoster, classId, actorName }) {
+  const [form, setForm] = useState({ name: "", parentName: "", feeDue: "" });
+  const [msg, setMsg] = useState("");
+  const mine = roster.students.filter((s) => s.classId === classId);
+
+  const add = () => {
+    if (!form.name.trim()) return;
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const s = {
+      id: nextAdmissionNo(roster.students), name: form.name.trim(), classId,
+      parentName: form.parentName.trim(), feeDue: Number(form.feeDue) || 0,
+      feePaid: 0, payments: [], pin,
+    };
+    const next = logAction({ ...roster, students: [...roster.students, s] },
+      actorName || "Teacher", `Registered pupil ${s.name} (${s.id})`);
+    saveRoster(next, `${s.name} added — Adm ${s.id}, PIN ${pin}`);
+    setMsg(`${s.name} registered. Admission No: ${s.id} · PIN: ${pin} — write these down for the parent.`);
+    setForm({ name: "", parentName: "", feeDue: "" });
+  };
+
+  return (
+    <div>
+      <SectionTitle>Register a pupil</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+        New pupils are added straight into <strong>{classNameOf(roster, classId)}</strong>.
+        An admission number and parent PIN are generated automatically.
+      </div>
+
+      {msg && (
+        <div style={{ padding: "10px 12px", borderRadius: 4, background: "#E4F0E8", border: "1px solid #B8D9C4",
+                      fontFamily: FONT.mono, fontSize: 12.5, color: "#22304A", marginBottom: 12 }}>{msg}</div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder="Pupil's full name" style={{ ...darkInput(), flex: 1, minWidth: 160 }} />
+        <input value={form.parentName} onChange={(e) => setForm({ ...form, parentName: e.target.value })}
+          placeholder="Parent / guardian" style={{ ...darkInput(), flex: 1, minWidth: 140 }} />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        <input value={form.feeDue} onChange={(e) => setForm({ ...form, feeDue: e.target.value })}
+          placeholder="Term fee due" type="number" style={{ ...darkInput(), width: 130 }} />
+        <button onClick={add} disabled={!form.name.trim()} style={primaryBtn()}>Register pupil</button>
+      </div>
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        Pupils in this class ({mine.length})
+      </div>
+      {mine.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>None yet.</div>}
+      <div style={{ display: "grid", gap: 5 }}>
+        {mine.map((s) => (
+          <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                                    padding: "8px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF",
+                                    borderRadius: 3, flexWrap: "wrap", gap: 6 }}>
+            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name}</span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552" }}>
+              {s.id} · PIN {s.pin || "—"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Teacher: raise a disciplinary report to admin ----------
+function DisciplineReport({ roster, saveRoster, classId, actorName, role = "teacher" }) {
+  const [form, setForm] = useState({ studentId: "", category: "", detail: "", action: "" });
+  const scope = classId
+    ? (roster.discipline || []).filter((d) => d.classId === classId)
+    : (roster.discipline || []);
+  const list = [...scope].sort((a, b) => b.ts.localeCompare(a.ts));
+  const students = classId ? roster.students.filter((s) => s.classId === classId) : roster.students;
+
+  const submit = () => {
+    if (!form.studentId || !form.category || !form.detail.trim()) return;
+    const stu = roster.students.find((s) => s.id === form.studentId);
+    const rec = {
+      id: genId("DSC", roster.discipline || []),
+      ts: new Date().toISOString(),
+      studentId: form.studentId, classId: stu?.classId || classId,
+      byTeacher: actorName || "Teacher",
+      category: form.category, detail: form.detail.trim(), action: form.action || "",
+      status: "submitted", adminNote: "",
+    };
+    const next = logAction({ ...roster, discipline: [...(roster.discipline || []), rec] },
+      actorName || "Teacher", `Discipline report raised for ${stu?.name} (${form.category})`);
+    saveRoster(next, "Report sent to admin");
+    setForm({ studentId: "", category: "", detail: "", action: "" });
+  };
+
+  const nameOf = (id) => roster.students.find((s) => s.id === id)?.name || "—";
+  const TONE = { submitted: "#3B5998", reviewed: "#3F7A5C", dismissed: "#8A8368" };
+
+  return (
+    <div>
+      <SectionTitle>{role === "admin" ? "Disciplinary reports" : "Report a discipline case"}</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+        {role === "admin"
+          ? "Cases raised by teachers. Review each one and record the action taken."
+          : "Reports go to the administrator for review. Keep the description factual."}
+      </div>
+
+      {role === "teacher" && (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <select value={form.studentId} onChange={(e) => setForm({ ...form, studentId: e.target.value })}
+              style={{ ...darkInput(), flex: 1, minWidth: 140 }}>
+              <option value="">Pupil…</option>
+              {students.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
+              style={{ ...darkInput(), flex: 1, minWidth: 140 }}>
+              <option value="">Category…</option>
+              {DISCIPLINE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <textarea value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })}
+            placeholder="What happened? Include date, place and what was said or done."
+            style={{ ...darkInput(), width: "100%", height: 74, marginBottom: 8, resize: "vertical" }} />
+          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+            <select value={form.action} onChange={(e) => setForm({ ...form, action: e.target.value })}
+              style={{ ...darkInput(), flex: 1, minWidth: 160 }}>
+              <option value="">Action already taken (optional)…</option>
+              {DISCIPLINE_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <button onClick={submit} disabled={!form.studentId || !form.category || !form.detail.trim()}
+              style={{ ...primaryBtn(), background: "#3B5998" }}>Send to admin</button>
+          </div>
+        </>
+      )}
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        {role === "admin" ? `Cases (${list.length})` : `My reports (${list.length})`}
+      </div>
+      {list.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Nothing recorded.</div>}
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {list.map((d) => (
+          <div key={d.id} style={{ padding: "11px 13px", background: "#F5F1E6", borderRadius: 4,
+                border: "1px solid #E4DFCF", borderLeft: `4px solid ${TONE[d.status] || "#E4DFCF"}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>
+                {nameOf(d.studentId)} <span style={{ color: "#8A8368", fontWeight: 400, fontSize: 12 }}>· {d.category}</span>
+              </span>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10, color: TONE[d.status] || "#6B6552" }}>
+                {d.status.toUpperCase()}
+              </span>
+            </div>
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginTop: 5 }}>{d.detail}</div>
+            <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", marginTop: 5 }}>
+              {classNameOf(roster, d.classId)} · by {d.byTeacher} · {fmtDate(d.ts.slice(0, 10))}
+              {d.action ? ` · action: ${d.action}` : ""}
+            </div>
+            {d.adminNote && (
+              <div style={{ marginTop: 6, padding: "7px 10px", background: "#E4F0E8", border: "1px solid #B8D9C4",
+                            borderRadius: 3, fontFamily: FONT.body, fontSize: 12, color: "#22304A" }}>
+                <strong>Admin:</strong> {d.adminNote}
+              </div>
+            )}
+
+            {role === "admin" && d.status === "submitted" && (
+              <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+                <button onClick={() => {
+                  const note = window.prompt("Action taken / note to the teacher:", "") || "";
+                  saveRoster(logAction({ ...roster, discipline: roster.discipline.map((x) =>
+                    x.id === d.id ? { ...x, status: "reviewed", adminNote: note } : x) },
+                    "Admin", `Discipline case reviewed — ${nameOf(d.studentId)}`), "Case reviewed");
+                }} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Mark reviewed</button>
+                <button onClick={() => {
+                  const note = window.prompt("Reason for dismissing (optional):", "") || "";
+                  saveRoster({ ...roster, discipline: roster.discipline.map((x) =>
+                    x.id === d.id ? { ...x, status: "dismissed", adminNote: note } : x) }, "Case dismissed");
+                }} style={{ ...primaryBtn(), background: "#8A8368" }}>Dismiss</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Teacher: sign in on arrival; late after 08:00, admin approves ----------
+function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
+  const today = todayISO();
+  const mine = roster.checkins?.[today]?.[teacherId];
+  const [note, setNote] = useState("");
+
+  const signIn = () => {
+    const { h, m } = nowHM();
+    const late = isLateNow();
+    if (late && !note.trim()) {
+      window.alert("You are signing in after 08:00. Please give a reason before sending it to admin.");
+      return;
+    }
+    const rec = {
+      time: fmtHM(h, m),
+      status: late ? "late" : "present",
+      note: note.trim(),
+      approved: null,            // admin decides
+      ts: new Date().toISOString(),
+    };
+    const day = { ...(roster.checkins?.[today] || {}), [teacherId]: rec };
+    const next = logAction({ ...roster, checkins: { ...(roster.checkins || {}), [today]: day } },
+      teacherName, `Signed in at ${rec.time} (${rec.status})`);
+    saveRoster(next, late ? `Signed in ${rec.time} — marked LATE, sent to admin` : `Signed in ${rec.time} — on time`);
+    setNote("");
+  };
+
+  // last 7 days for this teacher
+  const history = [...Array(7)].map((_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const iso = d.toISOString().slice(0, 10);
+    return { d: iso, rec: roster.checkins?.[iso]?.[teacherId] };
+  });
+
+  const late = isLateNow();
+  const { h, m } = nowHM();
+
+  return (
+    <div>
+      <SectionTitle>Sign in for today</SectionTitle>
+
+      {!mine && (
+        <div style={{
+          padding: "13px 15px", borderRadius: 5, marginBottom: 14,
+          background: late ? "#F7E4E1" : "#E4F0E8",
+          border: `1px solid ${late ? "#E8C4BD" : "#B8D9C4"}`,
+        }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", letterSpacing: 1 }}>TIME NOW</div>
+          <div style={{ fontFamily: FONT.display, fontSize: 26, fontWeight: 700, color: "#22304A" }}>{fmtHM(h, m)}</div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: late ? "#B84C3E" : "#3F7A5C", marginTop: 4 }}>
+            {late
+              ? "After 08:00 — you will be marked LATE and admin must approve."
+              : "Before 08:00 — you will be marked on time."}
+          </div>
+        </div>
+      )}
+
+      {mine ? (
+        <div style={{
+          padding: "13px 15px", borderRadius: 5, marginBottom: 16,
+          background: mine.status === "late" ? "#F7E4E1" : "#E4F0E8",
+          border: `1px solid ${mine.status === "late" ? "#E8C4BD" : "#B8D9C4"}`,
+        }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#22304A" }}>
+            Signed in at {mine.time} — {mine.status === "late" ? "LATE" : "on time"}
+          </div>
+          {mine.note && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginTop: 4 }}>Reason: {mine.note}</div>}
+          <div style={{ fontFamily: FONT.mono, fontSize: 11, marginTop: 6,
+                        color: mine.approved === true ? "#3F7A5C" : mine.approved === false ? "#B84C3E" : "#C98A2C" }}>
+            {mine.approved === true ? "APPROVED BY ADMIN"
+              : mine.approved === false ? "NOT APPROVED — see admin"
+              : "AWAITING ADMIN APPROVAL"}
+          </div>
+        </div>
+      ) : (
+        <>
+          {late && (
+            <textarea value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="Reason for arriving after 08:00 (required)"
+              style={{ ...darkInput(), width: "100%", height: 64, marginBottom: 10, resize: "vertical" }} />
+          )}
+          <button onClick={signIn} style={{ ...primaryBtn(), background: late ? "#C98A2C" : "#3F7A5C", marginBottom: 18 }}>
+            {late ? "Sign in as LATE" : "Sign in — on time"}
+          </button>
+        </>
+      )}
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>Last 7 days</div>
+      <div style={{ display: "grid", gap: 5 }}>
+        {history.map(({ d, rec }) => (
+          <div key={d} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                                 padding: "8px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 3 }}>
+            <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#22304A" }}>{fmtDate(d)}</span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 11.5,
+                           color: !rec ? "#8A8368" : rec.status === "late" ? "#B84C3E" : "#3F7A5C" }}>
+              {rec ? `${rec.time} · ${rec.status}${rec.approved === true ? " ✓" : rec.approved === false ? " ✗" : ""}` : "not signed in"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Admin: approve arrival sign-ins, especially late ones ----------
+function CheckInApprovals({ roster, saveRoster }) {
+  const [date, setDate] = useState(todayISO());
+  const day = roster.checkins?.[date] || {};
+  const nameOf = (id) => roster.teachers.find((t) => t.id === id)?.name
+    || roster.teachers.find((t) => t.id === id)?.name || id;
+
+  const decide = (teacherId, ok) => {
+    const rec = day[teacherId];
+    if (!rec) return;
+    const next = {
+      ...roster,
+      checkins: { ...roster.checkins, [date]: { ...day, [teacherId]: { ...rec, approved: ok } } },
+    };
+    saveRoster(logAction(next, "Admin",
+      `${ok ? "Approved" : "Rejected"} ${nameOf(teacherId)}'s ${rec.status} sign-in on ${fmtDate(date)}`),
+      ok ? "Approved" : "Not approved");
+  };
+
+  const rows = roster.teachers.map((t) => ({ t, rec: day[t.id] }));
+  const pending = rows.filter((r) => r.rec && r.rec.approved === null).length;
+  const lateCount = rows.filter((r) => r.rec?.status === "late").length;
+  const absent = rows.filter((r) => !r.rec).length;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+        <SectionTitle>Arrival sign-ins</SectionTitle>
+        <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} style={darkInput()} />
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+        Staff sign in on arrival. After <strong>08:00</strong> the system records them as late and asks you to approve.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: 10, marginBottom: 16 }}>
+        <StatCard label="Awaiting you" value={pending} tone={pending ? "#3B5998" : "#22304A"} />
+        <StatCard label="Late today" value={lateCount} tone={lateCount ? "#B84C3E" : "#3F7A5C"} />
+        <StatCard label="Not signed in" value={absent} tone={absent ? "#C98A2C" : "#3F7A5C"} />
+      </div>
+
+      {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No teachers on file.</div>}
+      <div style={{ display: "grid", gap: 6 }}>
+        {rows.map(({ t, rec }) => (
+          <div key={t.id} style={{ padding: "10px 12px", background: "#F5F1E6", borderRadius: 4,
+                border: "1px solid #E4DFCF",
+                borderLeft: `4px solid ${!rec ? "#D8D2C2" : rec.status === "late" ? "#B84C3E" : "#3F7A5C"}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>
+                {t.name} <span style={{ color: "#8A8368", fontWeight: 400, fontSize: 12 }}>· {classNameOf(roster, t.classId)}</span>
+              </span>
+              <span style={{ fontFamily: FONT.mono, fontSize: 12,
+                             color: !rec ? "#8A8368" : rec.status === "late" ? "#B84C3E" : "#3F7A5C" }}>
+                {rec ? `${rec.time} · ${rec.status.toUpperCase()}` : "NOT SIGNED IN"}
+              </span>
+            </div>
+            {rec?.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginTop: 4 }}>Reason: {rec.note}</div>}
+            {rec && (
+              rec.approved === null ? (
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  <button onClick={() => decide(t.id, true)} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve</button>
+                  <button onClick={() => decide(t.id, false)} style={{ ...primaryBtn(), background: "#B84C3E" }}>Not approved</button>
+                </div>
+              ) : (
+                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, marginTop: 5,
+                              color: rec.approved ? "#3F7A5C" : "#B84C3E" }}>
+                  {rec.approved ? "APPROVED" : "NOT APPROVED"}
+                </div>
+              )
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ================= PRINTABLE DOCUMENTS (inline, no pop-up) =================
+
+// Small wrapper: lets a teacher choose a term, then print every pupil's card.
+function TeacherReportCards({ roster, classId }) {
+  const [term, setTerm] = useState(DEFAULT_TERM);
+  const [printing, setPrinting] = useState(false);
+  if (printing) return <BulkReportCards roster={roster} classId={classId} term={term} onBack={() => setPrinting(false)} />;
+
+  const record = getMarksFor(roster, classId, term);
+  const approved = statusOf(record) === "approved";
+  const count = roster.students.filter((s) => s.classId === classId).length;
+
+  return (
+    <div>
+      <SectionTitle>Print report cards</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+        Prints one report card per pupil in <strong>{classNameOf(roster, classId)}</strong>, each on its own page,
+        with the pupil's admission number and parent PIN printed at the foot.
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+        <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 130 }} />
+        <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: approved ? "#3F7A5C" : "#C98A2C" }}>
+          {approved ? "results approved" : "results not yet approved"}
+        </span>
+      </div>
+
+      {!approved && (
+        <div style={{ padding: "10px 12px", borderRadius: 4, background: "#F5E8DC", border: "1px solid #E8CBA0",
+                      fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginBottom: 14 }}>
+          These results have not been approved by admin yet. You can still print for your own checking,
+          but do not give them to parents until they are approved.
+        </div>
+      )}
+
+      <button onClick={() => setPrinting(true)} style={primaryBtn()}>
+        Open {count} report card{count === 1 ? "" : "s"}
+      </button>
+    </div>
+  );
+}
+
+// ---------- Every pupil's report card in one printable run ----------
+// Each card starts on a new page and carries the pupil's admission number and
+// PIN, so the printed slip doubles as the parent's portal login.
+function BulkReportCards({ roster, classId, term, onBack }) {
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
+  const students = roster.students.filter((s) => s.classId === classId);
+  const record = getMarksFor(roster, classId, term);
+  const grid = record.grid || {};
+  const ranked = classPositions(grid, students, roster.subjects, weights);
+  const classLog = getAttendanceFor(roster, classId);
+  const cur = roster.settings.currency;
+
+  const attendanceRate = (studentId) => {
+    const rows = [...Array(30)].map((_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      return classLog[d.toISOString().slice(0, 10)]?.[studentId];
+    }).filter(Boolean);
+    if (!rows.length) return null;
+    const present = rows.filter((v) => v === "present" || v === "late").length;
+    return Math.round((present / rows.length) * 100);
+  };
+
+  const withResults = students.filter((s) => studentSummary(grid, s.id, roster.subjects, weights).count > 0);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#1F3A2E" }}>
+      <div className="no-print" style={{ maxWidth: 760, margin: "0 auto", padding: "14px 12px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #4A6E58", color: "#F5F3EE", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
+        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E" }}>Print all / Save as PDF</button>
+        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8AA090" }}>
+          {withResults.length} report card{withResults.length === 1 ? "" : "s"} · {classNameOf(roster, classId)} · {term}
+        </span>
+      </div>
+
+      {withResults.length === 0 && (
+        <div className="no-print" style={{ maxWidth: 760, margin: "0 auto", padding: "0 12px 40px", fontFamily: FONT.body, fontSize: 13, color: "#B8C4B9" }}>
+          No pupil in this class has marks for {term} yet.
+        </div>
+      )}
+
+      {withResults.map((student, idx) => {
+        const sum = studentSummary(grid, student.id, roster.subjects, weights);
+        const rank = positionOf(ranked, student.id);
+        const avg = sum.average;
+        const rate = attendanceRate(student.id);
+        const due = student.feeDue || 0, paid = student.feePaid || 0;
+        const entries = roster.subjects
+          .filter((sub) => grid[student.id]?.[sub])
+          .map((sub) => [sub, grid[student.id][sub]]);
+
+        return (
+          <div key={student.id} className="print-doc report-page" style={{
+            maxWidth: 760, margin: "0 auto 24px", background: "#fff", color: "#22304A",
+            border: "1px solid #D8D2C2", borderRadius: 4, padding: "28px 30px",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.18)", fontFamily: "Georgia, 'Times New Roman', serif",
+            pageBreakAfter: idx < withResults.length - 1 ? "always" : "auto",
+          }}>
+            <DocHeader subtitle={`Report Card — ${term}`} />
+            <DocInfo roster={roster} student={student} />
+
+            <div style={{ fontWeight: "bold", marginBottom: 8 }}>Learning areas</div>
+            <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 14 }}>
+              <thead>
+                <tr>
+                  <th style={docTh}>Learning area</th>
+                  <th style={{ ...docTh, textAlign: "right" }}>CAT 1</th>
+                  <th style={{ ...docTh, textAlign: "right" }}>CAT 2</th>
+                  <th style={{ ...docTh, textAlign: "right" }}>Exam</th>
+                  <th style={{ ...docTh, textAlign: "right" }}>Final</th>
+                  <th style={{ ...docTh, textAlign: "center" }}>Level</th>
+                  <th style={docTh}>Performance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map(([sub, raw]) => {
+                  const e = normEntry(raw);
+                  const fin = subjectFinal(e, weights);
+                  return (
+                    <tr key={sub}>
+                      <td style={docTd}>{sub}</td>
+                      {ASSESSMENTS.map((a) => (
+                        <td key={a.key} style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 11.5 }}>
+                          {typeof e[a.key] === "number" ? e[a.key] : "–"}
+                        </td>
+                      ))}
+                      <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontWeight: 700 }}>{fin ?? "—"}</td>
+                      <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>
+                        {fin === null ? "—" : `L${gradeLevel(fin)}`}
+                      </td>
+                      <td style={{ ...docTd, fontSize: 11 }}>{fin === null ? "—" : gradeLabel(fin)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, margin: "14px 0 18px" }}>
+              {[["POSITION", rank ? `${rank.position} / ${rank.outOf}` : "—"],
+                ["TOTAL", sum.count ? sum.total : "—"],
+                ["MEAN", avg === null ? "—" : `${avg}/100`],
+                ["LEVEL", avg === null ? "—" : `L${gradeLevel(avg)}`]].map(([l, v]) => (
+                <div key={l} style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "8px 9px", background: "#F5F1E6", textAlign: "center" }}>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#8A8368", letterSpacing: 0.8 }}>{l}</div>
+                  <div style={{ fontSize: 15, fontWeight: "bold", marginTop: 3 }}>{v}</div>
+                </div>
+              ))}
+            </div>
+
+            {avg !== null && (
+              <div style={{ marginBottom: 16, fontSize: 13 }}>
+                Overall: <strong>Level {gradeLevel(avg)} — {gradeLabel(avg)}</strong>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+              <div style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "9px 11px", background: "#F5F1E6" }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#8A8368", letterSpacing: 1 }}>ATTENDANCE</div>
+                <div style={{ fontSize: 15, fontWeight: "bold", marginTop: 3 }}>{rate === null ? "—" : `${rate}%`}</div>
+              </div>
+              <div style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "9px 11px", background: "#F5F1E6" }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#8A8368", letterSpacing: 1 }}>FEES DUE / PAID / BALANCE</div>
+                <div style={{ fontSize: 12.5, fontWeight: "bold", marginTop: 3 }}>
+                  {cur}{money(due)} / {cur}{money(paid)} / {cur}{money(due - paid)}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 9, marginBottom: 12, fontSize: 9.5, color: "#6B6552", fontFamily: FONT.mono }}>
+              CBC PERFORMANCE LEVELS — 4 Exceeding (76–100) · 3 Meeting (51–75) · 2 Approaching (26–50) · 1 Below (0–25)
+            </div>
+
+            <div style={{ border: "1px dashed #B8B2A0", borderRadius: 4, padding: "9px 11px", marginBottom: 18,
+                          fontSize: 11, fontFamily: FONT.mono, color: "#22304A" }}>
+              PARENT PORTAL — Admission No: <strong>{student.id}</strong> · PIN: <strong>{student.pin || "—"}</strong>
+              <div style={{ color: "#8A8368", marginTop: 3 }}>
+                Use these at {SCHOOL_NAME} portal to see results any time. Keep them private.
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 24 }}>
+              <div style={docSig}>Class Teacher's Signature</div>
+              <div style={docSig}>Head Teacher's Signature</div>
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="no-print" style={{ maxWidth: 760, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#8AA090", lineHeight: 1.5 }}>
+        Each report card prints on its own page. If the Print button does not respond, use your browser menu (⋮ → Print).
+      </div>
+    </div>
+  );
+}
+
 
 // ---------- Printable class marksheet: whole class, all subjects, one page ----------
 function ClassMarksheetDoc({ roster, classId, term, onBack }) {
