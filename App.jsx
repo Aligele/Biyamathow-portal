@@ -7,6 +7,7 @@ import {
   requestReset, confirmReset, staffSetEmail, staffSetContact, schoolInfo,
   photoSet, photoDelete, photosGet, photosWhich,
   healthCheck, backupsList, backupNow, backupRestore,
+  mpesaClaim, mpesaLookup, mpesaRecent, mpesaRelease,
 } from "./store.js";
 
 // ---------- helpers ----------
@@ -76,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v19 · hardened";
+const APP_VERSION = "v20 · M-Pesa reconciliation";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -968,7 +969,9 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
   const [newTeacher, setNewTeacher] = useState({ name: "", classId: "", username: "", password: "" });
   const [newStudent, setNewStudent] = useState({ name: "", classId: "", parentName: "", feeDue: "" });
   const [newAdminPass, setNewAdminPass] = useState("");
-  const [payment, setPayment] = useState({ studentId: "", amount: "" });
+  const [payment, setPayment] = useState({ studentId: "", amount: "", method: "cash", code: "", sender: "" });
+  const [payErr, setPayErr] = useState("");
+  const [payBusy, setPayBusy] = useState(false);
   const [marksClassId, setMarksClassId] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [receipt, setReceipt] = useState(null);   // { student, payment } to print
@@ -1058,18 +1061,41 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     saveRoster({ ...roster, teachers: roster.teachers.map((x) => x.id === id ? { ...x, password: pw } : x) }, `${t?.name}'s new password: ${pw}`);
   };
   const setFeeDue = (id, val) => saveRoster({ ...roster, students: roster.students.map((s) => s.id === id ? { ...s, feeDue: Number(val) || 0 } : s) });
-  const recordPayment = () => {
+  const recordPayment = async () => {
     const amt = Number(payment.amount);
     if (!payment.studentId || !amt || amt <= 0) return;
     const st = roster.students.find((s) => s.id === payment.studentId);
     const receiptNo = nextReceiptNo(roster);
+    setPayErr(""); setPayBusy(true);
+
+    // For M-Pesa, claim the confirmation code first. If it has been used
+    // before the claim fails and no payment is recorded, so the books cannot
+    // be inflated by entering the same SMS twice.
+    let code = "";
+    if (payment.method === "mpesa") {
+      if (!payment.code.trim()) { setPayErr("Enter the M-Pesa confirmation code from the SMS."); setPayBusy(false); return; }
+      try {
+        code = await mpesaClaim(payment.code, payment.studentId, amt, todayISO(), payment.sender);
+      } catch (e) {
+        setPayErr(String(e.message || e).replace(/^mpesa_claim \d+: /, "").slice(0, 200));
+        setPayBusy(false);
+        return;
+      }
+    }
+
+    const entry = { date: todayISO(), amount: amt, receiptNo, method: payment.method };
+    if (code) { entry.mpesaCode = code; if (payment.sender.trim()) entry.sender = payment.sender.trim(); }
+
     const next = {
       ...roster,
       students: roster.students.map((s) => s.id === payment.studentId
-        ? { ...s, feePaid: (s.feePaid || 0) + amt, payments: [...(s.payments || []), { date: todayISO(), amount: amt, receiptNo }] } : s),
+        ? { ...s, feePaid: (s.feePaid || 0) + amt, payments: [...(s.payments || []), entry] } : s),
     };
-    saveRoster(logAction(next, "Admin", `Receipt ${receiptNo} — ${cur}${money(amt)} from ${st?.name}`), `${receiptNo} · ${cur}${money(amt)} from ${st?.name}`);
-    setPayment({ studentId: "", amount: "" });
+    saveRoster(logAction(next, "Admin",
+      `Receipt ${receiptNo} — ${cur}${money(amt)} from ${st?.name}${code ? " (M-Pesa " + code + ")" : " (cash)"}`),
+      `${receiptNo} · ${cur}${money(amt)} from ${st?.name}`);
+    setPayment({ studentId: "", amount: "", method: payment.method, code: "", sender: "" });
+    setPayBusy(false);
   };
 
   if (receipt) {
@@ -1235,13 +1261,58 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "fees" && (
             <div>
               <SectionTitle>Fees</SectionTitle>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4, padding: 12 }}>
-                <select value={payment.studentId} onChange={(e) => setPayment({ ...payment, studentId: e.target.value })} style={darkInput()}>
-                  <option value="">Record payment for…</option>
-                  {roster.students.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <input value={payment.amount} onChange={(e) => setPayment({ ...payment, amount: e.target.value })} placeholder="Amount" type="number" style={{ ...darkInput(), width: 110 }} />
-                <button onClick={recordPayment} style={primaryBtn()}>Record payment</button>
+              <div style={{ marginBottom: 16, background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4, padding: 12 }}>
+                {/* how the money arrived */}
+                <div style={{ display: "flex", gap: 7, marginBottom: 9, flexWrap: "wrap" }}>
+                  {[["cash", "Cash"], ["mpesa", "M-Pesa"], ["bank", "Bank"]].map(([k, label]) => (
+                    <button key={k} onClick={() => { setPayment({ ...payment, method: k }); setPayErr(""); }}
+                      style={{
+                        padding: "6px 15px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
+                        border: `1px solid ${payment.method === k ? "#22304A" : "#D8D2C2"}`,
+                        background: payment.method === k ? "#22304A" : "#fff",
+                        color: payment.method === k ? "#fff" : "#6B6552",
+                      }}>{label}</button>
+                  ))}
+                </div>
+
+                <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={payment.studentId} onChange={(e) => setPayment({ ...payment, studentId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 150 }}>
+                    <option value="">Record payment for…</option>
+                    {roster.students.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <input value={payment.amount} onChange={(e) => setPayment({ ...payment, amount: e.target.value })} placeholder="Amount" type="number" inputMode="numeric" style={{ ...darkInput(), width: 110 }} />
+                </div>
+
+                {payment.method === "mpesa" && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                    <input value={payment.code}
+                      onChange={(e) => setPayment({ ...payment, code: e.target.value.toUpperCase() })}
+                      placeholder="M-Pesa code (e.g. TFH5XY9Z12)" autoCapitalize="characters"
+                      style={{ ...darkInput(), flex: 1, minWidth: 170, fontFamily: FONT.mono, letterSpacing: 1 }} />
+                    <input value={payment.sender}
+                      onChange={(e) => setPayment({ ...payment, sender: e.target.value })}
+                      placeholder="Sent from (phone)" inputMode="tel"
+                      style={{ ...darkInput(), flex: 1, minWidth: 140 }} />
+                  </div>
+                )}
+
+                {payErr && (
+                  <div style={{ padding: "8px 11px", borderRadius: 4, background: "#F7E4E1", border: "1px solid #E8C4BD",
+                                fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 8, lineHeight: 1.45 }}>
+                    {payErr}
+                  </div>
+                )}
+
+                <button onClick={recordPayment} disabled={payBusy} style={{ ...primaryBtn(), opacity: payBusy ? 0.5 : 1 }}>
+                  {payBusy ? "Checking…" : "Record payment"}
+                </button>
+
+                {payment.method === "mpesa" && (
+                  <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 8, lineHeight: 1.5 }}>
+                    Copy the code from the M-Pesa SMS. Each code can only be recorded once — if it has
+                    already been used the payment is refused, so the same message cannot be counted twice.
+                  </div>
+                )}
               </div>
               {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Add students first.</div>}
               <div style={{ display: "grid", gap: 8 }}>
@@ -1265,6 +1336,9 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                             <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                               <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552" }}>
                                 {p.receiptNo || "receipt —"} · {fmtDate(p.date)} · {cur}{money(p.amount)}
+                                {p.mpesaCode
+                                  ? <span style={{ color: "#3F7A5C" }}> · M-PESA {p.mpesaCode}</span>
+                                  : p.method && p.method !== "cash" ? <span> · {p.method}</span> : null}
                               </span>
                               <button onClick={() => setReceipt({ student: s, payment: p })}
                                 style={{ background: "none", border: "none", color: "#22304A", fontFamily: FONT.mono, fontSize: 11, textDecoration: "underline" }}>
@@ -4128,9 +4202,15 @@ function ReceiptDoc({ roster, student, payment, onBack }) {
     <DocShell title="Fee receipt" onBack={onBack}>
       <DocHeader subtitle="Official Fee Receipt" />
 
-      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 18, fontSize: 12.5 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14, fontSize: 12.5 }}>
         <div><strong>Receipt No:</strong> {payment.receiptNo || "—"}</div>
         <div><strong>Date:</strong> {fmtDate(payment.date)}</div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 18, fontSize: 12 }}>
+        <div><strong>Paid by:</strong> {payment.mpesaCode ? "M-Pesa" : (payment.method ? payment.method.charAt(0).toUpperCase() + payment.method.slice(1) : "Cash")}</div>
+        {payment.mpesaCode && <div><strong>M-Pesa code:</strong> <span style={{ fontFamily: FONT.mono }}>{payment.mpesaCode}</span></div>}
+        {payment.sender && <div><strong>From:</strong> {payment.sender}</div>}
       </div>
 
       <DocInfo roster={roster} student={student} />

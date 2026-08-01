@@ -248,3 +248,13 @@ export const healthCheck   = ()            => rpc("health_check",   { p_token: g
 export const backupsList   = ()            => rpc("backups_list",   { p_token: getToken() });
 export const backupNow     = (reason)      => rpc("backup_now",     { p_token: getToken(), p_reason: reason || "manual" });
 export const backupRestore = (id)          => rpc("backup_restore", { p_token: getToken(), p_id: id });
+
+// ---------- M-Pesa reconciliation ----------
+// Codes are claimed in their own table with a uniqueness rule, so the same
+// confirmation code can never be recorded twice.
+export const mpesaClaim = (code, studentId, amount, date, sender) =>
+  rpc("mpesa_claim", { p_token: getToken(), p_code: code, p_student: studentId,
+                       p_amount: amount, p_date: date, p_sender: sender || null });
+export const mpesaLookup  = (code)  => rpc("mpesa_lookup",  { p_token: getToken(), p_code: code });
+export const mpesaRecent  = (days)  => rpc("mpesa_recent",  { p_token: getToken(), p_days: days || 30 });
+export const mpesaRelease = (code)  => rpc("mpesa_release", { p_token: getToken(), p_code: code });
