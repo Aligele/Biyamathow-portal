@@ -228,3 +228,17 @@ export async function schoolInfo() {
     return null;
   }
 }
+
+// ---------- student photos ----------
+// Stored in their own table so the roster stays small and quick to save.
+export const photoSet    = (studentId, dataUrl) => rpc("photo_set",   { p_token: getToken(), p_student: studentId, p_data: dataUrl });
+export const photoDelete = (studentId)          => rpc("photo_delete",{ p_token: getToken(), p_student: studentId });
+export const photosWhich = ()                   => rpc("photos_which",{ p_token: getToken() });
+
+export async function photosGet(studentIds) {
+  if (!isShared || !studentIds?.length) return {};
+  const rows = await rpc("photos_get", { p_token: getToken(), p_students: studentIds });
+  const out = {};
+  (rows || []).forEach((r) => { out[r.student_id] = r.data; });
+  return out;
+}

@@ -5,6 +5,7 @@ import {
   staffLogin, staffLogout, restoreSession, getWho, changeMyPassword,
   staffList, staffUpsert, staffDeactivate, parentLookup,
   requestReset, confirmReset, staffSetEmail, staffSetContact, schoolInfo,
+  photoSet, photoDelete, photosGet, photosWhich,
 } from "./store.js";
 
 // ---------- helpers ----------
@@ -74,7 +75,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v16 · student ID cards";
+const APP_VERSION = "v17 · photos + flag cards";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -990,6 +991,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     { title: "PEOPLE", items: [
       { key: "students", label: "Students", icon: "students" },
       { key: "discipline", label: "Discipline cases", icon: "approvals" },
+      { key: "photos", label: "Pupil photos", icon: "students" },
       { key: "idcards", label: "Student ID cards", icon: "logins" },
       { key: "signins", label: "Arrival sign-ins", icon: "duty" },
       { key: "teachers", label: "Teachers", icon: "teachers" },
@@ -1091,6 +1093,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "discipline" && <DisciplineReport roster={roster} saveRoster={saveRoster} classId={null} actorName="Admin" role="admin" />}
 
           {tab === "signins" && <CheckInApprovals roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "photos" && <PhotoManager roster={roster} classId={null} />}
 
           {tab === "idcards" && <IdCardDashboard roster={roster} />}
 
@@ -1845,7 +1849,8 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
       <PortalHeader title={`${classNameOf(roster, classId).toUpperCase()} · ${teacher.name.toUpperCase()}`}
         section={{ signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
                    reportcards: "Report cards", timetable: "My timetable",
-                   register: "Register a pupil", discipline: "Discipline report" }[tab] || tab}
+                   register: "Register a pupil", photos: "Pupil photos",
+                   discipline: "Discipline report" }[tab] || tab}
         onMenu={() => setMenuOpen(true)} onExit={onExit} />
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} active={tab} onPick={setTab}
         heading={teacher.name} subheading={classNameOf(roster, classId)}
@@ -1861,6 +1866,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           ]},
           { title: "MY CLASS", items: [
             { key: "register", label: "Register a pupil", icon: "students" },
+            { key: "photos", label: "Pupil photos", icon: "logins" },
             { key: "discipline", label: "Discipline report", icon: "approvals" },
           ]},
         ]} />
@@ -1870,6 +1876,8 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           {tab === "signin" && <StaffCheckIn roster={roster} saveRoster={saveRoster} teacherId={teacher.id} teacherName={teacher.name} />}
 
           {tab === "register" && <TeacherAddStudent roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} />}
+
+          {tab === "photos" && <PhotoManager roster={roster} classId={classId} />}
 
           {tab === "discipline" && <DisciplineReport roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} role="teacher" />}
 
@@ -3252,27 +3260,196 @@ function CheckInApprovals({ roster, saveRoster }) {
 }
 
 // ================= PRINTABLE DOCUMENTS (inline, no pop-up) =================
+
+// ---------- Capture or upload a pupil's photo ----------
+// The image is cropped square and shrunk before upload: a passport-style
+// thumbnail is all a card needs, and it keeps the database small enough that
+// a whole class of photos loads quickly over mobile data.
+async function shrinkToSquare(file, side = 300, quality = 0.72) {
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error("Could not read that image"));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("That file is not a usable image"));
+    i.src = dataUrl;
+  });
+  const s = Math.min(img.width, img.height);
+  const sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = side; canvas.height = side;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, sx, sy, s, s, 0, 0, side, side);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+function PhotoManager({ roster, classId, actorLabel }) {
+  const [selectedClass, setSelectedClass] = useState(classId || "");
+  const [photos, setPhotos] = useState({});      // studentId -> dataUrl
+  const [have, setHave] = useState(null);        // set of ids that have a photo
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const fileRefs = useRef({});
+
+  const pool = selectedClass
+    ? roster.students.filter((s) => s.classId === selectedClass)
+    : roster.students;
+
+  const refresh = async () => {
+    try {
+      const rows = await photosWhich();
+      setHave(new Set((rows || []).map((r) => r.student_id)));
+      setErr("");
+    } catch (e) { setErr("Could not check which pupils have photos."); setHave(new Set()); }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  // load the actual images for whoever is on screen
+  useEffect(() => {
+    let cancelled = false;
+    const missing = pool.filter((s) => have?.has(s.id) && !photos[s.id]).map((s) => s.id);
+    if (!missing.length) return;
+    photosGet(missing).then((got) => { if (!cancelled) setPhotos((p) => ({ ...p, ...got })); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedClass, have]);
+
+  const onPick = async (student, file) => {
+    if (!file) return;
+    setBusy(student.id); setErr("");
+    try {
+      const small = await shrinkToSquare(file);
+      await photoSet(student.id, small);
+      setPhotos((p) => ({ ...p, [student.id]: small }));
+      setHave((h) => new Set([...(h || []), student.id]));
+    } catch (e) {
+      setErr(String(e.message || e).slice(0, 160));
+    }
+    setBusy("");
+  };
+
+  const remove = async (student) => {
+    if (!window.confirm(`Remove ${student.name}'s photo?`)) return;
+    setBusy(student.id);
+    try {
+      await photoDelete(student.id);
+      setPhotos((p) => { const n = { ...p }; delete n[student.id]; return n; });
+      setHave((h) => { const n = new Set(h); n.delete(student.id); return n; });
+    } catch (e) { setErr(String(e.message || e).slice(0, 160)); }
+    setBusy("");
+  };
+
+  const withPhoto = pool.filter((s) => have?.has(s.id)).length;
+
+  return (
+    <div>
+      <SectionTitle>Pupil photos</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+        Take a photo with the camera or choose one from the phone. Each is cropped square and
+        shrunk automatically, so it stays small and prints sharply on the ID card.
+      </div>
+
+      {err && (
+        <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1", border: "1px solid #E8C4BD",
+                      fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>
+      )}
+
+      {!classId && (
+        <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
+          style={{ ...darkInput(), width: "100%", maxWidth: 320, marginBottom: 12 }}>
+          <option value="">All classes ({roster.students.length})</option>
+          {roster.classes.map((c) => (
+            <option key={c.id} value={c.id}>{c.name} ({roster.students.filter((s) => s.classId === c.id).length})</option>
+          ))}
+        </select>
+      )}
+
+      <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552", marginBottom: 12 }}>
+        {have === null ? "checking…" : `${withPhoto} of ${pool.length} have a photo`}
+      </div>
+
+      {pool.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No pupils here yet.</div>}
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {pool.map((s) => {
+          const img = photos[s.id];
+          const hasIt = have?.has(s.id);
+          return (
+            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
+                  background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
+              <div style={{
+                width: 54, height: 54, flex: "0 0 54px", borderRadius: 4, overflow: "hidden",
+                background: "#E4DFCF", border: "1px solid #D8D2C2",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {img
+                  ? <img src={img} alt={s.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <span style={{ fontFamily: FONT.mono, fontSize: 9, color: "#8A8368" }}>{hasIt ? "…" : "no photo"}</span>}
+              </div>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>{s.name}</div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552" }}>
+                  {s.id} · {classNameOf(roster, s.classId)}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                {/* capture=environment opens the camera straight away on a phone */}
+                <input ref={(el) => { fileRefs.current[s.id] = el; }} type="file" accept="image/*" capture="environment"
+                  onChange={(e) => { onPick(s, e.target.files?.[0]); e.target.value = ""; }}
+                  style={{ display: "none" }} />
+                <button onClick={() => fileRefs.current[s.id]?.click()} disabled={busy === s.id}
+                  style={{ ...primaryBtn(), padding: "6px 11px", fontSize: 12, opacity: busy === s.id ? 0.5 : 1 }}>
+                  {busy === s.id ? "saving…" : hasIt ? "Retake" : "Take photo"}
+                </button>
+                {hasIt && (
+                  <button onClick={() => remove(s)} style={{ background: "none", border: "none", color: "#B84C3E",
+                          fontFamily: FONT.mono, fontSize: 10.5 }}>remove</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---------- Printable student ID cards with a scannable QR code ----------
 // Cards are laid out two per row at roughly bank-card size, so a sheet of A4
 // yields eight. The QR carries the pupil's key details, so a phone camera or
 // any scanner at the gate reads them without needing the portal open.
 function StudentIdCards({ roster, students, onBack, title }) {
-  const cur = roster.settings.currency;
+  const [photos, setPhotos] = useState({});
 
-  // What the scanner sees. Pipe-separated so it is readable even in a plain
-  // text scanner app, and short enough to stay a small, crisp QR.
+  // Fetch the photos for exactly these pupils, in one request.
+  useEffect(() => {
+    let cancelled = false;
+    photosGet(students.map((s) => s.id))
+      .then((got) => { if (!cancelled) setPhotos(got); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [students]);
+
+  // What a scanner reads. Pipe-separated so even a plain text scanner app
+  // shows something readable.
   const payload = (s) => [
-    SCHOOL_NAME,
-    SCHOOL_LOCATION,
-    `ADM:${s.id}`,
-    `NAME:${s.name}`,
+    SCHOOL_NAME, SCHOOL_LOCATION,
+    `ADM:${s.id}`, `NAME:${s.name}`,
     `CLASS:${classNameOf(roster, s.classId)}`,
     s.parentName ? `GUARDIAN:${s.parentName}` : "",
   ].filter(Boolean).join(" | ");
 
+  // Kenyan flag palette: black, red, white, green — with gold for the seal.
+  const KE = { black: "#1A1A1A", red: "#BB0A1E", white: "#FFFFFF", green: "#1F6B3B", gold: "#E8B23D" };
+
   return (
     <div style={{ minHeight: "100vh", background: "#1F3A2E" }}>
-      <div className="no-print" style={{ maxWidth: 800, margin: "0 auto", padding: "14px 12px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", padding: "14px 12px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={onBack} style={{ background: "transparent", border: "1px solid #4A6E58", color: "#F5F3EE", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
         <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#E8B23D", color: "#1F3A2E" }}>Print cards</button>
         <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8AA090" }}>
@@ -3281,79 +3458,112 @@ function StudentIdCards({ roster, students, onBack, title }) {
       </div>
 
       {students.length === 0 && (
-        <div className="no-print" style={{ maxWidth: 800, margin: "0 auto", padding: "0 12px 40px", fontFamily: FONT.body, fontSize: 13, color: "#B8C4B9" }}>
+        <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", padding: "0 12px 40px", fontFamily: FONT.body, fontSize: 13, color: "#B8C4B9" }}>
           No pupils to print.
         </div>
       )}
 
       <div className="print-doc" style={{
-        maxWidth: 800, margin: "0 auto 30px", background: "#fff", padding: "18px",
-        borderRadius: 4, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))",
+        maxWidth: 820, margin: "0 auto 30px", background: "#fff", padding: 16,
+        borderRadius: 4, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(345px, 1fr))",
         gap: 14, alignContent: "start",
       }}>
         {students.map((s) => {
           const m = qrMatrix(payload(s));
-          const size = m ? m.length : 0;
+          const qsize = m ? m.length : 0;
+          const photo = photos[s.id];
+
           return (
             <div key={s.id} className="id-card" style={{
-              border: "1.5px solid #22304A", borderRadius: 7, padding: "11px 12px",
-              background: "linear-gradient(135deg,#FFFFFF 0%,#F5F1E6 100%)",
-              color: "#22304A", fontFamily: "Georgia, 'Times New Roman', serif",
-              display: "flex", gap: 11, minHeight: 190, breakInside: "avoid",
+              breakInside: "avoid", borderRadius: 9, overflow: "hidden",
+              // red edge all the way round
+              border: `3px solid ${KE.red}`,
+              background: KE.white, color: KE.black,
+              fontFamily: "Georgia, 'Times New Roman', serif",
+              display: "flex", flexDirection: "column", minHeight: 205,
+              boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
             }}>
-              {/* left: school + pupil details */}
-              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, borderBottom: "1px solid #D8D2C2", paddingBottom: 6 }}>
-                  <Seal size={26} ink="#22304A" />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 9.5, fontWeight: "bold", lineHeight: 1.15, textTransform: "uppercase" }}>{SCHOOL_NAME}</div>
-                    <div style={{ fontSize: 7.5, color: "#6B6552", fontFamily: FONT.mono }}>{SCHOOL_LOCATION}</div>
-                  </div>
+              {/* black header band with the seal and school name */}
+              <div style={{ background: KE.black, color: KE.white, padding: "7px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: "0 0 auto", background: KE.green, borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Seal size={21} />
                 </div>
-
-                <div style={{ fontFamily: FONT.mono, fontSize: 7, letterSpacing: 1.2, color: "#8A8368", marginTop: 7 }}>PUPIL IDENTITY CARD</div>
-
-                <div style={{ fontSize: 15, fontWeight: "bold", lineHeight: 1.2, marginTop: 3 }}>{s.name}</div>
-
-                <div style={{ marginTop: 6, display: "grid", gap: 2.5, fontSize: 9.5 }}>
-                  <div><span style={{ color: "#8A8368" }}>Adm No:</span> <strong style={{ fontFamily: FONT.mono }}>{s.id}</strong></div>
-                  <div><span style={{ color: "#8A8368" }}>Class:</span> <strong>{classNameOf(roster, s.classId)}</strong></div>
-                  {s.parentName && <div><span style={{ color: "#8A8368" }}>Guardian:</span> {s.parentName}</div>}
-                </div>
-
-                <div style={{ marginTop: "auto", paddingTop: 7, borderTop: "1px dashed #C8C2B0", fontSize: 7.5, color: "#6B6552", fontFamily: FONT.mono, lineHeight: 1.35 }}>
-                  If found, please return to the school office.
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: "bold", lineHeight: 1.15, textTransform: "uppercase", letterSpacing: 0.2 }}>{SCHOOL_NAME}</div>
+                  <div style={{ fontSize: 7.5, color: KE.gold, fontFamily: FONT.mono }}>{SCHOOL_LOCATION}</div>
                 </div>
               </div>
 
-              {/* right: scannable code */}
-              <div style={{ width: 92, flex: "0 0 92px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                {m ? (
-                  <svg viewBox={`-2 -2 ${size + 4} ${size + 4}`} width="88" height="88"
-                       style={{ background: "#fff", border: "1px solid #E4DFCF", borderRadius: 3 }} shapeRendering="crispEdges">
-                    <path d={qrSvgPath(m)} fill="#22304A" />
-                  </svg>
-                ) : (
-                  <div style={{ fontSize: 8, color: "#B84C3E", textAlign: "center" }}>QR too long</div>
-                )}
-                <div style={{ fontFamily: FONT.mono, fontSize: 6.5, color: "#8A8368", marginTop: 4, textAlign: "center", lineHeight: 1.3 }}>
-                  SCAN TO VERIFY
+              {/* flag stripe: white / red / white / green */}
+              <div style={{ display: "flex", height: 4 }}>
+                <div style={{ flex: 1, background: KE.white }} />
+                <div style={{ flex: 1, background: KE.red }} />
+                <div style={{ flex: 1, background: KE.white }} />
+                <div style={{ flex: 2, background: KE.green }} />
+              </div>
+
+              {/* body */}
+              <div style={{ display: "flex", gap: 10, padding: "9px 10px", flex: 1 }}>
+                {/* photo */}
+                <div style={{
+                  width: 62, height: 74, flex: "0 0 62px", borderRadius: 4, overflow: "hidden",
+                  border: `2px solid ${KE.green}`, background: "#EFEADC",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {photo
+                    ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ fontFamily: FONT.mono, fontSize: 6.5, color: "#8A8368", textAlign: "center", lineHeight: 1.3 }}>NO<br />PHOTO</span>}
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 7, color: "#22304A", marginTop: 3, textAlign: "center" }}>
-                  {s.id}
+
+                {/* details */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 6.5, letterSpacing: 1.2, color: KE.green, fontWeight: "bold" }}>
+                    PUPIL IDENTITY CARD
+                  </div>
+                  <div style={{ fontSize: 14.5, fontWeight: "bold", lineHeight: 1.15, marginTop: 3 }}>{s.name}</div>
+                  <div style={{ marginTop: 5, display: "grid", gap: 2, fontSize: 9 }}>
+                    <div><span style={{ color: "#6B6552" }}>Adm No:</span>{" "}
+                      <strong style={{ fontFamily: FONT.mono, background: KE.gold, padding: "0 3px", borderRadius: 2 }}>{s.id}</strong>
+                    </div>
+                    <div><span style={{ color: "#6B6552" }}>Class:</span> <strong>{classNameOf(roster, s.classId)}</strong></div>
+                    {s.parentName && <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ color: "#6B6552" }}>Guardian:</span> {s.parentName}
+                    </div>}
+                  </div>
                 </div>
+
+                {/* scannable code */}
+                <div style={{ width: 74, flex: "0 0 74px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  {m ? (
+                    <svg viewBox={`-2 -2 ${qsize + 4} ${qsize + 4}`} width="72" height="72"
+                         style={{ background: KE.white, border: `1px solid ${KE.black}`, borderRadius: 3 }} shapeRendering="crispEdges">
+                      <path d={qrSvgPath(m)} fill={KE.black} />
+                    </svg>
+                  ) : (
+                    <div style={{ fontSize: 7, color: KE.red, textAlign: "center" }}>code too long</div>
+                  )}
+                  <div style={{ fontFamily: FONT.mono, fontSize: 6, color: KE.green, marginTop: 3, fontWeight: "bold" }}>SCAN TO VERIFY</div>
+                </div>
+              </div>
+
+              {/* green footer */}
+              <div style={{ background: KE.green, color: KE.white, padding: "4px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span style={{ fontFamily: FONT.mono, fontSize: 6.5, lineHeight: 1.3 }}>
+                  If found, return to the school office
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 6.5, color: KE.gold }}>{SCHOOL_MOTTO}</span>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="no-print" style={{ maxWidth: 800, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#8AA090", lineHeight: 1.5 }}>
-        Print on card stock if you have it. Scanning any card with a phone camera shows the school name,
-        admission number, pupil's name, class and guardian.
+      <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#8AA090", lineHeight: 1.5 }}>
+        Print on card stock if you have it. Scanning a card shows the school, admission number, pupil's name,
+        class and guardian.
         <div style={{ marginTop: 6, color: "#C9A227" }}>
-          Note: the parent PIN is deliberately <strong>not</strong> on the card — a lost card would otherwise
-          give a stranger access to that child's records. PINs stay on the report card.
+          The parent PIN is deliberately <strong>not</strong> on the card — a lost card would otherwise give a
+          stranger access to that child's records. PINs stay on the report card.
         </div>
       </div>
     </div>
