@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v20 · M-Pesa reconciliation";
+const APP_VERSION = "v21 · CBC level subjects";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -104,6 +104,66 @@ const DEFAULT_ADMIN_PASSWORD = "admin123";
 const DEFAULT_TERM = "Term 1";
 const DEFAULT_SUBJECTS = ["Math", "English", "Science", "Social", "IRE", "Kiswahili"];
 const SCORE_OPTIONS = Array.from({ length: 100 }, (_, i) => i + 1);
+
+// ---- CBC levels: which learning areas belong to which grades ----
+// Kenya's rationalised curriculum gives each level its own set. A Grade 2
+// class does Environmental Activities; by Grade 4 that has become Science and
+// Technology; by Grade 7, Integrated Science. Showing every area to every
+// teacher invites marks against the wrong subject, so the lists are filtered.
+const CBC_LEVELS = {
+  lower:  { label: "Lower Primary (Grades 1–3)",  grades: [1, 2, 3] },
+  upper:  { label: "Upper Primary (Grades 4–6)",  grades: [4, 5, 6] },
+  junior: { label: "Junior School (Grades 7–9)",  grades: [7, 8, 9] },
+};
+
+// Learning areas per level. Anything not listed here is treated as
+// school-specific and offered at every level.
+const CBC_LEVEL_SUBJECTS = {
+  lower: [
+    "English", "Kiswahili", "Mathematics",
+    "Environmental Activities", "Creative Arts and Sports",
+    "Religious Education (IRE)",
+  ],
+  upper: [
+    "English", "Kiswahili", "Mathematics",
+    "Science and Technology", "Social Studies",
+    "Agriculture and Nutrition", "Creative Arts and Sports",
+    "Religious Education (IRE)",
+  ],
+  junior: [
+    "English", "Kiswahili", "Mathematics",
+    "Integrated Science", "Social Studies", "Pre-Technical Studies",
+    "Agriculture and Nutrition", "Creative Arts and Sports",
+    "Religious Education (IRE)",
+  ],
+};
+
+// Works out the level from the class name, e.g. "Grade 4" or "Class 7B".
+const levelOfClassName = (name) => {
+  const m = String(name || "").match(/(\d+)/);
+  if (!m) return null;
+  const g = parseInt(m[1], 10);
+  return Object.keys(CBC_LEVELS).find((k) => CBC_LEVELS[k].grades.includes(g)) || null;
+};
+
+// The learning areas a given class actually studies. Falls back to the whole
+// list when the class name carries no grade number, so nothing is ever hidden
+// by accident.
+const subjectsForClass = (roster, classId) => {
+  const all = roster.subjects || [];
+  const level = levelOfClassName(classNameOf(roster, classId));
+  if (!level) return all;
+  const allowed = CBC_LEVEL_SUBJECTS[level];
+  const filtered = all.filter((sub) => allowed.includes(sub));
+  // keep any subject the school added itself, which no level claims
+  const custom = all.filter((sub) => !Object.values(CBC_LEVEL_SUBJECTS).flat().includes(sub));
+  return [...filtered, ...custom];
+};
+
+const levelLabelForClass = (roster, classId) => {
+  const level = levelOfClassName(classNameOf(roster, classId));
+  return level ? CBC_LEVELS[level].label : null;
+};
 
 // Staff must sign in at school by this time; later counts as late.
 const ARRIVAL_CUTOFF = { hour: 8, minute: 0 };
@@ -1181,9 +1241,14 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                       </span>
                     </div>
                     <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", marginTop: 2 }}>{classNameOf(roster, t.classId)} · login: {t.username}</div>
-                    <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", margin: "9px 0 5px" }}>Subjects taught (tap to toggle):</div>
+                    <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", margin: "9px 0 5px" }}>
+                      Subjects taught (tap to toggle):
+                      {levelLabelForClass(roster, t.classId) && (
+                        <span style={{ color: "#8A8368" }}> — {levelLabelForClass(roster, t.classId)}</span>
+                      )}
+                    </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {roster.subjects.map((sub) => {
+                      {subjectsForClass(roster, t.classId).map((sub) => {
                         const on = (t.subjects || []).includes(sub);
                         return (
                           <button key={sub} onClick={() => toggleTeacherSubject(t.id, sub)} style={{
@@ -1253,7 +1318,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
               {marksClassId && (
                 <MarksEditor roster={roster} saveRoster={saveRoster} classId={marksClassId}
                   students={roster.students.filter((s) => s.classId === marksClassId)}
-                  allowedSubjects={roster.subjects} role="admin" />
+                  allowedSubjects={subjectsForClass(roster, marksClassId)} role="admin" />
               )}
             </div>
           )}
@@ -1787,6 +1852,11 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
 
       <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 10 }}>
         Final mark = CAT 1 ({weights.cat1}%) + CAT 2 ({weights.cat2}%) + Main Exam ({weights.exam}%). Weights are set in Settings.
+        {levelLabelForClass(roster, classId) && (
+          <div style={{ marginTop: 3 }}>
+            Showing the learning areas for <strong>{levelLabelForClass(roster, classId)}</strong>.
+          </div>
+        )}
       </div>
 
       {record.note && status === "returned" && (
@@ -2001,7 +2071,9 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
               <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
                 You can enter results for: {mySubjects.length ? mySubjects.join(", ") : "— no subjects assigned yet —"}
               </div>
-              <MarksEditor roster={roster} saveRoster={saveRoster} classId={classId} students={students} allowedSubjects={mySubjects} role="teacher" actorName={teacher.name} />
+              <MarksEditor roster={roster} saveRoster={saveRoster} classId={classId} students={students}
+                allowedSubjects={mySubjects.filter((sub) => subjectsForClass(roster, classId).includes(sub))}
+                role="teacher" actorName={teacher.name} />
             </div>
           )}
         </div>
@@ -2660,7 +2732,7 @@ function TimetableAdmin({ roster, saveRoster }) {
           <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
             <select value={entry.subject} onChange={(e) => setEntry({ ...entry, subject: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
               <option value="">Subject…</option>
-              {roster.subjects.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
+              {subjectsForClass(roster, classId).map((sub) => <option key={sub} value={sub}>{sub}</option>)}
             </select>
             <select value={entry.teacherId} onChange={(e) => setEntry({ ...entry, teacherId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
               <option value="">Teacher (optional)…</option>
