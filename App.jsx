@@ -75,7 +75,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v17 · photos + flag cards";
+const APP_VERSION = "v18 · teacher link fix";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -1839,7 +1839,39 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
   const teacher = roster.teachers.find((t) => t.id === teacherId);
   const [tab, setTab] = useState("attendance");
   const [menuOpen, setMenuOpen] = useState(false);
-  if (!teacher) return <div style={{ color: "#F5F3EE", padding: 30 }}>Teacher not found. <button onClick={onExit} style={backBtnStyle()}>go back</button></div>;
+  // A staff login can exist without being linked to a teacher record — for
+  // example if the record was deleted, or the account was created before the
+  // teacher was added. Explain what to do rather than showing a dead end.
+  if (!teacher) {
+    return (
+      <div>
+        <PortalHeader title={SCHOOL_NAME.toUpperCase()} section="Not set up yet"
+          onMenu={() => {}} onExit={onExit} />
+        <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 14px 60px" }}>
+          <div style={{ ...paperPanel(), padding: 22 }}>
+            <SectionTitle>Your account isn't linked to a class yet</SectionTitle>
+            <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", lineHeight: 1.6, marginBottom: 14 }}>
+              You signed in successfully{who?.name ? ` as ${who.name}` : ""}, but the portal doesn't yet know
+              which class you teach — so there is nothing to show you.
+            </div>
+            <div style={{ padding: "12px 14px", background: "#F5E8DC", border: "1px solid #E8CBA0",
+                          borderRadius: 4, fontFamily: FONT.body, fontSize: 13, color: "#22304A", lineHeight: 1.6 }}>
+              <strong>Ask the administrator to:</strong>
+              <ol style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+                <li>Open <strong>Teachers</strong> and add you, choosing your class and subjects.</li>
+                <li>Open <strong>Staff logins</strong>, find <strong>{who?.username || "your username"}</strong>,
+                    and set <em>“Link to teacher record”</em> to your name.</li>
+              </ol>
+            </div>
+            <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginTop: 14 }}>
+              Once that is done, sign out and back in and your class will appear.
+            </div>
+            <button onClick={onExit} style={{ ...primaryBtn(), marginTop: 16 }}>Sign out</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const classId = teacher.classId;
   const students = roster.students.filter((s) => s.classId === classId);
   const mySubjects = teacher.subjects?.length ? teacher.subjects : [];
