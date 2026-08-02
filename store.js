@@ -110,6 +110,11 @@ export const staffUpsert = (username, name, role, password, teacherId) =>
   rpc("staff_upsert", { p_token: getToken(), p_username: username, p_name: name, p_role: role, p_password: password || null, p_teacher_id: teacherId || null });
 export const staffDeactivate = (username) => rpc("staff_deactivate", { p_token: getToken(), p_username: username });
 
+// Changes ONLY the password. Using staffUpsert for this previously overwrote
+// the person's role, which silently demoted administrators.
+export const staffResetPassword = (username, newPassword) =>
+  rpc("staff_reset_password", { p_token: getToken(), p_username: username, p_new: newPassword });
+
 // ---------- parents ----------
 export async function parentLookup(admissionNo, pin) {
   if (!isShared) return null;
