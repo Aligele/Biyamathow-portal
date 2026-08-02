@@ -6,7 +6,7 @@ import {
   staffList, staffUpsert, staffDeactivate, parentLookup,
   requestReset, confirmReset, staffSetEmail, staffSetContact, schoolInfo,
   photoSet, photoDelete, photosGet, photosWhich,
-  healthCheck, backupsList, backupNow, backupRestore,
+  healthCheck, backupsList, backupNow, backupRestore, staffResetPassword,
   mpesaClaim, mpesaLookup, mpesaRecent, mpesaRelease,
 } from "./store.js";
 
@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v22 · save fix";
+const APP_VERSION = "v24 · classes grouped";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -1028,6 +1028,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
   const [newSubject, setNewSubject] = useState("");
   const [newTeacher, setNewTeacher] = useState({ name: "", classId: "", username: "", password: "" });
   const [newStudent, setNewStudent] = useState({ name: "", classId: "", parentName: "", feeDue: "" });
+  const [lastAddedClassId, setLastAddedClassId] = useState("");
   const [newAdminPass, setNewAdminPass] = useState("");
   const [payment, setPayment] = useState({ studentId: "", amount: "", method: "cash", code: "", sender: "" });
   const [payErr, setPayErr] = useState("");
@@ -1102,7 +1103,9 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     const pin = String(Math.floor(1000 + Math.random() * 9000));
     const s = { id: nextAdmissionNo(roster.students), name: newStudent.name.trim(), classId: newStudent.classId, parentName: newStudent.parentName.trim(), feeDue: Number(newStudent.feeDue) || 0, feePaid: 0, payments: [], pin };
     saveRoster(logAction({ ...roster, students: [...roster.students, s] }, "Admin", `Added student ${s.name} (${s.id})`), `Added ${s.name} — PIN ${pin}`);
-    setNewStudent({ name: "", classId: "", parentName: "", feeDue: "" });
+    setLastAddedClassId(s.classId);
+    // keep the class selected, so registering a whole class is quick
+    setNewStudent({ name: "", classId: newStudent.classId, parentName: "", feeDue: newStudent.feeDue });
   };
   const removeItem = (kind, id) => saveRoster({ ...roster, [kind]: roster[kind].filter((x) => x.id !== id) }, "Removed");
   const toggleTeacherSubject = (teacherId, subject) => {
@@ -1281,28 +1284,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                 Each student gets a PIN. Parents sign in with the admission number + PIN, so only they can see their child's results.
               </div>
               {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No students yet.</div>}
-              <div style={{ display: "grid", gap: 6 }}>
-                {roster.students.map((st) => (
-                  <div key={st.id} style={{ padding: "10px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                      <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>{st.name}</span>
-                      <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                        <span style={{ fontFamily: FONT.mono, fontSize: 12.5, background: "#fff", border: "1px solid #D8D2C2", borderRadius: 3, padding: "2px 8px", color: "#22304A" }}>
-                          PIN {st.pin || "—"}
-                        </span>
-                        <button onClick={() => {
-                          const np = String(Math.floor(1000 + Math.random() * 9000));
-                          saveRoster({ ...roster, students: roster.students.map((x) => x.id === st.id ? { ...x, pin: np } : x) }, `${st.name}'s new PIN: ${np}`);
-                        }} style={{ background: "none", border: "none", color: "#22304A", fontFamily: FONT.mono, fontSize: 11.5 }}>new PIN</button>
-                        <button onClick={() => removeItem("students", st.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
-                      </span>
-                    </div>
-                    <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", marginTop: 3 }}>
-                      {st.id} · {classNameOf(roster, st.classId)}{st.parentName ? " · guardian: " + st.parentName : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <StudentsByClass roster={roster} saveRoster={saveRoster} removeItem={removeItem} openClassId={lastAddedClassId} />
             </div>
           )}
 
@@ -1773,6 +1755,127 @@ function StaffAttendance({ roster, saveRoster }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Pupils grouped under their class ----------
+// A single long list becomes unusable past a few dozen pupils, so each class
+// is its own section that opens and closes. A newly registered pupil lands in
+// their class straight away, and that class opens so you can see it happen.
+function StudentsByClass({ roster, saveRoster, removeItem, openClassId }) {
+  const [open, setOpen] = useState({});
+  const [search, setSearch] = useState("");
+
+  // When a pupil has just been registered, open their class so you can see
+  // them arrive rather than wondering where they went.
+  useEffect(() => {
+    if (openClassId) setOpen((o) => ({ ...o, [openClassId]: true }));
+  }, [openClassId]);
+
+  const q = search.trim().toLowerCase();
+  const matches = (st) => !q || st.name.toLowerCase().includes(q) || st.id.toLowerCase().includes(q)
+    || (st.parentName || "").toLowerCase().includes(q);
+
+  // classes in their natural order, plus a catch-all for anyone unassigned
+  const groups = roster.classes.map((c) => ({
+    id: c.id, name: c.name,
+    pupils: roster.students.filter((s) => s.classId === c.id && matches(s)),
+  }));
+  const orphans = roster.students.filter(
+    (s) => !roster.classes.some((c) => c.id === s.classId) && matches(s));
+  if (orphans.length) groups.push({ id: "__none", name: "Not in any class", pupils: orphans });
+
+  const shown = groups.filter((g) => g.pupils.length > 0 || !q);
+  const total = roster.students.filter(matches).length;
+
+  const newPin = (st) => {
+    const np = String(Math.floor(1000 + Math.random() * 9000));
+    saveRoster({ ...roster, students: roster.students.map((x) => x.id === st.id ? { ...x, pin: np } : x) },
+      `${st.name}'s new PIN: ${np}`);
+  };
+
+  const move = (st, classId) => {
+    saveRoster(logAction(
+      { ...roster, students: roster.students.map((x) => x.id === st.id ? { ...x, classId } : x) },
+      "Admin", `Moved ${st.name} to ${classNameOf(roster, classId)}`),
+      `${st.name} moved to ${classNameOf(roster, classId)}`);
+  };
+
+  return (
+    <div>
+      <input value={search} onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search by name, admission number or guardian"
+        style={{ ...darkInput(), width: "100%", marginBottom: 10 }} />
+
+      {q && (
+        <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552", marginBottom: 8 }}>
+          {total} match{total === 1 ? "" : "es"}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 7 }}>
+        {shown.map((g) => {
+          const isOpen = q ? true : !!open[g.id];
+          return (
+            <div key={g.id} style={{ border: "1px solid #E4DFCF", borderRadius: 5, overflow: "hidden" }}>
+              <button onClick={() => setOpen({ ...open, [g.id]: !open[g.id] })}
+                style={{
+                  width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                  gap: 10, padding: "11px 13px", border: "none", textAlign: "left",
+                  background: g.id === "__none" ? "#F7E4E1" : (isOpen ? "#22304A" : "#F5F1E6"),
+                  color: g.id === "__none" ? "#B84C3E" : (isOpen ? "#fff" : "#22304A"),
+                }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600 }}>
+                  {g.name}
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{
+                    fontFamily: FONT.mono, fontSize: 11, padding: "2px 9px", borderRadius: 10,
+                    background: isOpen ? "rgba(255,255,255,0.18)" : "#E4DFCF",
+                    color: isOpen ? "#fff" : "#6B6552",
+                  }}>{g.pupils.length}</span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 12 }}>{isOpen ? "▾" : "▸"}</span>
+                </span>
+              </button>
+
+              {isOpen && (
+                <div style={{ padding: "8px 10px", display: "grid", gap: 5, background: "#FBF9F3" }}>
+                  {g.pupils.length === 0 && (
+                    <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#8A8368", padding: "4px 2px" }}>
+                      No pupils in this class yet.
+                    </div>
+                  )}
+                  {g.pupils.map((st) => (
+                    <div key={st.id} style={{ padding: "9px 11px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>{st.name}</span>
+                        <span style={{ display: "flex", gap: 11, alignItems: "center" }}>
+                          <span style={{ fontFamily: FONT.mono, fontSize: 12, background: "#fff", border: "1px solid #D8D2C2", borderRadius: 3, padding: "2px 8px", color: "#22304A" }}>
+                            PIN {st.pin || "—"}
+                          </span>
+                          <button onClick={() => newPin(st)} style={{ background: "none", border: "none", color: "#22304A", fontFamily: FONT.mono, fontSize: 11 }}>new PIN</button>
+                          <button onClick={() => removeItem("students", st.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                        <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368" }}>
+                          {st.id}{st.parentName ? " · guardian: " + st.parentName : ""}
+                        </span>
+                        <select value={st.classId} onChange={(e) => move(st, e.target.value)}
+                          style={{ ...darkInput(), padding: "3px 7px", fontSize: 11.5, minWidth: 110 }}>
+                          {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2457,12 +2560,15 @@ function StaffAccounts({ roster, who }) {
     } catch (e) { setErr(String(e.message || e).slice(0, 160)); }
   };
 
+  // Only the password changes here. It used to go through staffUpsert, which
+  // also wrote the role — quietly turning administrators into teachers.
   const resetPassword = async (username) => {
     const np = String(Math.floor(100000 + Math.random() * 900000));
     try {
-      await staffUpsert(username, "", "teacher", np, null);
-      setMsg(`${username}'s new password: ${np}`);
+      await staffResetPassword(username, np);
+      setMsg(`${username}'s new password: ${np} — write this down, it is not shown again.`);
       setErr("");
+      refresh();
     } catch (e) { setErr(String(e.message || e).slice(0, 160)); }
   };
 
@@ -2486,6 +2592,10 @@ function StaffAccounts({ roster, who }) {
       <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
         Real accounts with encrypted passwords. Passwords are never stored in readable form —
         if one is forgotten it can only be replaced, not looked up.
+        <div style={{ marginTop: 6 }}>
+          Tap a name below to load that account into the form. Take care with the
+          <strong> role</strong> — saving with the wrong one changes what that person can do.
+        </div>
       </div>
 
       {msg && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#E4F0E8", border: "1px solid #B8D9C4", fontFamily: FONT.mono, fontSize: 12.5, color: "#22304A", marginBottom: 12 }}>{msg}</div>}
@@ -2496,7 +2606,10 @@ function StaffAccounts({ roster, who }) {
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" style={{ ...darkInput(), flex: 1, minWidth: 130 }} />
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} style={{ ...darkInput(), minWidth: 110 }}>
+        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
+          style={{ ...darkInput(), minWidth: 110,
+                   borderColor: form.role === "admin" ? "#B8860B" : "#D8D2C2",
+                   color: form.role === "admin" ? "#B8860B" : "#22304A", fontWeight: 600 }}>
           <option value="teacher">Teacher</option>
           <option value="admin">Administrator</option>
         </select>
@@ -2515,7 +2628,11 @@ function StaffAccounts({ roster, who }) {
         {(rows || []).map((r) => (
           <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4, opacity: r.active ? 1 : 0.5 }}>
             <span>
-              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>{r.name}</span>
+              <button onClick={() => setForm({ username: r.username, name: r.name, role: r.role,
+                        password: "", teacherId: r.teacher_id || "", email: r.email || "", phone: r.phone || "" })}
+                style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A", textDecoration: "underline" }}>{r.name}</span>
+              </button>
               <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", marginLeft: 8 }}>{r.username}</span>
               <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: r.role === "admin" ? "#B8860B" : "#6B6552", marginTop: 2 }}>
                 {r.role === "admin" ? "ADMINISTRATOR" : "TEACHER"}{!r.active ? " · DISABLED" : ""}
