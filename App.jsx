@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v29 · breaks and lunch";
+const APP_VERSION = "v30 · staff memos";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -359,6 +359,7 @@ const EMPTY_ROSTER = {
   discipline: [],      // [ { id, ts, studentId, classId, byTeacher, category, detail, action, status, adminNote } ]
   checkins: {},        // { [date]: { [teacherId]: { time, status, note, approved } } }
   examTimetable: {},   // { [level]: { title, papers: [ { id, date, start, end, subject, invigilator, note } ] } }
+  memos: [],           // [ { id, ts, by, title, body, priority, expires, readBy: [teacherId] } ]
   audit: [],           // [ { ts, actor, action } ] — who changed what
   archives: [],        // [ { year, savedAt, snapshot } ] — closed school years
   settings: { currency: "KSh", passMark: 51, weights: DEFAULT_WEIGHTS, periods: DEFAULT_PERIODS,
@@ -409,6 +410,7 @@ export default function SchoolRegister() {
             discipline: p.discipline || [],
             checkins: p.checkins || {},
             examTimetable: p.examTimetable || {},
+            memos: p.memos || [],
             audit: p.audit || [],
             archives: p.archives || [],
             settings: {
@@ -1099,6 +1101,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     { title: "DASHBOARD", items: [
       { key: "overview", label: "Overview", icon: "overview" },
       { key: "approvals", label: "Approvals", icon: "approvals", badge: pendingCount },
+      { key: "memos", label: "Memos to staff", icon: "subjects" },
     ]},
     { title: "ACADEMICS", items: [
       { key: "marks", label: "Exam results", icon: "marks" },
@@ -1232,6 +1235,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "overview" && <AdminOverview roster={roster} />}
 
           {tab === "approvals" && <Approvals roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "memos" && <MemoBoard roster={roster} saveRoster={saveRoster} who={who} />}
 
           {tab === "logins" && <StaffAccounts roster={roster} who={who} />}
 
@@ -2348,6 +2353,18 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
 function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
   const teacher = roster.teachers.find((t) => t.id === teacherId);
   const [tab, setTab] = useState("attendance");
+
+  // The school's data arrives after this screen mounts, so the check for
+  // unread memos has to wait for it. Done once, so a teacher who deliberately
+  // navigates away is not dragged back.
+  const memoJumpDone = useRef(false);
+  useEffect(() => {
+    if (memoJumpDone.current || !teacherId || !roster.teachers.length) return;
+    if (unreadMemos(roster, teacherId).length > 0) {
+      memoJumpDone.current = true;
+      setTab("memos");
+    }
+  }, [roster, teacherId]);
   const [menuOpen, setMenuOpen] = useState(false);
   // A staff login can exist without being linked to a teacher record — for
   // example if the record was deleted, or the account was created before the
@@ -2389,7 +2406,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
   return (
     <div>
       <PortalHeader title={`${classNameOf(roster, classId).toUpperCase()} · ${teacher.name.toUpperCase()}`}
-        section={{ signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
+        section={{ memos: "Memos", signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
                    reportcards: "Report cards", timetable: "My timetable",
                    register: "Register a pupil", photos: "Pupil photos", examtt: "Exam timetable",
                    discipline: "Discipline report" }[tab] || tab}
@@ -2398,6 +2415,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
         heading={teacher.name} subheading={classNameOf(roster, classId)}
         groups={[
           { title: "DAILY", items: [
+            { key: "memos", label: "Memos", icon: "subjects", badge: unreadMemos(roster, teacher.id).length },
             { key: "signin", label: "Sign in (arrival)", icon: "duty" },
             { key: "attendance", label: "Pupil attendance", icon: "attendance" },
           ]},
@@ -2414,8 +2432,19 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           ]},
         ]} />
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
+        {tab !== "memos" && unreadMemos(roster, teacher.id).length > 0 && (
+          <button onClick={() => setTab("memos")} style={{
+            width: "100%", textAlign: "left", padding: "11px 13px", marginBottom: 12,
+            background: "#F5E8DC", border: "1px solid #E8CBA0", borderLeft: "4px solid #C98A2C",
+            borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#22304A",
+          }}>
+            <strong>{unreadMemos(roster, teacher.id).length} unread memo{unreadMemos(roster, teacher.id).length === 1 ? "" : "s"}</strong> from the office — tap to read
+          </button>
+        )}
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
           {tab === "attendance" && <TeacherAttendance roster={roster} saveRoster={saveRoster} classId={classId} students={students} />}
+          {tab === "memos" && <MemoBoard roster={roster} saveRoster={saveRoster} who={who} teacherId={teacher.id} />}
+
           {tab === "signin" && <StaffCheckIn roster={roster} saveRoster={saveRoster} teacherId={teacher.id} teacherName={teacher.name} />}
 
           {tab === "register" && <TeacherAddStudent roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} />}
@@ -4351,6 +4380,182 @@ function ExamTimetableDoc({ roster, level, onBack }) {
         <div style={docSig}>Head Teacher's Signature</div>
       </div>
     </DocShell>
+  );
+}
+
+
+// ---------- Staff memos ----------
+// A principal needs to reach every teacher without chasing them one by one.
+// Memos are posted once and each teacher acknowledges, so the office can see
+// who has actually read a notice rather than assuming.
+const MEMO_PRIORITY = {
+  normal:  { label: "Notice",    ink: "#3F7A5C", bg: "#E4F0E8", edge: "#B8D9C4" },
+  action:  { label: "Action needed", ink: "#C98A2C", bg: "#F5E8DC", edge: "#E8CBA0" },
+  urgent:  { label: "Urgent",    ink: "#B84C3E", bg: "#F7E4E1", edge: "#E8C4BD" },
+};
+
+// Memos a given teacher still needs to read.
+const unreadMemos = (roster, teacherId) =>
+  (roster.memos || []).filter((m) => !(m.readBy || []).includes(teacherId));
+
+function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
+  const isAdmin = !teacherId;
+  const [form, setForm] = useState({ title: "", body: "", priority: "normal" });
+  const [expanded, setExpanded] = useState({});
+
+  const memos = [...(roster.memos || [])].sort((a, b) => b.ts.localeCompare(a.ts));
+  const activeTeachers = roster.teachers || [];
+
+  const post = () => {
+    if (!form.title.trim() || !form.body.trim()) return;
+    const m = {
+      id: genId("MEM", roster.memos || []),
+      ts: new Date().toISOString(),
+      by: who?.name || "Administration",
+      title: form.title.trim(), body: form.body.trim(),
+      priority: form.priority, readBy: [],
+    };
+    saveRoster(logAction({ ...roster, memos: [...(roster.memos || []), m] },
+      who?.name || "Admin", `Memo posted: ${m.title}`), "Memo sent to all teachers");
+    setForm({ title: "", body: "", priority: "normal" });
+  };
+
+  const remove = (id) => {
+    if (!window.confirm("Withdraw this memo? Teachers will no longer see it.")) return;
+    saveRoster({ ...roster, memos: (roster.memos || []).filter((m) => m.id !== id) }, "Memo withdrawn");
+  };
+
+  const acknowledge = (id) => {
+    saveRoster({ ...roster, memos: (roster.memos || []).map((m) =>
+      m.id === id ? { ...m, readBy: [...new Set([...(m.readBy || []), teacherId])] } : m) },
+      "Marked as read");
+  };
+
+  return (
+    <div>
+      <SectionTitle>{isAdmin ? "Memos to staff" : "Memos from the office"}</SectionTitle>
+
+      {isAdmin ? (
+        <>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+            Every teacher sees the memo when they next sign in, and confirms they have read it —
+            so you can tell who has seen a notice rather than assuming.
+          </div>
+
+          <div style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: 12, marginBottom: 18 }}>
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="Subject, e.g. Staff meeting on Friday"
+              style={{ ...darkInput(), width: "100%", marginBottom: 8 }} />
+            <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })}
+              placeholder="Write the memo here…"
+              style={{ ...darkInput(), width: "100%", height: 96, marginBottom: 8, resize: "vertical" }} />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {Object.entries(MEMO_PRIORITY).map(([k, v]) => (
+                <button key={k} onClick={() => setForm({ ...form, priority: k })} style={{
+                  padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12, fontWeight: 600,
+                  border: `1px solid ${form.priority === k ? v.ink : "#D8D2C2"}`,
+                  background: form.priority === k ? v.bg : "#fff",
+                  color: form.priority === k ? v.ink : "#6B6552",
+                }}>{v.label}</button>
+              ))}
+              <button onClick={post} disabled={!form.title.trim() || !form.body.trim()}
+                style={{ ...primaryBtn(), marginLeft: "auto",
+                         opacity: form.title.trim() && form.body.trim() ? 1 : 0.5 }}>
+                Send to all teachers
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+          Notices from the head teacher's office. Tap <strong>I have read this</strong> so the office knows it reached you.
+        </div>
+      )}
+
+      {memos.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
+          {isAdmin ? "No memos posted yet." : "No memos at the moment."}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 9 }}>
+        {memos.map((m) => {
+          const tone = MEMO_PRIORITY[m.priority] || MEMO_PRIORITY.normal;
+          const read = (m.readBy || []).length;
+          const iHaveRead = teacherId && (m.readBy || []).includes(teacherId);
+          const open = expanded[m.id];
+          return (
+            <div key={m.id} style={{
+              background: iHaveRead === false ? "#fff" : "#F5F1E6",
+              border: `1px solid ${iHaveRead === false ? tone.edge : "#E4DFCF"}`,
+              borderLeft: `4px solid ${tone.ink}`, borderRadius: 5, padding: "12px 14px",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#22304A" }}>
+                  {m.title}
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, color: tone.ink,
+                               background: tone.bg, border: `1px solid ${tone.edge}`,
+                               borderRadius: 10, padding: "2px 9px", alignSelf: "flex-start" }}>
+                  {tone.label.toUpperCase()}
+                </span>
+              </div>
+
+              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", marginTop: 3 }}>
+                {m.by} · {new Date(m.ts).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                {" · "}{new Date(m.ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+              </div>
+
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#22304A", marginTop: 8,
+                            lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                {m.body}
+              </div>
+
+              {isAdmin ? (
+                <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #D8D2C2" }}>
+                  <button onClick={() => setExpanded({ ...expanded, [m.id]: !open })}
+                    style={{ background: "none", border: "none", padding: 0, textAlign: "left",
+                             fontFamily: FONT.mono, fontSize: 11,
+                             color: read === activeTeachers.length && read > 0 ? "#3F7A5C" : "#C98A2C" }}>
+                    Read by {read} of {activeTeachers.length} {open ? "▾" : "▸"}
+                  </button>
+                  {open && (
+                    <div style={{ display: "grid", gap: 3, marginTop: 7 }}>
+                      {activeTeachers.map((t) => {
+                        const seen = (m.readBy || []).includes(t.id);
+                        return (
+                          <div key={t.id} style={{ display: "flex", justifyContent: "space-between",
+                                fontFamily: FONT.body, fontSize: 12,
+                                color: seen ? "#3F7A5C" : "#B84C3E" }}>
+                            <span>{t.name}</span>
+                            <span style={{ fontFamily: FONT.mono, fontSize: 10 }}>{seen ? "read" : "not yet"}</span>
+                          </div>
+                        );
+                      })}
+                      {activeTeachers.length === 0 && (
+                        <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#8A8368" }}>No teachers on file.</div>
+                      )}
+                    </div>
+                  )}
+                  <button onClick={() => remove(m.id)} style={{ background: "none", border: "none",
+                          color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11, marginTop: 7 }}>withdraw</button>
+                </div>
+              ) : (
+                <div style={{ marginTop: 10 }}>
+                  {iHaveRead ? (
+                    <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#3F7A5C" }}>✓ YOU HAVE READ THIS</span>
+                  ) : (
+                    <button onClick={() => acknowledge(m.id)} style={{ ...primaryBtn(), background: tone.ink }}>
+                      I have read this
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
