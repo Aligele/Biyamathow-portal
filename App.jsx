@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v27 · exam timetable";
+const APP_VERSION = "v28 · invigilators per class";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -3938,13 +3938,15 @@ function SystemHealth({ roster }) {
 function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null }) {
   const [level, setLevel] = useState(onlyLevel || "upper");
   const [printing, setPrinting] = useState(false);
-  const [entry, setEntry] = useState({ date: todayISO(), start: "08:00", end: "10:00", subject: "", invigilator: "", note: "" });
+  const [entry, setEntry] = useState({ date: todayISO(), start: "08:00", end: "10:00", subject: "", note: "" });
 
   const sheet = roster.examTimetable?.[level] || { title: "", papers: [] };
   const papers = [...(sheet.papers || [])].sort((a, b) =>
     (a.date + a.start).localeCompare(b.date + b.start));
 
-  // learning areas for this level, taken from the school's own subject list
+  // every class sitting this level's papers — each needs its own invigilator
+  const levelClasses = roster.classes.filter((c) => levelOfClassName(c.name) === level);
+
   const levelSubjects = (roster.subjects || []).filter(
     (sub) => (CBC_LEVEL_SUBJECTS[level] || []).includes(sub)
       || !Object.values(CBC_LEVEL_SUBJECTS).flat().includes(sub));
@@ -3954,27 +3956,50 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
 
   const addPaper = () => {
     if (!entry.subject || !entry.date) return;
-    const p = { id: genId("EXM", papers), ...entry };
+    const p = { id: genId("EXM", papers), ...entry, invigilators: {} };
     write({ ...sheet, papers: [...papers, p] }, `${entry.subject} added`);
     setEntry({ ...entry, subject: "", note: "" });
   };
   const removePaper = (id) => write({ ...sheet, papers: papers.filter((p) => p.id !== id) }, "Paper removed");
   const setTitle = (title) => write({ ...sheet, title }, "Title updated");
 
+  const setInvigilator = (paperId, classId, teacherId) => {
+    write({ ...sheet, papers: papers.map((p) => p.id === paperId
+      ? { ...p, invigilators: { ...(p.invigilators || {}), [classId]: teacherId || undefined } }
+      : p) }, "Invigilator set");
+  };
+
+  // A teacher cannot be in two rooms at once. This flags anyone assigned to
+  // more than one class in the same time slot.
+  const clashesFor = (paper) => {
+    const seen = {}, clashing = new Set();
+    Object.entries(paper.invigilators || {}).forEach(([cid, tid]) => {
+      if (!tid) return;
+      if (seen[tid]) { clashing.add(tid); } else { seen[tid] = cid; }
+    });
+    // also across other papers at the same date and time
+    papers.forEach((other) => {
+      if (other.id === paper.id) return;
+      if (other.date !== paper.date || other.start !== paper.start) return;
+      Object.values(other.invigilators || {}).forEach((tid) => {
+        if (tid && Object.values(paper.invigilators || {}).includes(tid)) clashing.add(tid);
+      });
+    });
+    return clashing;
+  };
+
+  const teacherName = (id) => roster.teachers.find((t) => t.id === id)?.name || "";
+
   if (printing) return <ExamTimetableDoc roster={roster} level={level} onBack={() => setPrinting(false)} />;
 
-  // group papers by day, which is how anyone actually reads an exam timetable
-  const byDay = papers.reduce((acc, p) => {
-    (acc[p.date] = acc[p.date] || []).push(p);
-    return acc;
-  }, {});
+  const byDay = papers.reduce((acc, p) => { (acc[p.date] = acc[p.date] || []).push(p); return acc; }, {});
 
   return (
     <div>
       <SectionTitle>Exam timetable</SectionTitle>
       <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
-        Assessments are sat by a whole level together, so each timetable covers all the classes
-        in that level.
+        A paper is sat by every class at the level at the same time, so each class needs its own
+        invigilator in its own room.
       </div>
 
       {!onlyLevel && (
@@ -3992,8 +4017,13 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
         </div>
       )}
 
-      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", marginBottom: 10 }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", marginBottom: 4 }}>
         {CBC_LEVELS[level].label.toUpperCase()}
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 12 }}>
+        {levelClasses.length === 0
+          ? "No classes at this level yet."
+          : `${levelClasses.length} class${levelClasses.length === 1 ? "" : "es"} sitting: ${levelClasses.map((c) => c.name).join(", ")} — ${levelClasses.length} invigilator${levelClasses.length === 1 ? "" : "s"} needed per paper.`}
       </div>
 
       {!readOnly && (
@@ -4012,33 +4042,27 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
               <input type="time" value={entry.end} onChange={(e) => setEntry({ ...entry, end: e.target.value })}
                 style={{ ...darkInput(), width: 110 }} />
             </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <select value={entry.subject} onChange={(e) => setEntry({ ...entry, subject: e.target.value })}
                 style={{ ...darkInput(), flex: 1, minWidth: 150 }}>
                 <option value="">Learning area…</option>
                 {levelSubjects.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
               </select>
-              <select value={entry.invigilator} onChange={(e) => setEntry({ ...entry, invigilator: e.target.value })}
-                style={{ ...darkInput(), flex: 1, minWidth: 140 }}>
-                <option value="">Invigilator (optional)…</option>
-                {roster.teachers.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
-              </select>
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input value={entry.note} onChange={(e) => setEntry({ ...entry, note: e.target.value })}
-                placeholder="Note (optional) — e.g. bring a ruler" style={{ ...darkInput(), flex: 1, minWidth: 150 }} />
+                placeholder="Note (optional)" style={{ ...darkInput(), flex: 1, minWidth: 130 }} />
               <button onClick={addPaper} disabled={!entry.subject} style={{ ...primaryBtn(), opacity: entry.subject ? 1 : 0.5 }}>
                 Add paper
               </button>
+            </div>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 8 }}>
+              Invigilators are chosen per class once the paper is added.
             </div>
           </div>
         </>
       )}
 
       {papers.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
-          No papers set for this level yet.
-        </div>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No papers set for this level yet.</div>
       )}
 
       <div style={{ display: "grid", gap: 10 }}>
@@ -4049,28 +4073,65 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
               {new Date(date + "T00:00:00").toLocaleDateString(undefined,
                 { weekday: "long", day: "numeric", month: "long" })}
             </div>
-            <div style={{ padding: "8px 10px", display: "grid", gap: 5, background: "#FBF9F3" }}>
-              {byDay[date].map((p) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-                      padding: "9px 11px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
-                  <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#22304A", minWidth: 96, fontWeight: 600 }}>
-                    {p.start}–{p.end}
-                  </span>
-                  <span style={{ flex: 1, minWidth: 110 }}>
-                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>{p.subject}</span>
-                    {(p.invigilator || p.note) && (
-                      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6B6552", marginTop: 2 }}>
-                        {p.invigilator ? `Invigilator: ${p.invigilator}` : ""}
-                        {p.invigilator && p.note ? " · " : ""}{p.note}
-                      </div>
-                    )}
-                  </span>
-                  {!readOnly && (
-                    <button onClick={() => removePaper(p.id)} style={{ background: "none", border: "none",
-                            color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
-                  )}
-                </div>
-              ))}
+            <div style={{ padding: "8px 10px", display: "grid", gap: 8, background: "#FBF9F3" }}>
+              {byDay[date].map((p) => {
+                const clash = clashesFor(p);
+                const assigned = levelClasses.filter((c) => p.invigilators?.[c.id]).length;
+                return (
+                  <div key={p.id} style={{ padding: "10px 12px", background: "#F5F1E6",
+                        border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#22304A", fontWeight: 600 }}>
+                        {p.start}–{p.end}
+                      </span>
+                      <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600, flex: 1 }}>
+                        {p.subject}
+                      </span>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 10,
+                                     color: assigned === levelClasses.length ? "#3F7A5C" : "#C98A2C" }}>
+                        {assigned}/{levelClasses.length} invigilators
+                      </span>
+                      {!readOnly && (
+                        <button onClick={() => removePaper(p.id)} style={{ background: "none", border: "none",
+                                color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
+                      )}
+                    </div>
+                    {p.note && <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6B6552", marginTop: 3 }}>{p.note}</div>}
+
+                    {/* one invigilator per class */}
+                    <div style={{ display: "grid", gap: 5, marginTop: 8, paddingTop: 8, borderTop: "1px dashed #D8D2C2" }}>
+                      {levelClasses.map((c) => {
+                        const tid = p.invigilators?.[c.id] || "";
+                        const isClash = tid && clash.has(tid);
+                        return (
+                          <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                            <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", minWidth: 66, fontWeight: 600 }}>
+                              {c.name}
+                            </span>
+                            {readOnly ? (
+                              <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: tid ? "#22304A" : "#B84C3E" }}>
+                                {tid ? teacherName(tid) : "not assigned"}
+                              </span>
+                            ) : (
+                              <select value={tid} onChange={(e) => setInvigilator(p.id, c.id, e.target.value)}
+                                style={{ ...darkInput(), flex: 1, minWidth: 130, padding: "4px 8px", fontSize: 12,
+                                         borderColor: isClash ? "#B84C3E" : (tid ? "#3F7A5C" : "#D8D2C2") }}>
+                                <option value="">choose invigilator…</option>
+                                {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                            )}
+                            {isClash && (
+                              <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#B84C3E" }}>
+                                ALREADY IN ANOTHER ROOM
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -4090,6 +4151,7 @@ function ExamTimetableDoc({ roster, level, onBack }) {
   const sheet = roster.examTimetable?.[level] || { title: "", papers: [] };
   const papers = [...(sheet.papers || [])].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   const classes = roster.classes.filter((c) => levelOfClassName(c.name) === level);
+  const teacherName = (id) => roster.teachers.find((t) => t.id === id)?.name || "—";
 
   return (
     <DocShell title="Exam timetable" onBack={onBack}>
@@ -4097,39 +4159,45 @@ function ExamTimetableDoc({ roster, level, onBack }) {
 
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 16, fontSize: 12 }}>
         <div><strong>Level:</strong> {CBC_LEVELS[level].label}</div>
-        <div><strong>Classes:</strong> {classes.map((c) => c.name).join(", ") || "—"}</div>
+        <div><strong>Classes sitting:</strong> {classes.map((c) => c.name).join(", ") || "—"}</div>
       </div>
 
       <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 18 }}>
         <thead>
           <tr>
-            <th style={docTh}>Date</th>
-            <th style={docTh}>Time</th>
-            <th style={docTh}>Learning area</th>
-            <th style={docTh}>Invigilator</th>
-            <th style={docTh}>Notes</th>
+            <th style={{ ...docTh, fontSize: 8.5 }}>Date</th>
+            <th style={{ ...docTh, fontSize: 8.5 }}>Time</th>
+            <th style={{ ...docTh, fontSize: 8.5 }}>Learning area</th>
+            {classes.map((c) => (
+              <th key={c.id} style={{ ...docTh, fontSize: 8.5, textAlign: "center" }}>
+                {c.name}<div style={{ fontWeight: 400, color: "#8A8368" }}>invigilator</div>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {papers.map((p, i) => {
             const firstOfDay = i === 0 || papers[i - 1].date !== p.date;
+            const top = firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined;
             return (
               <tr key={p.id}>
-                <td style={{ ...docTd, fontSize: 11, whiteSpace: "nowrap",
-                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>
+                <td style={{ ...docTd, fontSize: 10.5, whiteSpace: "nowrap", borderTop: top }}>
                   {firstOfDay ? new Date(p.date + "T00:00:00").toLocaleDateString(undefined,
                     { weekday: "short", day: "numeric", month: "short" }) : ""}
                 </td>
-                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 11, whiteSpace: "nowrap",
-                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>
+                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5, whiteSpace: "nowrap", borderTop: top }}>
                   {p.start}–{p.end}
                 </td>
-                <td style={{ ...docTd, fontWeight: 600,
-                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>{p.subject}</td>
-                <td style={{ ...docTd, fontSize: 11,
-                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>{p.invigilator || "—"}</td>
-                <td style={{ ...docTd, fontSize: 11, color: "#6B6552",
-                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>{p.note || ""}</td>
+                <td style={{ ...docTd, fontWeight: 600, fontSize: 11, borderTop: top }}>
+                  {p.subject}
+                  {p.note && <div style={{ fontWeight: 400, fontSize: 9.5, color: "#6B6552" }}>{p.note}</div>}
+                </td>
+                {classes.map((c) => (
+                  <td key={c.id} style={{ ...docTd, fontSize: 10, textAlign: "center", borderTop: top,
+                        color: p.invigilators?.[c.id] ? "#22304A" : "#B84C3E" }}>
+                    {p.invigilators?.[c.id] ? teacherName(p.invigilators[c.id]) : "—"}
+                  </td>
+                ))}
               </tr>
             );
           })}
@@ -4137,6 +4205,7 @@ function ExamTimetableDoc({ roster, level, onBack }) {
       </table>
 
       <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, fontSize: 10.5, color: "#6B6552", fontFamily: FONT.mono, lineHeight: 1.5 }}>
+        Each class sits its paper in its own room with the invigilator named above.
         Pupils should be seated ten minutes before each paper begins.
         No mobile phones or unauthorised material in the examination room.
       </div>
