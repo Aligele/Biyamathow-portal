@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v25 · results by grade";
+const APP_VERSION = "v26 · multi-class teachers";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -158,6 +158,45 @@ const subjectsForClass = (roster, classId) => {
   // keep any subject the school added itself, which no level claims
   const custom = all.filter((sub) => !Object.values(CBC_LEVEL_SUBJECTS).flat().includes(sub));
   return [...filtered, ...custom];
+};
+
+// A teacher is rarely tied to one class. Their real workload is whatever the
+// timetable says they teach, plus the class they register. This reads both and
+// returns, per class, exactly which learning areas they may enter marks for.
+const teachingAssignments = (roster, teacherId) => {
+  const teacher = roster.teachers.find((t) => t.id === teacherId);
+  if (!teacher) return [];
+
+  const byClass = {};       // classId -> Set of subjects
+  const add = (classId, subject) => {
+    if (!classId || !subject) return;
+    if (!byClass[classId]) byClass[classId] = new Set();
+    byClass[classId].add(subject);
+  };
+
+  // 1. everything the timetable assigns to them, across any class
+  Object.entries(roster.timetable || {}).forEach(([classId, days]) => {
+    Object.values(days || {}).forEach((periods) => {
+      Object.values(periods || {}).forEach((lesson) => {
+        if (lesson && lesson.teacherId === teacherId) add(classId, lesson.subject);
+      });
+    });
+  });
+
+  // 2. their own class, with the subjects recorded against them. A class
+  //    teacher usually takes most areas without every one being timetabled.
+  (teacher.subjects || []).forEach((sub) => add(teacher.classId, sub));
+
+  return roster.classes
+    .filter((c) => byClass[c.id]?.size)
+    .map((c) => ({
+      classId: c.id,
+      className: c.name,
+      isHomeClass: c.id === teacher.classId,
+      // only areas that class actually studies at its level
+      subjects: [...byClass[c.id]].filter((sub) => subjectsForClass(roster, c.id).includes(sub)),
+    }))
+    .filter((a) => a.subjects.length > 0);
 };
 
 const levelLabelForClass = (roster, classId) => {
@@ -1219,6 +1258,13 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "teachers" && (
             <div>
               <SectionTitle>Teachers</SectionTitle>
+              <div style={{ padding: "10px 12px", background: "#F5F1E6", border: "1px solid #E4DFCF",
+                            borderRadius: 4, fontFamily: FONT.body, fontSize: 12, color: "#6B6552",
+                            lineHeight: 1.55, marginBottom: 12 }}>
+                A teacher's class here is the one they register and write report cards for.
+                To let them teach <strong>other</strong> classes, put them on the <strong>Timetable</strong> —
+                every lesson assigned to them there lets them enter marks for that class and subject.
+              </div>
               <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                 <input value={newTeacher.name} onChange={(e) => setNewTeacher({ ...newTeacher, name: e.target.value })} placeholder="Teacher name" style={{ ...darkInput(), flex: 1, minWidth: 150 }} />
                 <select value={newTeacher.classId} onChange={(e) => setNewTeacher({ ...newTeacher, classId: e.target.value })} style={darkInput()}>
@@ -1244,8 +1290,19 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                       </span>
                     </div>
                     <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", marginTop: 2 }}>{classNameOf(roster, t.classId)} · login: {t.username}</div>
+                    {(() => {
+                      const extra = teachingAssignments(roster, t.id).filter((a) => !a.isHomeClass);
+                      return extra.length > 0 ? (
+                        <div style={{ margin: "8px 0 4px", padding: "7px 10px", background: "#E3E9F5",
+                                      border: "1px solid #BCCAE6", borderRadius: 4,
+                                      fontFamily: FONT.body, fontSize: 11.5, color: "#22304A", lineHeight: 1.5 }}>
+                          <strong>Also teaches</strong> (from the timetable):{" "}
+                          {extra.map((a) => `${a.className} — ${a.subjects.join(", ")}`).join(" · ")}
+                        </div>
+                      ) : null;
+                    })()}
                     <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", margin: "9px 0 5px" }}>
-                      Subjects taught (tap to toggle):
+                      Subjects taught in their own class (tap to toggle):
                       {levelLabelForClass(roster, t.classId) && (
                         <span style={{ color: "#8A8368" }}> — {levelLabelForClass(roster, t.classId)}</span>
                       )}
@@ -1961,6 +2018,101 @@ function ClassPicker({ roster, onPick }) {
   );
 }
 
+
+// ---------- A teacher's results, across every class they actually teach ----------
+// Subject teachers commonly cover several classes. Rather than tying them to
+// one, this lists whatever the timetable assigns them, plus their own class,
+// and limits each to the learning areas they hold there.
+function TeacherResults({ roster, saveRoster, teacher }) {
+  const assignments = teachingAssignments(roster, teacher.id);
+  const [picked, setPicked] = useState(assignments.length === 1 ? assignments[0].classId : "");
+
+  const current = assignments.find((a) => a.classId === picked);
+
+  if (assignments.length === 0) {
+    return (
+      <div>
+        <SectionTitle>Exam results</SectionTitle>
+        <div style={{ padding: "13px 15px", borderRadius: 5, background: "#F5E8DC", border: "1px solid #E8CBA0",
+                      fontFamily: FONT.body, fontSize: 13, color: "#22304A", lineHeight: 1.6 }}>
+          You have not been given any subjects yet, so there is nothing to enter.
+          <div style={{ marginTop: 8 }}>
+            Ask the administrator to either tap your subject chips under <strong>Teachers</strong>,
+            or put you on the <strong>Timetable</strong> for the classes you teach. Both work —
+            the timetable is what lets you teach more than one class.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <SectionTitle>Exam results</SectionTitle>
+
+      {!current && (
+        <>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+            You teach {assignments.length} class{assignments.length === 1 ? "" : "es"}. Choose one to enter results.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px,1fr))", gap: 9 }}>
+            {assignments.map((a) => {
+              const rec = getMarksFor(roster, a.classId, DEFAULT_TERM);
+              const st = statusOf(rec);
+              const tone = { draft: "#C98A2C", submitted: "#3B5998", approved: "#3F7A5C", returned: "#B84C3E" }[st] || "#8A8368";
+              const count = roster.students.filter((s) => s.classId === a.classId).length;
+              return (
+                <button key={a.classId} onClick={() => setPicked(a.classId)} style={{
+                  textAlign: "left", padding: "13px 14px", borderRadius: 6, background: "#fff",
+                  border: "1px solid #E4DFCF", borderLeft: `4px solid ${tone}`, display: "grid", gap: 5,
+                }}>
+                  <span style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 700, color: "#22304A" }}>
+                    {a.className}
+                    {a.isHomeClass && <span style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#B8860B", marginLeft: 6 }}>MY CLASS</span>}
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368" }}>
+                    {count} pupil{count === 1 ? "" : "s"} · {a.subjects.length} subject{a.subjects.length === 1 ? "" : "s"}
+                  </span>
+                  <span style={{ fontFamily: FONT.body, fontSize: 11, color: "#6B6552", lineHeight: 1.35 }}>
+                    {a.subjects.join(", ")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {current && (
+        <>
+          {assignments.length > 1 && (
+            <button onClick={() => setPicked("")} style={{ ...backBtnStyle(), color: "#22304A", marginBottom: 12 }}>
+              ← my classes
+            </button>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#22304A" }}>{current.className}</span>
+            {levelLabelForClass(roster, current.classId) && (
+              <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#6B6552", background: "#F5F1E6",
+                             border: "1px solid #E4DFCF", borderRadius: 10, padding: "2px 9px" }}>
+                {levelLabelForClass(roster, current.classId)}
+              </span>
+            )}
+          </div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 12 }}>
+            You may enter: {current.subjects.join(", ")}
+          </div>
+
+          <MarksEditor roster={roster} saveRoster={saveRoster} classId={current.classId}
+            students={roster.students.filter((s) => s.classId === current.classId)}
+            allowedSubjects={current.subjects}
+            role="teacher" actorName={teacher.name} />
+        </>
+      )}
+    </div>
+  );
+}
+
 // ================= MARKS EDITOR (shared: admin + teacher) =================
 function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, role = "admin", actorName = "" }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
@@ -2254,20 +2406,12 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
 
           {tab === "discipline" && <DisciplineReport roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} role="teacher" />}
 
-          {tab === "reportcards" && <TeacherReportCards roster={roster} classId={classId} />}
+          {tab === "reportcards" && <TeacherReportCards roster={roster} classId={classId} teacher={teacher} />}
 
           {tab === "timetable" && <MyTimetable roster={roster} teacher={teacher} />}
 
           {tab === "results" && (
-            <div>
-              <SectionTitle>Exam results</SectionTitle>
-              <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
-                You can enter results for: {mySubjects.length ? mySubjects.join(", ") : "— no subjects assigned yet —"}
-              </div>
-              <MarksEditor roster={roster} saveRoster={saveRoster} classId={classId} students={students}
-                allowedSubjects={mySubjects.filter((sub) => subjectsForClass(roster, classId).includes(sub))}
-                role="teacher" actorName={teacher.name} />
-            </div>
+            <TeacherResults roster={roster} saveRoster={saveRoster} teacher={teacher} />
           )}
         </div>
       </div>
@@ -4163,20 +4307,40 @@ function IdCardDashboard({ roster }) {
 
 
 // Small wrapper: lets a teacher choose a term, then print every pupil's card.
-function TeacherReportCards({ roster, classId }) {
+function TeacherReportCards({ roster, classId, teacher }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
   const [printing, setPrinting] = useState(false);
-  if (printing) return <BulkReportCards roster={roster} classId={classId} term={term} onBack={() => setPrinting(false)} />;
 
-  const record = getMarksFor(roster, classId, term);
+  // Report cards belong to a class as a whole, so only the class teacher
+  // prints them — a subject teacher covering one lesson should not.
+  const [pick, setPick] = useState(classId || "");
+  const mine = teachingAssignments(roster, teacher?.id).filter((a) => a.isHomeClass);
+  const useClass = mine.length ? (pick || mine[0].classId) : classId;
+
+  if (printing) return <BulkReportCards roster={roster} classId={useClass} term={term} onBack={() => setPrinting(false)} />;
+
+  if (!useClass) {
+    return (
+      <div>
+        <SectionTitle>Print report cards</SectionTitle>
+        <div style={{ padding: "13px 15px", borderRadius: 5, background: "#F5E8DC", border: "1px solid #E8CBA0",
+                      fontFamily: FONT.body, fontSize: 13, color: "#22304A", lineHeight: 1.6 }}>
+          Report cards are printed by the class teacher. You are not registered as the class teacher
+          for any class, so there is nothing to print here — ask the administrator if that is wrong.
+        </div>
+      </div>
+    );
+  }
+
+  const record = getMarksFor(roster, useClass, term);
   const approved = statusOf(record) === "approved";
-  const count = roster.students.filter((s) => s.classId === classId).length;
+  const count = roster.students.filter((s) => s.classId === useClass).length;
 
   return (
     <div>
       <SectionTitle>Print report cards</SectionTitle>
       <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
-        Prints one report card per pupil in <strong>{classNameOf(roster, classId)}</strong>, each on its own page,
+        Prints one report card per pupil in <strong>{classNameOf(roster, useClass)}</strong>, each on its own page,
         with the pupil's admission number and parent PIN printed at the foot.
       </div>
 
