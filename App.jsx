@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v28 · invigilators per class";
+const APP_VERSION = "v29 · breaks and lunch";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -232,16 +232,28 @@ const DISCIPLINE_ACTIONS = [
 // ---- Timetable & duty roster ----
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_FULL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday" };
+// A school day is lessons punctuated by breaks. Break rows run across every
+// day of the week, so they are part of the timetable rather than a gap in it.
 const DEFAULT_PERIODS = [
-  { id: "p1", label: "1", time: "8:00–8:40" },
-  { id: "p2", label: "2", time: "8:40–9:20" },
-  { id: "p3", label: "3", time: "9:20–10:00" },
-  { id: "p4", label: "4", time: "10:20–11:00" },
-  { id: "p5", label: "5", time: "11:00–11:40" },
-  { id: "p6", label: "6", time: "11:40–12:20" },
-  { id: "p7", label: "7", time: "2:00–2:40" },
-  { id: "p8", label: "8", time: "2:40–3:20" },
+  { id: "p1", label: "1", time: "8:00–8:40", type: "lesson" },
+  { id: "p2", label: "2", time: "8:40–9:20", type: "lesson" },
+  { id: "p3", label: "3", time: "9:20–10:00", type: "lesson" },
+  { id: "b1", label: "Short break", time: "10:00–10:20", type: "break" },
+  { id: "p4", label: "4", time: "10:20–11:00", type: "lesson" },
+  { id: "p5", label: "5", time: "11:00–11:40", type: "lesson" },
+  { id: "p6", label: "6", time: "11:40–12:20", type: "lesson" },
+  { id: "l1", label: "Lunch", time: "12:20–14:00", type: "lunch" },
+  { id: "p7", label: "7", time: "14:00–14:40", type: "lesson" },
+  { id: "p8", label: "8", time: "14:40–15:20", type: "lesson" },
+  { id: "b2", label: "Games / Clubs", time: "15:20–16:00", type: "break" },
 ];
+
+const PERIOD_TYPES = {
+  lesson: { label: "Lesson", bg: "#FFFFFF", fg: "#22304A", band: null },
+  break:  { label: "Break",  bg: "#F5E8DC", fg: "#8A6A2C", band: "#F5E8DC" },
+  lunch:  { label: "Lunch",  bg: "#E4F0E8", fg: "#2E6B4F", band: "#E4F0E8" },
+};
+const isLessonPeriod = (p) => (p.type || "lesson") === "lesson";
 
 const getTimetable = (roster, classId) => roster.timetable?.[classId] || {};
 const setLessonIn = (roster, classId, day, periodId, lesson) => {
@@ -3065,9 +3077,11 @@ function TimetableAdmin({ roster, saveRoster }) {
   const updatePeriod = (id, field, value) => {
     saveRoster({ ...roster, settings: { ...roster.settings, periods: periods.map((p) => p.id === id ? { ...p, [field]: value } : p) } });
   };
-  const addPeriod = () => {
-    const n = periods.length + 1;
-    saveRoster({ ...roster, settings: { ...roster.settings, periods: [...periods, { id: "p" + Date.now(), label: String(n), time: "" }] } }, "Period added");
+  const addPeriod = (type = "lesson") => {
+    const lessons = periods.filter(isLessonPeriod).length;
+    const label = type === "lesson" ? String(lessons + 1) : (type === "lunch" ? "Lunch" : "Break");
+    saveRoster({ ...roster, settings: { ...roster.settings,
+      periods: [...periods, { id: type[0] + Date.now(), label, time: "", type }] } }, `${PERIOD_TYPES[type].label} added`);
   };
   const removePeriod = (id) => saveRoster({ ...roster, settings: { ...roster.settings, periods: periods.filter((p) => p.id !== id) } }, "Period removed");
 
@@ -3093,7 +3107,7 @@ function TimetableAdmin({ roster, saveRoster }) {
             </select>
             <select value={entry.periodId} onChange={(e) => setEntry({ ...entry, periodId: e.target.value })} style={{ ...darkInput(), minWidth: 130 }}>
               <option value="">Period…</option>
-              {periods.map((p) => <option key={p.id} value={p.id}>Period {p.label}{p.time ? ` (${p.time})` : ""}</option>)}
+              {periods.filter(isLessonPeriod).map((p) => <option key={p.id} value={p.id}>Period {p.label}{p.time ? ` (${p.time})` : ""}</option>)}
             </select>
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
@@ -3110,19 +3124,31 @@ function TimetableAdmin({ roster, saveRoster }) {
 
           <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
             {DAYS.map((day) => {
-              const lessons = periods.map((p) => ({ p, l: tt[day]?.[p.id] })).filter((x) => x.l);
+              // keep breaks in the list so the day reads in real order
+              const lessons = periods
+                .map((p) => ({ p, l: tt[day]?.[p.id] }))
+                .filter((x) => x.l || !isLessonPeriod(x.p));
               return (
                 <div key={day} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "10px 12px" }}>
                   <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#22304A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
                   {lessons.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#8A8368" }}>No lessons set.</div>}
                   <div style={{ display: "grid", gap: 4 }}>
                     {lessons.map(({ p, l }) => (
-                      <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#22304A" }}>
-                        <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", minWidth: 92 }}>P{p.label} {p.time}</span>
-                        <span style={{ fontWeight: 600 }}>{l.subject}</span>
-                        <span style={{ color: "#6B6552", fontSize: 12 }}>{l.teacherId ? roster.teachers.find((t) => t.id === l.teacherId)?.name || "" : ""}</span>
-                        <button onClick={() => removeLesson(day, p.id)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
-                      </div>
+                      isLessonPeriod(p) ? (
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#22304A" }}>
+                          <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", minWidth: 92 }}>P{p.label} {p.time}</span>
+                          <span style={{ fontWeight: 600 }}>{l.subject}</span>
+                          <span style={{ color: "#6B6552", fontSize: 12 }}>{l.teacherId ? roster.teachers.find((t) => t.id === l.teacherId)?.name || "" : ""}</span>
+                          <button onClick={() => removeLesson(day, p.id)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
+                        </div>
+                      ) : (
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12,
+                              fontFamily: FONT.body, padding: "3px 7px", borderRadius: 3,
+                              background: PERIOD_TYPES[p.type].band, color: PERIOD_TYPES[p.type].fg }}>
+                          <span style={{ fontFamily: FONT.mono, fontSize: 10.5, minWidth: 92 }}>{p.time}</span>
+                          <span style={{ fontWeight: 600 }}>{p.label}</span>
+                        </div>
+                      )
                     ))}
                   </div>
                 </div>
@@ -3138,14 +3164,32 @@ function TimetableAdmin({ roster, saveRoster }) {
             </button>
             {showPeriods && (
               <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                {periods.map((p) => (
-                  <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <input value={p.label} onChange={(e) => updatePeriod(p.id, "label", e.target.value)} style={{ ...darkInput(), width: 60, padding: "6px 8px" }} />
-                    <input value={p.time} onChange={(e) => updatePeriod(p.id, "time", e.target.value)} placeholder="8:00–8:40" style={{ ...darkInput(), flex: 1, minWidth: 120, padding: "6px 8px" }} />
-                    <button onClick={() => removePeriod(p.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
-                  </div>
-                ))}
-                <button onClick={addPeriod} style={{ ...primaryBtn(), justifySelf: "start" }}>Add period</button>
+                {periods.map((p) => {
+                  const type = p.type || "lesson";
+                  return (
+                    <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+                          padding: type === "lesson" ? 0 : "5px 7px", borderRadius: 3,
+                          background: type === "lesson" ? "transparent" : PERIOD_TYPES[type].band }}>
+                      <select value={type} onChange={(e) => updatePeriod(p.id, "type", e.target.value)}
+                        style={{ ...darkInput(), width: 96, padding: "6px 6px", fontSize: 12 }}>
+                        <option value="lesson">Lesson</option>
+                        <option value="break">Break</option>
+                        <option value="lunch">Lunch</option>
+                      </select>
+                      <input value={p.label} onChange={(e) => updatePeriod(p.id, "label", e.target.value)}
+                        placeholder={type === "lesson" ? "1" : "Short break"}
+                        style={{ ...darkInput(), width: type === "lesson" ? 60 : 120, padding: "6px 8px" }} />
+                      <input value={p.time} onChange={(e) => updatePeriod(p.id, "time", e.target.value)}
+                        placeholder="8:00–8:40" style={{ ...darkInput(), flex: 1, minWidth: 110, padding: "6px 8px" }} />
+                      <button onClick={() => removePeriod(p.id)} style={{ background: "none", border: "none", color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
+                    </div>
+                  );
+                })}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={() => addPeriod("lesson")} style={primaryBtn()}>Add lesson</button>
+                  <button onClick={() => addPeriod("break")} style={{ ...primaryBtn(), background: "#C98A2C" }}>Add break</button>
+                  <button onClick={() => addPeriod("lunch")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Add lunch</button>
+                </div>
               </div>
             )}
           </div>
@@ -3171,21 +3215,41 @@ function TimetableDoc({ roster, classId, onBack }) {
           </tr>
         </thead>
         <tbody>
-          {periods.map((p) => (
-            <tr key={p.id}>
-              <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5, whiteSpace: "nowrap" }}>
-                <strong>P{p.label}</strong>{p.time ? <div style={{ color: "#8A8368" }}>{p.time}</div> : null}
-              </td>
-              {DAYS.map((d) => {
-                const l = tt[d]?.[p.id];
-                return (
-                  <td key={d} style={{ ...docTd, fontSize: 11.5 }}>
-                    {l ? <><strong>{l.subject}</strong>{l.teacherId ? <div style={{ color: "#6B6552", fontSize: 10 }}>{nameOf(l.teacherId)}</div> : null}</> : <span style={{ color: "#C8C2B0" }}>—</span>}
+          {periods.map((p) => {
+            // A break runs across the whole week, so it prints as one band
+            // rather than five identical cells.
+            if (!isLessonPeriod(p)) {
+              const tone = PERIOD_TYPES[p.type] || PERIOD_TYPES.break;
+              return (
+                <tr key={p.id}>
+                  <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10, whiteSpace: "nowrap",
+                               background: tone.band, color: tone.fg }}>
+                    {p.time}
                   </td>
-                );
-              })}
-            </tr>
-          ))}
+                  <td colSpan={DAYS.length} style={{ ...docTd, textAlign: "center", fontSize: 11,
+                        fontWeight: "bold", letterSpacing: 1.5, textTransform: "uppercase",
+                        background: tone.band, color: tone.fg }}>
+                    {p.label}
+                  </td>
+                </tr>
+              );
+            }
+            return (
+              <tr key={p.id}>
+                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5, whiteSpace: "nowrap" }}>
+                  <strong>P{p.label}</strong>{p.time ? <div style={{ color: "#8A8368" }}>{p.time}</div> : null}
+                </td>
+                {DAYS.map((d) => {
+                  const l = tt[d]?.[p.id];
+                  return (
+                    <td key={d} style={{ ...docTd, fontSize: 11.5 }}>
+                      {l ? <><strong>{l.subject}</strong>{l.teacherId ? <div style={{ color: "#6B6552", fontSize: 10 }}>{nameOf(l.teacherId)}</div> : null}</> : <span style={{ color: "#C8C2B0" }}>—</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 40 }}>
@@ -3301,6 +3365,17 @@ function MyTimetable({ roster, teacher }) {
   DAYS.forEach((d) => rows[d].sort((a, b) => periods.findIndex((x) => x.id === a.p.id) - periods.findIndex((x) => x.id === b.p.id)));
   const hasAny = DAYS.some((d) => rows[d].length > 0);
 
+  // slot the breaks back in, so the day reads as it is actually lived
+  const withBreaks = (day) => {
+    const mine = rows[day];
+    if (!mine.length) return [];
+    const first = periods.findIndex((x) => x.id === mine[0].p.id);
+    const last = periods.findIndex((x) => x.id === mine[mine.length - 1].p.id);
+    return periods.slice(first, last + 1)
+      .map((p) => isLessonPeriod(p) ? mine.find((r) => r.p.id === p.id) : { p, isBreak: true })
+      .filter(Boolean);
+  };
+
   return (
     <div>
       <SectionTitle>My timetable</SectionTitle>
@@ -3325,7 +3400,14 @@ function MyTimetable({ roster, teacher }) {
           <div key={day} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "10px 12px" }}>
             <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#22304A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
             <div style={{ display: "grid", gap: 4 }}>
-              {rows[day].map((r, i) => (
+              {withBreaks(day).map((r, i) => r.isBreak ? (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12,
+                      fontFamily: FONT.body, padding: "3px 7px", borderRadius: 3,
+                      background: PERIOD_TYPES[r.p.type].band, color: PERIOD_TYPES[r.p.type].fg }}>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 10.5, minWidth: 92 }}>{r.p.time}</span>
+                  <span style={{ fontWeight: 600 }}>{r.p.label}</span>
+                </div>
+              ) : (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#22304A" }}>
                   <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", minWidth: 92 }}>P{r.p.label} {r.p.time}</span>
                   <span style={{ fontWeight: 600 }}>{r.subject}</span>
@@ -3956,9 +4038,19 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
 
   const addPaper = () => {
     if (!entry.subject || !entry.date) return;
-    const p = { id: genId("EXM", papers), ...entry, invigilators: {} };
+    const p = { id: genId("EXM", papers), ...entry, kind: "paper", invigilators: {} };
     write({ ...sheet, papers: [...papers, p] }, `${entry.subject} added`);
     setEntry({ ...entry, subject: "", note: "" });
+  };
+
+  // Exam days need rest between papers. A break spans the whole level, so it
+  // needs no invigilator and shows as a band.
+  const addBreak = (kind) => {
+    if (!entry.date) return;
+    const p = { id: genId("EXM", papers), date: entry.date, start: entry.start, end: entry.end,
+                subject: kind === "lunch" ? "Lunch" : "Break", kind, note: entry.note, invigilators: {} };
+    write({ ...sheet, papers: [...papers, p] }, `${p.subject} added`);
+    setEntry({ ...entry, note: "" });
   };
   const removePaper = (id) => write({ ...sheet, papers: papers.filter((p) => p.id !== id) }, "Paper removed");
   const setTitle = (title) => write({ ...sheet, title }, "Title updated");
@@ -3979,7 +4071,7 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
     });
     // also across other papers at the same date and time
     papers.forEach((other) => {
-      if (other.id === paper.id) return;
+      if (other.id === paper.id || (other.kind && other.kind !== "paper")) return;
       if (other.date !== paper.date || other.start !== paper.start) return;
       Object.values(other.invigilators || {}).forEach((tid) => {
         if (tid && Object.values(paper.invigilators || {}).includes(tid)) clashing.add(tid);
@@ -4054,8 +4146,12 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
                 Add paper
               </button>
             </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button onClick={() => addBreak("break")} style={{ ...primaryBtn(), background: "#C98A2C" }}>Add break</button>
+              <button onClick={() => addBreak("lunch")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Add lunch</button>
+            </div>
             <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 8 }}>
-              Invigilators are chosen per class once the paper is added.
+              Invigilators are chosen per class once a paper is added. Breaks need none.
             </div>
           </div>
         </>
@@ -4075,6 +4171,23 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
             </div>
             <div style={{ padding: "8px 10px", display: "grid", gap: 8, background: "#FBF9F3" }}>
               {byDay[date].map((p) => {
+                const kind = p.kind || "paper";
+                if (kind !== "paper") {
+                  const tone = PERIOD_TYPES[kind] || PERIOD_TYPES.break;
+                  return (
+                    <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                          padding: "8px 12px", borderRadius: 4, background: tone.band, color: tone.fg }}>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 11.5, fontWeight: 600 }}>{p.start}–{p.end}</span>
+                      <span style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 700, letterSpacing: 1, flex: 1 }}>
+                        {p.subject.toUpperCase()}
+                      </span>
+                      {!readOnly && (
+                        <button onClick={() => removePaper(p.id)} style={{ background: "none", border: "none",
+                                color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
+                      )}
+                    </div>
+                  );
+                }
                 const clash = clashesFor(p);
                 const assigned = levelClasses.filter((c) => p.invigilators?.[c.id]).length;
                 return (
@@ -4179,6 +4292,29 @@ function ExamTimetableDoc({ roster, level, onBack }) {
           {papers.map((p, i) => {
             const firstOfDay = i === 0 || papers[i - 1].date !== p.date;
             const top = firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined;
+            const kind = p.kind || "paper";
+
+            // breaks span every class, so they print as one band
+            if (kind !== "paper") {
+              const tone = PERIOD_TYPES[kind] || PERIOD_TYPES.break;
+              return (
+                <tr key={p.id}>
+                  <td style={{ ...docTd, fontSize: 10.5, borderTop: top, background: tone.band, color: tone.fg }}>
+                    {firstOfDay ? new Date(p.date + "T00:00:00").toLocaleDateString(undefined,
+                      { weekday: "short", day: "numeric", month: "short" }) : ""}
+                  </td>
+                  <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5, whiteSpace: "nowrap",
+                               borderTop: top, background: tone.band, color: tone.fg }}>
+                    {p.start}–{p.end}
+                  </td>
+                  <td colSpan={1 + classes.length} style={{ ...docTd, textAlign: "center", fontSize: 10.5,
+                        fontWeight: "bold", letterSpacing: 1.5, textTransform: "uppercase",
+                        borderTop: top, background: tone.band, color: tone.fg }}>
+                    {p.subject}
+                  </td>
+                </tr>
+              );
+            }
             return (
               <tr key={p.id}>
                 <td style={{ ...docTd, fontSize: 10.5, whiteSpace: "nowrap", borderTop: top }}>
