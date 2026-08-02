@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v26 · multi-class teachers";
+const APP_VERSION = "v27 · exam timetable";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -346,6 +346,7 @@ const EMPTY_ROSTER = {
   duty: [],            // [ { id, weekStart, teacherId, note } ]
   discipline: [],      // [ { id, ts, studentId, classId, byTeacher, category, detail, action, status, adminNote } ]
   checkins: {},        // { [date]: { [teacherId]: { time, status, note, approved } } }
+  examTimetable: {},   // { [level]: { title, papers: [ { id, date, start, end, subject, invigilator, note } ] } }
   audit: [],           // [ { ts, actor, action } ] — who changed what
   archives: [],        // [ { year, savedAt, snapshot } ] — closed school years
   settings: { currency: "KSh", passMark: 51, weights: DEFAULT_WEIGHTS, periods: DEFAULT_PERIODS,
@@ -395,6 +396,7 @@ export default function SchoolRegister() {
             duty: p.duty || [],
             discipline: p.discipline || [],
             checkins: p.checkins || {},
+            examTimetable: p.examTimetable || {},
             audit: p.audit || [],
             archives: p.archives || [],
             settings: {
@@ -1088,7 +1090,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     ]},
     { title: "ACADEMICS", items: [
       { key: "marks", label: "Exam results", icon: "marks" },
-      { key: "timetable", label: "Timetable", icon: "timetable" },
+      { key: "timetable", label: "Class timetable", icon: "timetable" },
+      { key: "examtt", label: "Exam timetable", icon: "marks" },
       { key: "subjects", label: "Subjects", icon: "subjects" },
       { key: "classes", label: "Classes", icon: "classes" },
     ]},
@@ -1478,6 +1481,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "staff" && <StaffAttendance roster={roster} saveRoster={saveRoster} />}
 
           {tab === "timetable" && <TimetableAdmin roster={roster} saveRoster={saveRoster} />}
+
+          {tab === "examtt" && <ExamTimetable roster={roster} saveRoster={saveRoster} />}
 
           {tab === "duty" && <DutyRoster roster={roster} saveRoster={saveRoster} />}
 
@@ -2374,7 +2379,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
       <PortalHeader title={`${classNameOf(roster, classId).toUpperCase()} · ${teacher.name.toUpperCase()}`}
         section={{ signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
                    reportcards: "Report cards", timetable: "My timetable",
-                   register: "Register a pupil", photos: "Pupil photos",
+                   register: "Register a pupil", photos: "Pupil photos", examtt: "Exam timetable",
                    discipline: "Discipline report" }[tab] || tab}
         onMenu={() => setMenuOpen(true)} onExit={onExit} />
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} active={tab} onPick={setTab}
@@ -2388,6 +2393,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
             { key: "results", label: "Exam results", icon: "marks" },
             { key: "reportcards", label: "Print report cards", icon: "reports" },
             { key: "timetable", label: "My timetable", icon: "timetable" },
+            { key: "examtt", label: "Exam timetable", icon: "marks" },
           ]},
           { title: "MY CLASS", items: [
             { key: "register", label: "Register a pupil", icon: "students" },
@@ -2409,6 +2415,8 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           {tab === "reportcards" && <TeacherReportCards roster={roster} classId={classId} teacher={teacher} />}
 
           {tab === "timetable" && <MyTimetable roster={roster} teacher={teacher} />}
+
+          {tab === "examtt" && <ExamTimetable roster={roster} saveRoster={saveRoster} readOnly />}
 
           {tab === "results" && (
             <TeacherResults roster={roster} saveRoster={saveRoster} teacher={teacher} />
@@ -2526,6 +2534,11 @@ function ParentView({ payload, onExit }) {
   const due = student.feeDue || 0, paid = student.feePaid || 0, balance = due - paid;
 
   if (printDoc === "timetable") return <TimetableDoc roster={roster} classId={payload.classId} onBack={() => setPrintDoc(null)} />;
+  if (printDoc === "examtt") {
+    const lvl = levelOfClassName(payload.className);
+    const shim = { ...roster, examTimetable: { [lvl]: payload.examTimetable } };
+    return <ExamTimetableDoc roster={shim} level={lvl} onBack={() => setPrintDoc(null)} />;
+  }
   if (printDoc === "invoice") return <InvoiceDoc roster={roster} student={student} onBack={() => setPrintDoc(null)} />;
   if (printDoc === "report") return <ReportDoc roster={roster} student={student} term={term} termMarks={termMarks} avg={avg} rank={rank} rate={rate} onBack={() => setPrintDoc(null)} />;
 
@@ -2549,6 +2562,9 @@ function ParentView({ payload, onExit }) {
           <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
             <button onClick={() => setPrintDoc("invoice")} style={primaryBtn()}>Fee invoice</button>
             <button onClick={() => setPrintDoc("timetable")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Class timetable</button>
+            {payload.examTimetable?.papers?.length > 0 && (
+              <button onClick={() => setPrintDoc("examtt")} style={{ ...primaryBtn(), background: "#22304A" }}>Exam timetable</button>
+            )}
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
@@ -3911,6 +3927,225 @@ function SystemHealth({ roster }) {
         ))}
       </div>
     </div>
+  );
+}
+
+
+// ---------- Exam timetable, set per CBC level ----------
+// Assessments are sat by a whole level at once — every Grade 4, 5 and 6 class
+// takes the Upper Primary paper together — so the timetable belongs to the
+// level rather than to any single class.
+function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null }) {
+  const [level, setLevel] = useState(onlyLevel || "upper");
+  const [printing, setPrinting] = useState(false);
+  const [entry, setEntry] = useState({ date: todayISO(), start: "08:00", end: "10:00", subject: "", invigilator: "", note: "" });
+
+  const sheet = roster.examTimetable?.[level] || { title: "", papers: [] };
+  const papers = [...(sheet.papers || [])].sort((a, b) =>
+    (a.date + a.start).localeCompare(b.date + b.start));
+
+  // learning areas for this level, taken from the school's own subject list
+  const levelSubjects = (roster.subjects || []).filter(
+    (sub) => (CBC_LEVEL_SUBJECTS[level] || []).includes(sub)
+      || !Object.values(CBC_LEVEL_SUBJECTS).flat().includes(sub));
+
+  const write = (next, msg) => saveRoster(
+    { ...roster, examTimetable: { ...(roster.examTimetable || {}), [level]: next } }, msg);
+
+  const addPaper = () => {
+    if (!entry.subject || !entry.date) return;
+    const p = { id: genId("EXM", papers), ...entry };
+    write({ ...sheet, papers: [...papers, p] }, `${entry.subject} added`);
+    setEntry({ ...entry, subject: "", note: "" });
+  };
+  const removePaper = (id) => write({ ...sheet, papers: papers.filter((p) => p.id !== id) }, "Paper removed");
+  const setTitle = (title) => write({ ...sheet, title }, "Title updated");
+
+  if (printing) return <ExamTimetableDoc roster={roster} level={level} onBack={() => setPrinting(false)} />;
+
+  // group papers by day, which is how anyone actually reads an exam timetable
+  const byDay = papers.reduce((acc, p) => {
+    (acc[p.date] = acc[p.date] || []).push(p);
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <SectionTitle>Exam timetable</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 12 }}>
+        Assessments are sat by a whole level together, so each timetable covers all the classes
+        in that level.
+      </div>
+
+      {!onlyLevel && (
+        <div style={{ display: "flex", gap: 7, marginBottom: 14, flexWrap: "wrap" }}>
+          {Object.entries(CBC_LEVELS).map(([k, v]) => (
+            <button key={k} onClick={() => setLevel(k)} style={{
+              padding: "7px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
+              border: `1px solid ${level === k ? "#22304A" : "#D8D2C2"}`,
+              background: level === k ? "#22304A" : "#fff",
+              color: level === k ? "#fff" : "#6B6552",
+            }}>
+              Grades {v.grades[0]}–{v.grades[v.grades.length - 1]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", marginBottom: 10 }}>
+        {CBC_LEVELS[level].label.toUpperCase()}
+      </div>
+
+      {!readOnly && (
+        <>
+          <input defaultValue={sheet.title} key={level + (sheet.title || "")}
+            onBlur={(e) => setTitle(e.target.value)}
+            placeholder="Title, e.g. End of Term 1 Assessment"
+            style={{ ...darkInput(), width: "100%", marginBottom: 12 }} />
+
+          <div style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: 12, marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              <input type="date" value={entry.date} onChange={(e) => setEntry({ ...entry, date: e.target.value })}
+                style={{ ...darkInput(), minWidth: 140 }} />
+              <input type="time" value={entry.start} onChange={(e) => setEntry({ ...entry, start: e.target.value })}
+                style={{ ...darkInput(), width: 110 }} />
+              <input type="time" value={entry.end} onChange={(e) => setEntry({ ...entry, end: e.target.value })}
+                style={{ ...darkInput(), width: 110 }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              <select value={entry.subject} onChange={(e) => setEntry({ ...entry, subject: e.target.value })}
+                style={{ ...darkInput(), flex: 1, minWidth: 150 }}>
+                <option value="">Learning area…</option>
+                {levelSubjects.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
+              </select>
+              <select value={entry.invigilator} onChange={(e) => setEntry({ ...entry, invigilator: e.target.value })}
+                style={{ ...darkInput(), flex: 1, minWidth: 140 }}>
+                <option value="">Invigilator (optional)…</option>
+                {roster.teachers.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input value={entry.note} onChange={(e) => setEntry({ ...entry, note: e.target.value })}
+                placeholder="Note (optional) — e.g. bring a ruler" style={{ ...darkInput(), flex: 1, minWidth: 150 }} />
+              <button onClick={addPaper} disabled={!entry.subject} style={{ ...primaryBtn(), opacity: entry.subject ? 1 : 0.5 }}>
+                Add paper
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {papers.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
+          No papers set for this level yet.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 10 }}>
+        {Object.keys(byDay).sort().map((date) => (
+          <div key={date} style={{ border: "1px solid #E4DFCF", borderRadius: 5, overflow: "hidden" }}>
+            <div style={{ background: "#22304A", color: "#fff", padding: "8px 12px",
+                          fontFamily: FONT.display, fontSize: 13.5, fontWeight: 600 }}>
+              {new Date(date + "T00:00:00").toLocaleDateString(undefined,
+                { weekday: "long", day: "numeric", month: "long" })}
+            </div>
+            <div style={{ padding: "8px 10px", display: "grid", gap: 5, background: "#FBF9F3" }}>
+              {byDay[date].map((p) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                      padding: "9px 11px", background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#22304A", minWidth: 96, fontWeight: 600 }}>
+                    {p.start}–{p.end}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 110 }}>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>{p.subject}</span>
+                    {(p.invigilator || p.note) && (
+                      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6B6552", marginTop: 2 }}>
+                        {p.invigilator ? `Invigilator: ${p.invigilator}` : ""}
+                        {p.invigilator && p.note ? " · " : ""}{p.note}
+                      </div>
+                    )}
+                  </span>
+                  {!readOnly && (
+                    <button onClick={() => removePaper(p.id)} style={{ background: "none", border: "none",
+                            color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {papers.length > 0 && (
+        <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), marginTop: 16 }}>
+          Open printable timetable
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Printable version, one sheet per level.
+function ExamTimetableDoc({ roster, level, onBack }) {
+  const sheet = roster.examTimetable?.[level] || { title: "", papers: [] };
+  const papers = [...(sheet.papers || [])].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const classes = roster.classes.filter((c) => levelOfClassName(c.name) === level);
+
+  return (
+    <DocShell title="Exam timetable" onBack={onBack}>
+      <DocHeader subtitle={sheet.title || "Examination Timetable"} />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 16, fontSize: 12 }}>
+        <div><strong>Level:</strong> {CBC_LEVELS[level].label}</div>
+        <div><strong>Classes:</strong> {classes.map((c) => c.name).join(", ") || "—"}</div>
+      </div>
+
+      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 18 }}>
+        <thead>
+          <tr>
+            <th style={docTh}>Date</th>
+            <th style={docTh}>Time</th>
+            <th style={docTh}>Learning area</th>
+            <th style={docTh}>Invigilator</th>
+            <th style={docTh}>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {papers.map((p, i) => {
+            const firstOfDay = i === 0 || papers[i - 1].date !== p.date;
+            return (
+              <tr key={p.id}>
+                <td style={{ ...docTd, fontSize: 11, whiteSpace: "nowrap",
+                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>
+                  {firstOfDay ? new Date(p.date + "T00:00:00").toLocaleDateString(undefined,
+                    { weekday: "short", day: "numeric", month: "short" }) : ""}
+                </td>
+                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 11, whiteSpace: "nowrap",
+                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>
+                  {p.start}–{p.end}
+                </td>
+                <td style={{ ...docTd, fontWeight: 600,
+                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>{p.subject}</td>
+                <td style={{ ...docTd, fontSize: 11,
+                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>{p.invigilator || "—"}</td>
+                <td style={{ ...docTd, fontSize: 11, color: "#6B6552",
+                             borderTop: firstOfDay && i > 0 ? "2px solid #B8B2A0" : undefined }}>{p.note || ""}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, fontSize: 10.5, color: "#6B6552", fontFamily: FONT.mono, lineHeight: 1.5 }}>
+        Pupils should be seated ten minutes before each paper begins.
+        No mobile phones or unauthorised material in the examination room.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 34 }}>
+        <div style={docSig}>Examinations Officer</div>
+        <div style={docSig}>Head Teacher's Signature</div>
+      </div>
+    </DocShell>
   );
 }
 
