@@ -77,7 +77,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v24 · classes grouped";
+const APP_VERSION = "v25 · results by grade";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -1291,16 +1291,32 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "marks" && (
             <div>
               <SectionTitle>Exam results</SectionTitle>
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 12 }}>Enter or review any class's results — admin can enter every subject.</div>
-              <select value={marksClassId} onChange={(e) => setMarksClassId(e.target.value)} style={{ ...darkInput(), marginBottom: 16, width: "100%", maxWidth: 320 }}>
-                <option value="">Choose a class…</option>
-                {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              {!marksClassId && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Select a class to enter results.</div>}
-              {marksClassId && (
-                <MarksEditor roster={roster} saveRoster={saveRoster} classId={marksClassId}
-                  students={roster.students.filter((s) => s.classId === marksClassId)}
-                  allowedSubjects={subjectsForClass(roster, marksClassId)} role="admin" />
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552", marginBottom: 12 }}>
+                Pick a grade to open its results. Only that grade is loaded, so nothing else is in the way.
+              </div>
+
+              {marksClassId ? (
+                <>
+                  <button onClick={() => setMarksClassId("")} style={{ ...backBtnStyle(), color: "#22304A", marginBottom: 12 }}>
+                    ← all grades
+                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: "#22304A" }}>
+                      {classNameOf(roster, marksClassId)}
+                    </span>
+                    {levelLabelForClass(roster, marksClassId) && (
+                      <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6B6552", background: "#F5F1E6",
+                                     border: "1px solid #E4DFCF", borderRadius: 10, padding: "2px 9px" }}>
+                        {levelLabelForClass(roster, marksClassId)}
+                      </span>
+                    )}
+                  </div>
+                  <MarksEditor roster={roster} saveRoster={saveRoster} classId={marksClassId}
+                    students={roster.students.filter((s) => s.classId === marksClassId)}
+                    allowedSubjects={subjectsForClass(roster, marksClassId)} role="admin" />
+                </>
+              ) : (
+                <ClassPicker roster={roster} onPick={setMarksClassId} />
               )}
             </div>
           )}
@@ -1881,11 +1897,76 @@ function StudentsByClass({ roster, saveRoster, removeItem, openClassId }) {
   );
 }
 
+
+// ---------- Choose a grade before anything loads ----------
+// Showing every class's results at once is unreadable on a phone and slow to
+// scroll. Each grade is a card carrying just enough to decide which to open:
+// how many pupils, and whether the results are still a draft.
+function ClassPicker({ roster, onPick }) {
+  const weights = roster.settings.weights || DEFAULT_WEIGHTS;
+
+  const summarise = (classId) => {
+    const terms = roster.marks?.[classId] || {};
+    const keys = Object.keys(terms);
+    if (!keys.length) return { status: "none", label: "no results yet" };
+    // report on the most recently touched term
+    const latest = keys[keys.length - 1];
+    const st = statusOf(terms[latest]);
+    return {
+      status: st,
+      label: { draft: "draft", submitted: "awaiting approval", approved: "published", returned: "returned to teacher" }[st] || st,
+      term: latest.replace(/_/g, " "),
+    };
+  };
+
+  const TONE = {
+    none:      { bg: "#F5F1E6", fg: "#8A8368", edge: "#D8D2C2" },
+    draft:     { bg: "#F5E8DC", fg: "#C98A2C", edge: "#E8CBA0" },
+    submitted: { bg: "#E3E9F5", fg: "#3B5998", edge: "#BCCAE6" },
+    approved:  { bg: "#E4F0E8", fg: "#3F7A5C", edge: "#B8D9C4" },
+    returned:  { bg: "#F7E4E1", fg: "#B84C3E", edge: "#E8C4BD" },
+  };
+
+  if (roster.classes.length === 0) {
+    return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Add classes first.</div>;
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 9 }}>
+      {roster.classes.map((c) => {
+        const count = roster.students.filter((s) => s.classId === c.id).length;
+        const sum = summarise(c.id);
+        const tone = TONE[sum.status] || TONE.none;
+        return (
+          <button key={c.id} onClick={() => onPick(c.id)} style={{
+            textAlign: "left", padding: "13px 14px", borderRadius: 6,
+            background: "#fff", border: `1px solid #E4DFCF`,
+            borderLeft: `4px solid ${tone.fg}`, display: "grid", gap: 5,
+          }}>
+            <span style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: "#22304A" }}>{c.name}</span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368" }}>
+              {count} pupil{count === 1 ? "" : "s"}
+            </span>
+            <span style={{
+              justifySelf: "start", fontFamily: FONT.mono, fontSize: 9.5, fontWeight: 700,
+              background: tone.bg, color: tone.fg, border: `1px solid ${tone.edge}`,
+              borderRadius: 10, padding: "2px 8px",
+            }}>
+              {sum.label.toUpperCase()}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ================= MARKS EDITOR (shared: admin + teacher) =================
 function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, role = "admin", actorName = "" }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
   const [entry, setEntry] = useState({ studentId: "", subject: "", assessment: "exam", score: "" });
   const [printing, setPrinting] = useState(false);
+  const [openPupil, setOpenPupil] = useState(null);   // which pupil's breakdown is showing
   const record = getMarksFor(roster, classId, term);
   const { grid } = record;
   const status = statusOf(record);
@@ -2016,18 +2097,27 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
           {ranked.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No marks entered for {term} yet.</div>}
 
           {ranked.length > 0 && (
-            <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "grid", gap: 7 }}>
               {ranked.map((r) => (
                 <div key={r.student.id} style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: "11px 13px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                  {/* one line per pupil; tap to see the subject breakdown */}
+                  <button onClick={() => setOpenPupil(openPupil === r.student.id ? null : r.student.id)}
+                    style={{ width: "100%", background: "none", border: "none", padding: 0, textAlign: "left",
+                             display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                             flexWrap: "wrap", gap: 8 }}>
                     <span style={{ fontFamily: FONT.body, fontSize: 14, fontWeight: 600, color: "#22304A" }}>
                       <span style={{ fontFamily: FONT.mono, color: "#8A8368", fontSize: 11.5, marginRight: 7 }}>#{r.position}</span>{r.student.name}
                     </span>
-                    <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: gradeInk(r.average) }}>
-                      avg {r.average} · {gradeOf(r.average)}
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: gradeInk(r.average) }}>
+                        avg {r.average} · {gradeOf(r.average)}
+                      </span>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368" }}>
+                        {openPupil === r.student.id ? "▾" : "▸"}
+                      </span>
                     </span>
-                  </div>
-                  <div style={{ display: "grid", gap: 4 }}>
+                  </button>
+                  <div style={{ display: openPupil === r.student.id ? "grid" : "none", gap: 4, marginTop: 8 }}>
                     {roster.subjects.filter((sub) => grid[r.student.id]?.[sub]).map((sub) => {
                       const e = normEntry(grid[r.student.id][sub]);
                       const fin = subjectFinal(e, weights);
