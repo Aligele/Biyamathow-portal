@@ -270,3 +270,46 @@ export const mpesaClaim = (code, studentId, amount, date, sender) =>
 export const mpesaLookup  = (code)  => rpc("mpesa_lookup",  { p_token: getToken(), p_code: code });
 export const mpesaRecent  = (days)  => rpc("mpesa_recent",  { p_token: getToken(), p_days: days || 30 });
 export const mpesaRelease = (code)  => rpc("mpesa_release", { p_token: getToken(), p_code: code });
+
+// ---------- geofence ----------
+// Some actions should only happen at school. Position can be faked, so this is
+// a deterrent against convenience rather than a lock against determination —
+// every check is written to an audit trail either way.
+export const geofenceGet = () => rpc("geofence_get", {});
+export const geofenceSet = (v) => rpc("geofence_set", { p_token: getToken(), p_value: v });
+export const locationRecent = (days) => rpc("location_recent", { p_token: getToken(), p_days: days || 14 });
+export const locationRecord = (action, pos, distance, inside, note) =>
+  rpc("location_record", {
+    p_token: getToken(), p_action: action,
+    p_lat: pos?.lat ?? null, p_lng: pos?.lng ?? null,
+    p_accuracy: pos?.accuracy ?? null, p_distance: distance ?? null,
+    p_inside: inside, p_note: note || null,
+  });
+
+// Metres between two points on the earth's surface.
+export function metresBetween(a, b) {
+  const R = 6371000, rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const x = Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(x)));
+}
+
+// Asks the device where it is. Rejects with a plain-language reason.
+//
+// maximumAge is 0 deliberately. A cached fix would let someone pass a check
+// using a reading taken minutes earlier at the school gate, which defeats the
+// point of asking. Every check costs a fresh fix.
+export function currentPosition({ timeout = 15000 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("This device cannot report its location."));
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) }),
+      (e) => reject(new Error(
+        e.code === 1 ? "Location permission was refused. Allow it in your browser settings to continue."
+        : e.code === 2 ? "Your position could not be found. Step outside or nearer a window and try again."
+        : "Finding your position took too long. Try again.")),
+      { enableHighAccuracy: true, timeout, maximumAge: 0 }
+    );
+  });
+}

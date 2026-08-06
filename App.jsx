@@ -7,6 +7,7 @@ import {
   requestReset, confirmReset, staffSetEmail, staffSetContact, schoolInfo,
   photoSet, photoDelete, photosGet, photosWhich,
   healthCheck, backupsList, backupNow, backupRestore, staffResetPassword,
+  geofenceGet, geofenceSet, locationRecent, locationRecord, currentPosition, metresBetween,
   mpesaClaim, mpesaLookup, mpesaRecent, mpesaRelease,
 } from "./store.js";
 
@@ -77,7 +78,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v30 · staff memos";
+const APP_VERSION = "v31 · finance, history, boundary";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -539,6 +540,10 @@ export default function SchoolRegister() {
         <TeacherView roster={roster} saveRoster={saveRoster} teacherId={activeTeacherId} who={who}
           onExit={async () => { await staffLogout(); setRole(null); setWho(null); setActiveTeacherId(null); setRoster(EMPTY_ROSTER); }} />
       )}
+      {role === "finance" && (
+        <FinanceView roster={roster} saveRoster={saveRoster} who={who} syncState={syncState} onForceSave={flush}
+          onExit={async () => { await staffLogout(); setRole(null); setWho(null); setRoster(EMPTY_ROSTER); }} />
+      )}
       {role === "family" && (
         <ParentView payload={parentData} onExit={() => { setParentData(null); setRole(null); }} />
       )}
@@ -584,6 +589,28 @@ function Shell({ children }) {
         button { font-family: inherit; cursor: pointer; }
         input, select { font-family: inherit; }
         button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #E8B23D; outline-offset: 2px; }
+
+        /* --- interaction: feedback the eye reads faster than text --- */
+        button, [role="button"] { transition: transform .11s cubic-bezier(.2,.7,.3,1), filter .15s ease, box-shadow .15s ease; }
+        button:not(:disabled):active { transform: scale(.975); }
+        button:not(:disabled):hover { filter: brightness(1.06); }
+        .lift { transition: transform .16s cubic-bezier(.2,.7,.3,1), box-shadow .16s ease; }
+        .lift:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.14); }
+        .lift:active { transform: translateY(0); }
+        input, select, textarea { transition: border-color .14s ease, box-shadow .14s ease; }
+        input:focus, select:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(232,178,61,.18); }
+        @keyframes pulseIn { 0% { transform: scale(.94); opacity:.5 } 60% { transform: scale(1.02) } 100% { transform: scale(1); opacity:1 } }
+        .pulse { animation: pulseIn .34s cubic-bezier(.2,.7,.3,1); }
+        @keyframes shimmer { 0% { background-position:-420px 0 } 100% { background-position:420px 0 } }
+        .skeleton { background: linear-gradient(90deg, rgba(241,236,225,.05) 25%, rgba(241,236,225,.13) 37%, rgba(241,236,225,.05) 63%);
+                    background-size: 900px 100%; animation: shimmer 1.3s linear infinite; border-radius: 3px; }
+        @keyframes slideUp { from { opacity:0; transform: translateY(9px) } to { opacity:1; transform:none } }
+        .enter { animation: slideUp .3s cubic-bezier(.2,.7,.3,1) both; }
+        @keyframes spin { to { transform: rotate(360deg) } }
+        .spin { animation: spin .9s linear infinite; }
+        .ring { transform: rotate(-90deg); }
+        .ring circle { transition: stroke-dashoffset .6s cubic-bezier(.2,.7,.3,1); }
+
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
         .chalk-fade { animation: chalkIn 0.35s ease both; }
         @keyframes chalkIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
@@ -1127,9 +1154,11 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     { title: "REPORTS", items: [
       { key: "reports", label: "Reports", icon: "reports" },
       { key: "year end", label: "End of year", icon: "yearend" },
+      { key: "history", label: "History", icon: "reports" },
     ]},
     { title: "SYSTEM", items: [
       { key: "health", label: "System health", icon: "approvals" },
+      { key: "geofence", label: "School boundary", icon: "duty" },
       { key: "backup", label: "Backup", icon: "backup" },
       { key: "settings", label: "Settings", icon: "settings" },
     ]},
@@ -1507,7 +1536,11 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
 
           {tab === "year end" && <YearEnd roster={roster} saveRoster={saveRoster} />}
 
+          {tab === "history" && <History roster={roster} />}
+
           {tab === "health" && <SystemHealth roster={roster} />}
+
+          {tab === "geofence" && <GeofenceSettings who={who} />}
 
           {tab === "backup" && <AdminBackup roster={roster} saveRoster={saveRoster} syncState={syncState} onForceSave={onForceSave} />}
 
@@ -2442,10 +2475,18 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           </button>
         )}
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
-          {tab === "attendance" && <TeacherAttendance roster={roster} saveRoster={saveRoster} classId={classId} students={students} />}
+          {tab === "attendance" && (
+            <GeoGate action="attendance" label="Marking the register">
+              <TeacherAttendance roster={roster} saveRoster={saveRoster} classId={classId} students={students} />
+            </GeoGate>
+          )}
           {tab === "memos" && <MemoBoard roster={roster} saveRoster={saveRoster} who={who} teacherId={teacher.id} />}
 
-          {tab === "signin" && <StaffCheckIn roster={roster} saveRoster={saveRoster} teacherId={teacher.id} teacherName={teacher.name} />}
+          {tab === "signin" && (
+            <GeoGate action="signin" label="Signing in">
+              <StaffCheckIn roster={roster} saveRoster={saveRoster} teacherId={teacher.id} teacherName={teacher.name} />
+            </GeoGate>
+          )}
 
           {tab === "register" && <TeacherAddStudent roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} />}
 
@@ -2581,6 +2622,7 @@ function ParentView({ payload, onExit }) {
     return <ExamTimetableDoc roster={shim} level={lvl} onBack={() => setPrintDoc(null)} />;
   }
   if (printDoc === "invoice") return <InvoiceDoc roster={roster} student={student} onBack={() => setPrintDoc(null)} />;
+  if (printDoc === "statement") return <FeeStatement roster={roster} student={student} term={DEFAULT_TERM} onBack={() => setPrintDoc(null)} />;
   if (printDoc === "report") return <ReportDoc roster={roster} student={student} term={term} termMarks={termMarks} avg={avg} rank={rank} rate={rate} onBack={() => setPrintDoc(null)} />;
 
   return (
@@ -2602,6 +2644,7 @@ function ParentView({ payload, onExit }) {
 
           <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
             <button onClick={() => setPrintDoc("invoice")} style={primaryBtn()}>Fee invoice</button>
+            <button onClick={() => setPrintDoc("statement")} style={{ ...primaryBtn(), background: "#22304A" }}>Fee statement</button>
             <button onClick={() => setPrintDoc("timetable")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Class timetable</button>
             {payload.examTimetable?.papers?.length > 0 && (
               <button onClick={() => setPrintDoc("examtt")} style={{ ...primaryBtn(), background: "#22304A" }}>Exam timetable</button>
@@ -4551,6 +4594,985 @@ function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
                   )}
                 </div>
               )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Geofence ----------
+// Guards actions that should only happen at school. Position is checked on the
+// device and the result is written to an audit trail either way.
+//
+// An honest limit: a determined person can fake their position. This raises the
+// effort of marking attendance from home; it does not make it impossible. The
+// audit trail is what makes misuse visible afterwards, which is the real
+// deterrent.
+function GeoGate({ action, label, children, onBlocked }) {
+  const [state, setState] = useState("idle");   // idle | checking | inside | outside | error | off
+  const [info, setInfo] = useState(null);
+  const [msg, setMsg] = useState("");
+
+  const check = async () => {
+    setState("checking"); setMsg("");
+    let fence = null;
+    try { fence = await geofenceGet(); } catch (e) { /* treat as off */ }
+
+    if (!fence?.enabled || fence.lat == null || fence.lng == null
+        || !(fence.enforce || []).includes(action)) {
+      setState("off"); return true;
+    }
+
+    try {
+      const pos = await currentPosition();
+      const d = metresBetween(pos, { lat: fence.lat, lng: fence.lng });
+      const radius = fence.radius_m || 300;
+      // A weak fix should not fail an honest person, so the reading's own
+      // margin of error is allowed for.
+      const inside = d - (pos.accuracy || 0) <= radius;
+      setInfo({ ...pos, distance: d, radius });
+      try { await locationRecord(action, pos, d, inside, label); } catch (e) {}
+      if (inside) { setState("inside"); return true; }
+      setState("outside");
+      onBlocked?.(d);
+      return false;
+    } catch (e) {
+      setMsg(String(e.message || e));
+      try { await locationRecord(action, null, null, false, "check failed: " + String(e.message || e)); } catch (_) {}
+      setState("error");
+      return false;
+    }
+  };
+
+  useEffect(() => { check(); /* eslint-disable-next-line */ }, [action]);
+
+  if (state === "off" || state === "inside") {
+    return (
+      <>
+        {state === "inside" && (
+          <div className="enter" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12,
+                padding: "7px 11px", borderRadius: 20, background: "#E4F0E8", border: "1px solid #B8D9C4",
+                fontFamily: FONT.mono, fontSize: 10.5, color: "#2E6B4F", width: "fit-content" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#3F7A5C" }} />
+            AT SCHOOL · {info?.distance}m from the centre
+          </div>
+        )}
+        {children}
+      </>
+    );
+  }
+
+  if (state === "checking") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "16px 14px",
+            background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5 }}>
+        <svg className="spin" width="17" height="17" viewBox="0 0 24 24" fill="none"
+             stroke="#C98A2C" strokeWidth="2.4" strokeLinecap="round">
+          <path d="M21 12a9 9 0 1 1-6.2-8.6" />
+        </svg>
+        <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>
+          Checking that you are at school…
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="enter" style={{ padding: "14px 15px", borderRadius: 5,
+          background: "#F7E4E1", border: "1px solid #E8C4BD", borderLeft: "4px solid #B84C3E" }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#22304A" }}>
+        {state === "outside" ? "You are not at school" : "Location could not be confirmed"}
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginTop: 5, lineHeight: 1.55 }}>
+        {state === "outside"
+          ? <>{label} may only be done on the school grounds. You appear to be{" "}
+              <strong>{info?.distance}m</strong> away; the boundary is {info?.radius}m.</>
+          : msg}
+      </div>
+      <button onClick={check} style={{ ...primaryBtn(), marginTop: 11 }}>Check again</button>
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#8A8368", marginTop: 9, lineHeight: 1.5 }}>
+        If you are at school and this keeps failing, move outside or near a window — walls and
+        metal roofing weaken the signal. The administrator can record it for you instead.
+      </div>
+    </div>
+  );
+}
+
+// ---------- Admin: set the school's boundary ----------
+function GeofenceSettings({ who }) {
+  const [fence, setFence] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(""); const [err, setErr] = useState("");
+  const [log, setLog] = useState(null);
+
+  const load = async () => {
+    try { setFence(await geofenceGet() || { enabled: false, radius_m: 300, enforce: ["signin","attendance"] }); }
+    catch (e) { setErr("Could not read the current setting."); }
+    try { setLog(await locationRecent(14)); } catch (e) { setLog([]); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async (next) => {
+    setBusy(true); setErr(""); setMsg("");
+    try { await geofenceSet(next); setFence(next); setMsg("Saved."); await load(); }
+    catch (e) { setErr(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  const useMyPosition = async () => {
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      const p = await currentPosition();
+      await save({ ...fence, lat: p.lat, lng: p.lng });
+      setMsg(`Centre set to where you are now (accurate to about ${p.accuracy}m).`);
+    } catch (e) { setErr(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  if (!fence) return <div style={{ height: 90 }} className="skeleton" />;
+
+  const ACTIONS = [
+    ["signin", "Arrival sign-in", "Stops a teacher signing in from home"],
+    ["attendance", "Marking pupil attendance", "Registers must be taken in the classroom"],
+    ["marks", "Entering exam marks", "Optional — often done at home legitimately"],
+    ["fees", "Recording fee payments", "Money should be handled at the office"],
+  ];
+  const toggle = (k) => {
+    const on = (fence.enforce || []).includes(k);
+    save({ ...fence, enforce: on ? fence.enforce.filter((x) => x !== k) : [...(fence.enforce || []), k] });
+  };
+
+  return (
+    <div>
+      <SectionTitle>School boundary</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14, lineHeight: 1.6 }}>
+        Some actions can be limited to the school grounds. Every check is recorded whether it passes
+        or fails, so you can see who tried from where.
+      </div>
+
+      <div style={{ padding: "11px 13px", background: "#F5E8DC", border: "1px solid #E8CBA0",
+            borderRadius: 4, fontFamily: FONT.body, fontSize: 12, color: "#22304A",
+            marginBottom: 16, lineHeight: 1.55 }}>
+        <strong>What this can and cannot do.</strong> A phone's reported position can be faked by
+        someone determined. Treat this as a deterrent against convenience, not a lock — the record
+        below is what makes misuse visible.
+      </div>
+
+      {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+      {msg && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#E4F0E8",
+            border: "1px solid #B8D9C4", fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginBottom: 12 }}>{msg}</div>}
+
+      <button onClick={() => save({ ...fence, enabled: !fence.enabled })} disabled={busy}
+        style={{ ...primaryBtn(), background: fence.enabled ? "#3F7A5C" : "#8A8368", marginBottom: 16 }}>
+        {fence.enabled ? "✓ Boundary is on" : "Boundary is off — turn it on"}
+      </button>
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        Where the school is
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+        <input type="number" step="0.000001" placeholder="Latitude" value={fence.lat ?? ""}
+          onChange={(e) => setFence({ ...fence, lat: e.target.value === "" ? null : +e.target.value })}
+          style={{ ...darkInput(), width: 150 }} />
+        <input type="number" step="0.000001" placeholder="Longitude" value={fence.lng ?? ""}
+          onChange={(e) => setFence({ ...fence, lng: e.target.value === "" ? null : +e.target.value })}
+          style={{ ...darkInput(), width: 150 }} />
+        <button onClick={() => save(fence)} disabled={busy} style={primaryBtn()}>Save</button>
+      </div>
+      <button onClick={useMyPosition} disabled={busy}
+        style={{ ...primaryBtn(), background: "#22304A", marginBottom: 16 }}>
+        {busy ? "Reading…" : "Use where I am standing now"}
+      </button>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8368", marginBottom: 18 }}>
+        Stand in the middle of the compound and tap the button. That is more accurate than typing
+        coordinates from a map.
+      </div>
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 6 }}>
+        How far the boundary reaches
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
+        <input type="range" min="100" max="1000" step="50" value={fence.radius_m || 300}
+          onChange={(e) => setFence({ ...fence, radius_m: +e.target.value })}
+          onMouseUp={() => save(fence)} onTouchEnd={() => save(fence)}
+          style={{ flex: 1, minWidth: 170, accentColor: "#E8B23D" }} />
+        <span style={{ fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: "#22304A", minWidth: 62 }}>
+          {fence.radius_m || 300} m
+        </span>
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8368", marginTop: -12, marginBottom: 20 }}>
+        Allow generously. A phone under an iron roof can be 50–100m out, and a boundary set too
+        tightly will lock out honest staff.
+      </div>
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        What the boundary applies to
+      </div>
+      <div style={{ display: "grid", gap: 6, marginBottom: 22 }}>
+        {ACTIONS.map(([k, label, why]) => {
+          const on = (fence.enforce || []).includes(k);
+          return (
+            <button key={k} onClick={() => toggle(k)} disabled={busy} className="lift"
+              style={{ display: "flex", alignItems: "center", gap: 11, textAlign: "left",
+                padding: "10px 12px", borderRadius: 4, cursor: "pointer",
+                background: on ? "#E4F0E8" : "#F5F1E6",
+                border: `1px solid ${on ? "#3F7A5C" : "#E4DFCF"}` }}>
+              <span style={{ width: 17, height: 17, borderRadius: 3, flex: "0 0 17px",
+                border: `1.5px solid ${on ? "#3F7A5C" : "#B8B2A0"}`,
+                background: on ? "#3F7A5C" : "transparent", color: "#fff",
+                fontSize: 12, lineHeight: "15px", textAlign: "center" }}>{on ? "✓" : ""}</span>
+              <span>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>{label}</span>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 2 }}>{why}</div>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        Recent location checks
+      </div>
+      {log === null && <div className="skeleton" style={{ height: 60 }} />}
+      {log && log.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Nothing recorded yet.</div>
+      )}
+      <div style={{ display: "grid", gap: 4 }}>
+        {(log || []).slice(0, 40).map((r, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap",
+                padding: "7px 11px", borderRadius: 3, background: "#F5F1E6",
+                border: "1px solid #E4DFCF",
+                borderLeft: `3px solid ${r.inside ? "#3F7A5C" : "#B84C3E"}` }}>
+            <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A" }}>
+              {r.staff_name} <span style={{ color: "#8A8368" }}>· {r.action}</span>
+            </span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: r.inside ? "#3F7A5C" : "#B84C3E" }}>
+              {r.distance_m === null ? "no fix" : `${Math.round(r.distance_m)}m`}
+              {r.accuracy_m ? ` ±${Math.round(r.accuracy_m)}` : ""} ·{" "}
+              {new Date(r.at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Fee statement: the full record, paid or not ----------
+// A parent who has paid nothing still needs a statement — it is how they learn
+// what is owed. A blank screen for the unpaid is the commonest failing in fee
+// software, so this always renders.
+function FeeStatement({ roster, student, term, onBack }) {
+  const cur = roster.settings.currency || "KSh";
+  const due = student.feeDue || 0;
+  const paid = student.feePaid || 0;
+  const balance = due - paid;
+  const pays = [...(student.payments || [])].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  let running = 0;
+  const rows = pays.map((p) => { running += p.amount || 0; return { ...p, balanceAfter: due - running }; });
+  const share = due ? Math.min(100, Math.round((paid / due) * 100)) : 0;
+
+  return (
+    <DocShell title="Fee statement" onBack={onBack}>
+      <DocHeader subtitle={`Fee Statement — ${term}`} />
+      <DocInfo roster={roster} student={student} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, margin: "6px 0 18px" }}>
+        {[["TOTAL FEE DUE", `${cur}${money(due)}`, "#22304A"],
+          ["PAID TO DATE", `${cur}${money(paid)}`, "#3F7A5C"],
+          ["BALANCE", `${cur}${money(balance)}`, balance > 0 ? "#B84C3E" : "#3F7A5C"]].map(([l, v, ink]) => (
+          <div key={l} style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "10px 11px",
+                background: "#F5F1E6", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#8A8368", letterSpacing: 1 }}>{l}</div>
+            <div style={{ fontSize: 16, fontWeight: "bold", marginTop: 3, color: ink }}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* a bar reads faster than three figures */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ height: 9, background: "#EFEADC", borderRadius: 5, overflow: "hidden", border: "1px solid #E4DFCF" }}>
+          <div style={{ height: "100%", width: `${share}%`,
+                background: share >= 100 ? "#3F7A5C" : share >= 50 ? "#C98A2C" : "#B84C3E" }} />
+        </div>
+        <div style={{ fontSize: 10.5, color: "#6B6552", marginTop: 4, fontFamily: FONT.mono }}>
+          {share}% of the term's fee has been paid
+        </div>
+      </div>
+
+      <div style={{ fontWeight: "bold", marginBottom: 7 }}>Payments received</div>
+      {rows.length === 0 ? (
+        <div style={{ padding: "16px 14px", border: "1px dashed #B8B2A0", borderRadius: 4,
+              background: "#F5F1E6", marginBottom: 18 }}>
+          <div style={{ fontSize: 13, fontWeight: "bold", color: "#B84C3E" }}>
+            No payment has been received for {term}.
+          </div>
+          <div style={{ fontSize: 11.5, color: "#6B6552", marginTop: 5, lineHeight: 1.55 }}>
+            The full amount of {cur}{money(due)} is outstanding. This statement is issued so the
+            position is clear; it is not a receipt. A receipt is given for each payment made.
+          </div>
+        </div>
+      ) : (
+        <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 18 }}>
+          <thead>
+            <tr>
+              <th style={docTh}>Date</th>
+              <th style={docTh}>Receipt</th>
+              <th style={docTh}>Method</th>
+              <th style={{ ...docTh, textAlign: "right" }}>Amount</th>
+              <th style={{ ...docTh, textAlign: "right" }}>Balance after</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((p, i) => (
+              <tr key={i}>
+                <td style={{ ...docTd, fontSize: 11 }}>{fmtDate(p.date)}</td>
+                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5 }}>
+                  {p.receiptNo || "—"}
+                  {p.mpesaCode && <div style={{ color: "#3F7A5C", fontSize: 9 }}>{p.mpesaCode}</div>}
+                </td>
+                <td style={{ ...docTd, fontSize: 11, textTransform: "capitalize" }}>{p.method || "cash"}</td>
+                <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 11.5, fontWeight: 700 }}>
+                  {cur}{money(p.amount)}
+                </td>
+                <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 11,
+                      color: p.balanceAfter > 0 ? "#B84C3E" : "#3F7A5C" }}>
+                  {cur}{money(p.balanceAfter)}
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={3} style={{ ...docTd, borderTop: "2px solid #22304A", fontWeight: "bold" }}>Total received</td>
+              <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "right",
+                    fontFamily: FONT.mono, fontWeight: 700 }}>{cur}{money(paid)}</td>
+              <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "right",
+                    fontFamily: FONT.mono, fontWeight: 700,
+                    color: balance > 0 ? "#B84C3E" : "#3F7A5C" }}>{cur}{money(balance)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ fontSize: 10.5, color: "#6B6552", lineHeight: 1.55, marginBottom: 26 }}>
+        {balance > 0
+          ? `An amount of ${cur}${money(balance)} remains outstanding. Please settle it at the school office, or speak to the head teacher if payment in instalments would help.`
+          : "The fee for this term has been paid in full. Thank you."}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 18 }}>
+        <div style={docSig}>Bursar</div>
+        <div style={docSig}>Official School Stamp</div>
+      </div>
+    </DocShell>
+  );
+}
+
+
+// ---------- Taking a payment ----------
+// The bursar's main screen. Choosing a pupil shows what they owe before any
+// figure is typed, because the commonest error is receipting the wrong child.
+function FeeCollect({ roster, saveRoster, who, onReceipt }) {
+  const cur = roster.settings.currency || "KSh";
+  const [studentId, setStudentId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("cash");
+  const [code, setCode] = useState("");
+  const [sender, setSender] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
+
+  const student = roster.students.find((s) => s.id === studentId);
+  const due = student?.feeDue || 0;
+  const paid = student?.feePaid || 0;
+  const balance = due - paid;
+
+  const matches = q.trim()
+    ? roster.students.filter((s) =>
+        s.name.toLowerCase().includes(q.toLowerCase()) || s.id.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
+    : [];
+
+  const take = async () => {
+    const amt = Number(amount);
+    if (!student || !amt || amt <= 0) return setErr("Choose a pupil and enter an amount.");
+    if (method === "mpesa" && !code.trim()) return setErr("Enter the M-Pesa confirmation code from the SMS.");
+    setBusy(true); setErr("");
+
+    let claimed = "";
+    if (method === "mpesa") {
+      try {
+        claimed = await mpesaClaim(code, student.id, amt, todayISO(), sender);
+      } catch (e) {
+        setErr(String(e.message || e).replace(/^mpesa_claim \d+: /, "").slice(0, 200));
+        setBusy(false); return;
+      }
+    }
+
+    const receiptNo = nextReceiptNo(roster);
+    const entry = { date: todayISO(), amount: amt, receiptNo, method };
+    if (claimed) { entry.mpesaCode = claimed; if (sender.trim()) entry.sender = sender.trim(); }
+
+    const next = {
+      ...roster,
+      students: roster.students.map((s) => s.id === student.id
+        ? { ...s, feePaid: (s.feePaid || 0) + amt, payments: [...(s.payments || []), entry] } : s),
+    };
+    saveRoster(logAction(next, who?.name || "Bursar",
+      `Receipt ${receiptNo} — ${cur}${money(amt)} from ${student.name}${claimed ? " (M-Pesa " + claimed + ")" : ""}`),
+      `${receiptNo} · ${cur}${money(amt)} received`);
+
+    onReceipt?.({ student: { ...student, feePaid: paid + amt }, payment: entry });
+    setAmount(""); setCode(""); setSender(""); setStudentId(""); setQ("");
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <SectionTitle>Record a payment</SectionTitle>
+
+      {/* find the pupil */}
+      {!student ? (
+        <>
+          <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
+            placeholder="Type the pupil's name or admission number"
+            style={{ ...darkInput(), width: "100%", marginBottom: 9 }} />
+          {q.trim() && matches.length === 0 && (
+            <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No pupil matches that.</div>
+          )}
+          <div style={{ display: "grid", gap: 5 }}>
+            {matches.map((s) => {
+              const b = (s.feeDue || 0) - (s.feePaid || 0);
+              return (
+                <button key={s.id} onClick={() => { setStudentId(s.id); setErr(""); }} className="lift enter"
+                  style={{ display: "flex", justifyContent: "space-between", gap: 9, textAlign: "left",
+                    padding: "10px 12px", borderRadius: 4, cursor: "pointer",
+                    background: "#F5F1E6", border: "1px solid #E4DFCF" }}>
+                  <span>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>{s.name}</span>
+                    <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368" }}>
+                      {s.id} · {classNameOf(roster, s.classId)}
+                    </div>
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 11.5, alignSelf: "center",
+                        color: b > 0 ? "#B84C3E" : "#3F7A5C" }}>
+                    {b > 0 ? `owes ${cur}${money(b)}` : "cleared"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="enter">
+          {/* what this pupil owes, before any figure is typed */}
+          <div style={{ background: "#22304A", color: "#fff", borderRadius: 5, padding: "13px 15px", marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <span>
+                <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>{student.name}</span>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "rgba(255,255,255,.65)", marginTop: 2 }}>
+                  {student.id} · {classNameOf(roster, student.classId)}
+                </div>
+              </span>
+              <button onClick={() => { setStudentId(""); setQ(""); }}
+                style={{ background: "none", border: "1px solid rgba(255,255,255,.3)", color: "#fff",
+                  borderRadius: 3, padding: "5px 11px", fontFamily: FONT.mono, fontSize: 11, cursor: "pointer" }}>
+                change
+              </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9, marginTop: 12 }}>
+              {[["FEE DUE", due, "rgba(255,255,255,.9)"], ["PAID", paid, "#8FD3A8"],
+                ["BALANCE", balance, balance > 0 ? "#F0A08F" : "#8FD3A8"]].map(([l, v, ink]) => (
+                <div key={l}>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 8.5, letterSpacing: 1,
+                        color: "rgba(255,255,255,.5)" }}>{l}</div>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 15, fontWeight: 700, color: ink, marginTop: 2 }}>
+                    {cur}{money(v)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 7, marginBottom: 11, flexWrap: "wrap" }}>
+            {[["cash", "Cash"], ["mpesa", "M-Pesa"], ["bank", "Bank"]].map(([k, l]) => (
+              <button key={k} onClick={() => { setMethod(k); setErr(""); }}
+                style={{ padding: "7px 16px", borderRadius: 18, fontFamily: FONT.body, fontSize: 13, fontWeight: 600,
+                  cursor: "pointer",
+                  border: `1px solid ${method === k ? "#22304A" : "#D8D2C2"}`,
+                  background: method === k ? "#22304A" : "#fff",
+                  color: method === k ? "#fff" : "#6B6552" }}>{l}</button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap", alignItems: "center" }}>
+            <input type="number" inputMode="numeric" value={amount} min="1"
+              onChange={(e) => { setAmount(e.target.value); setErr(""); }}
+              placeholder={`Amount in ${cur}`} autoFocus
+              style={{ ...darkInput(), flex: 1, minWidth: 130, fontFamily: FONT.mono, fontSize: 16 }} />
+            {balance > 0 && (
+              <button onClick={() => setAmount(String(balance))}
+                style={{ ...backBtnStyle(), color: "#22304A", whiteSpace: "nowrap" }}>
+                pay the balance
+              </button>
+            )}
+          </div>
+
+          {method === "mpesa" && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+              <input value={code} onChange={(e) => { setCode(e.target.value.toUpperCase()); setErr(""); }}
+                placeholder="M-Pesa code, e.g. TFH5XY9Z12" autoCapitalize="characters"
+                style={{ ...darkInput(), flex: 1, minWidth: 170, fontFamily: FONT.mono, letterSpacing: 1 }} />
+              <input value={sender} onChange={(e) => setSender(e.target.value)}
+                placeholder="Sent from (phone)" inputMode="tel"
+                style={{ ...darkInput(), flex: 1, minWidth: 140 }} />
+            </div>
+          )}
+
+          {err && (
+            <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+                  border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5,
+                  color: "#B84C3E", marginBottom: 9, lineHeight: 1.5 }}>{err}</div>
+          )}
+
+          <button onClick={take} disabled={busy || !amount}
+            style={{ ...primaryBtn(), opacity: busy || !amount ? 0.5 : 1, fontSize: 15, padding: "11px 20px" }}>
+            {busy ? "Recording…" : `Take ${amount ? cur + money(Number(amount)) : "payment"} and print receipt`}
+          </button>
+
+          {method === "mpesa" && (
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 9, lineHeight: 1.5 }}>
+              Each M-Pesa code can only be recorded once. If it has been used before the payment is
+              refused and nothing is written, so the same SMS cannot be counted twice.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ---------- History: previous years and terms ----------
+// Once a year is archived its marks and attendance are cleared from the live
+// roster, so without this the record is stored but unreachable. This reads an
+// archived snapshot without restoring it — looking back should never risk the
+// current year.
+function History({ roster }) {
+  const [yearIdx, setYearIdx] = useState(null);
+  const [classId, setClassId] = useState("");
+  const [term, setTerm] = useState("");
+  const cur = roster.settings.currency || "KSh";
+
+  const archives = [...(roster.archives || [])].sort((a, b) => String(b.year).localeCompare(String(a.year)));
+
+  if (archives.length === 0) {
+    return (
+      <div>
+        <SectionTitle>History</SectionTitle>
+        <div style={{ padding: "14px 15px", background: "#F5F1E6", border: "1px solid #E4DFCF",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#22304A", lineHeight: 1.6 }}>
+          No year has been archived yet.
+          <div style={{ marginTop: 7, color: "#6B6552" }}>
+            At the close of a school year, use <strong>End of year → Archive year</strong>. A full copy is
+            kept and appears here, so past results and attendance stay readable even after the live
+            roster is cleared for the new year.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const snap = yearIdx !== null ? archives[yearIdx]?.snapshot : null;
+
+  // reading an archived snapshot uses the same shapes as the live roster
+  const archClassName = (id) => snap?.classes?.find((c) => c.id === id)?.name || "Unknown class";
+  const termsFor = (cid) => Object.keys(snap?.marks?.[cid] || {});
+
+  return (
+    <div>
+      <SectionTitle>History</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14, lineHeight: 1.6 }}>
+        Closed years, kept whole. Looking at one does not touch the current year.
+      </div>
+
+      {/* pick a year */}
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 16 }}>
+        {archives.map((a, i) => (
+          <button key={i} onClick={() => { setYearIdx(i === yearIdx ? null : i); setClassId(""); setTerm(""); }}
+            style={{ padding: "8px 15px", borderRadius: 18, fontFamily: FONT.body, fontSize: 13.5,
+              fontWeight: 700, cursor: "pointer",
+              border: `1px solid ${yearIdx === i ? "#22304A" : "#D8D2C2"}`,
+              background: yearIdx === i ? "#22304A" : "#fff",
+              color: yearIdx === i ? "#fff" : "#6B6552" }}>
+            {a.year}
+          </button>
+        ))}
+      </div>
+
+      {yearIdx === null && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Choose a year to look at.</div>
+      )}
+
+      {snap && (
+        <div className="enter">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))",
+                gap: 10, marginBottom: 18 }}>
+            <StatCard label="Pupils" value={(snap.students || []).length} />
+            <StatCard label="Classes" value={(snap.classes || []).length} />
+            <StatCard label="Teachers" value={(snap.teachers || []).length} />
+            <StatCard label="Archived" value={new Date(archives[yearIdx].savedAt)
+              .toLocaleDateString(undefined, { day: "numeric", month: "short" })} />
+          </div>
+
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+            Results by class
+          </div>
+          <select value={classId} onChange={(e) => { setClassId(e.target.value); setTerm(""); }}
+            style={{ ...darkInput(), width: "100%", maxWidth: 320, marginBottom: 10 }}>
+            <option value="">Choose a class…</option>
+            {(snap.classes || []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({termsFor(c.id).length} term{termsFor(c.id).length === 1 ? "" : "s"} recorded)
+              </option>
+            ))}
+          </select>
+
+          {classId && (
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
+              {termsFor(classId).length === 0 && (
+                <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
+                  No results were recorded for this class.
+                </div>
+              )}
+              {termsFor(classId).map((t) => (
+                <button key={t} onClick={() => setTerm(t === term ? "" : t)}
+                  style={{ padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5,
+                    cursor: "pointer",
+                    border: `1px solid ${term === t ? "#3F7A5C" : "#D8D2C2"}`,
+                    background: term === t ? "#E4F0E8" : "#fff",
+                    color: term === t ? "#2E6B4F" : "#6B6552", fontWeight: 600 }}>
+                  {t.replace(/_/g, " ")}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {classId && term && <HistoryMarks snap={snap} classId={classId} term={term} />}
+
+          {/* fee position as it stood at the close of that year */}
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A",
+                margin: "22px 0 8px" }}>
+            Fee position at the close of {archives[yearIdx].year}
+          </div>
+          {(() => {
+            const st = snap.students || [];
+            const due = st.reduce((a, s) => a + (s.feeDue || 0), 0);
+            const paid = st.reduce((a, s) => a + (s.feePaid || 0), 0);
+            const unpaid = st.filter((s) => (s.feePaid || 0) < (s.feeDue || 0)).length;
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10 }}>
+                <StatCard label="Expected" value={`${cur}${money(due)}`} />
+                <StatCard label="Collected" value={`${cur}${money(paid)}`} tone="#3F7A5C" />
+                <StatCard label="Uncollected" value={`${cur}${money(due - paid)}`}
+                  tone={due - paid > 0 ? "#B84C3E" : "#3F7A5C"} />
+                <StatCard label="Left owing" value={unpaid} tone={unpaid ? "#C98A2C" : "#3F7A5C"} />
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One archived class-term, ranked as it was.
+function HistoryMarks({ snap, classId, term }) {
+  const rec = snap.marks?.[classId]?.[term];
+  const grid = rec?.grid || {};
+  const students = (snap.students || []).filter((s) => s.classId === classId);
+  const weights = snap.settings?.weights || DEFAULT_WEIGHTS;
+
+  const ranked = students.map((st) => {
+    const subs = grid[st.id] || {};
+    const marks = Object.entries(subs).map(([sub, v]) => {
+      const final = Math.round(((v.cat1 || 0) * weights.cat1 + (v.cat2 || 0) * weights.cat2
+        + (v.exam || 0) * weights.exam) / 100);
+      return { sub, final };
+    });
+    const avg = marks.length ? Math.round(marks.reduce((a, m) => a + m.final, 0) / marks.length) : 0;
+    return { st, marks, avg };
+  }).filter((r) => r.marks.length > 0)
+    .sort((a, b) => b.avg - a.avg)
+    .map((r, i) => ({ ...r, position: i + 1 }));
+
+  if (ranked.length === 0) {
+    return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
+      No marks were entered for this term.
+    </div>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 5 }} className="enter">
+      {ranked.map((r) => (
+        <div key={r.st.id} style={{ padding: "9px 12px", background: "#F5F1E6",
+              border: "1px solid #E4DFCF", borderRadius: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", fontWeight: 600 }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#8A8368", marginRight: 7 }}>
+                #{r.position}
+              </span>{r.st.name}
+            </span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 12, color: gradeInk(r.avg) }}>
+              avg {r.avg} · {gradeOf(r.avg)}
+            </span>
+          </div>
+          <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", marginTop: 4 }}>
+            {r.marks.map((m) => `${m.sub} ${m.final}`).join(" · ")}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Finance portal ----------
+function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }) {
+  const [tab, setTab] = useState("collect");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [statementFor, setStatementFor] = useState(null);
+  const [receipt, setReceipt] = useState(null);
+  const cur = roster.settings.currency || "KSh";
+
+  if (statementFor) {
+    return <FeeStatement roster={roster} student={statementFor} term={DEFAULT_TERM}
+             onBack={() => setStatementFor(null)} />;
+  }
+  if (receipt) {
+    return <ReceiptDoc roster={roster} student={receipt.student} payment={receipt.payment}
+             onBack={() => setReceipt(null)} />;
+  }
+
+  const NAV = [
+    { title: "DAILY", items: [
+      { key: "collect", label: "Record a payment", icon: "fees" },
+      { key: "statements", label: "Fee statements", icon: "reports" },
+    ]},
+    { title: "MONEY", items: [
+      { key: "arrears", label: "Who owes what", icon: "approvals" },
+      { key: "daybook", label: "Day book", icon: "backup" },
+    ]},
+  ];
+
+  const totals = roster.students.reduce((a, s) => {
+    const due = s.feeDue || 0, paid = s.feePaid || 0;
+    a.due += due; a.paid += paid;
+    if (paid <= 0) a.none++; else if (paid < due) a.part++; else a.full++;
+    return a;
+  }, { due: 0, paid: 0, none: 0, part: 0, full: 0 });
+
+  return (
+    <div>
+      <PortalHeader title={SCHOOL_NAME.toUpperCase()}
+        section={NAV.flatMap((g) => g.items).find((i) => i.key === tab)?.label || tab}
+        onMenu={() => setMenuOpen(true)} onExit={onExit} />
+      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} groups={NAV} active={tab} onPick={setTab}
+        heading="Finance" subheading={who?.name || "Bursar"} />
+
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
+        <div style={{ ...paperPanel(), padding: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))",
+                gap: 10, marginBottom: 20 }}>
+            <StatCard label="Expected" value={`${cur}${money(totals.due)}`} />
+            <StatCard label="Collected" value={`${cur}${money(totals.paid)}`} tone="#3F7A5C" />
+            <StatCard label="Outstanding" value={`${cur}${money(totals.due - totals.paid)}`}
+              tone={totals.due - totals.paid > 0 ? "#B84C3E" : "#3F7A5C"} />
+            <StatCard label="Nothing paid" value={totals.none} tone={totals.none ? "#B84C3E" : "#3F7A5C"} />
+          </div>
+
+          {tab === "collect" && (
+            <GeoGate action="fees" label="Recording a payment">
+              <FeeCollect roster={roster} saveRoster={saveRoster} who={who} onReceipt={setReceipt} />
+            </GeoGate>
+          )}
+
+          {tab === "statements" && (
+            <div>
+              <SectionTitle>Fee statements</SectionTitle>
+              <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+                Every pupil has a statement, whether they have paid or not — it is how a family
+                learns what is owed.
+              </div>
+              <StudentPicker roster={roster} onPick={setStatementFor} label="statement" />
+            </div>
+          )}
+
+          {tab === "arrears" && <Arrears roster={roster} onStatement={setStatementFor} />}
+          {tab === "daybook" && <DayBook roster={roster} onReceipt={setReceipt} />}
+        </div>
+      </div>
+      <SyncBadge state={syncState} onRetry={onForceSave} />
+    </div>
+  );
+}
+
+// pick a pupil, grouped by class
+function StudentPicker({ roster, onPick, label }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState({});
+  const match = (s) => !q.trim() || s.name.toLowerCase().includes(q.toLowerCase())
+    || s.id.toLowerCase().includes(q.toLowerCase());
+
+  return (
+    <div>
+      <input value={q} onChange={(e) => setQ(e.target.value)}
+        placeholder="Search by name or admission number"
+        style={{ ...darkInput(), width: "100%", marginBottom: 10 }} />
+      <div style={{ display: "grid", gap: 6 }}>
+        {roster.classes.map((c) => {
+          const pupils = roster.students.filter((s) => s.classId === c.id && match(s));
+          if (q.trim() && pupils.length === 0) return null;
+          const isOpen = q.trim() ? true : !!open[c.id];
+          return (
+            <div key={c.id} style={{ border: "1px solid #E4DFCF", borderRadius: 5, overflow: "hidden" }}>
+              <button onClick={() => setOpen({ ...open, [c.id]: !open[c.id] })}
+                style={{ width: "100%", display: "flex", justifyContent: "space-between",
+                  padding: "10px 13px", border: "none", textAlign: "left",
+                  background: isOpen ? "#22304A" : "#F5F1E6", color: isOpen ? "#fff" : "#22304A",
+                  fontFamily: FONT.display, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                <span>{c.name}</span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 11 }}>{pupils.length} {isOpen ? "▾" : "▸"}</span>
+              </button>
+              {isOpen && (
+                <div style={{ padding: "7px 9px", display: "grid", gap: 4, background: "#FBF9F3" }}>
+                  {pupils.map((s) => {
+                    const bal = (s.feeDue || 0) - (s.feePaid || 0);
+                    return (
+                      <button key={s.id} onClick={() => onPick(s)} className="lift"
+                        style={{ display: "flex", justifyContent: "space-between", gap: 9, textAlign: "left",
+                          padding: "9px 11px", borderRadius: 4, cursor: "pointer",
+                          background: "#F5F1E6", border: "1px solid #E4DFCF" }}>
+                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>{s.name}</span>
+                        <span style={{ fontFamily: FONT.mono, fontSize: 11,
+                              color: bal > 0 ? "#B84C3E" : "#3F7A5C" }}>
+                          {bal > 0 ? `owes ${money(bal)}` : "cleared"} →
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {pupils.length === 0 && (
+                    <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#8A8368", padding: 4 }}>
+                      No pupils in this class.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// who owes what, worst first
+function Arrears({ roster, onStatement }) {
+  const cur = roster.settings.currency || "KSh";
+  const rows = roster.students
+    .map((s) => ({ s, due: s.feeDue || 0, paid: s.feePaid || 0, bal: (s.feeDue || 0) - (s.feePaid || 0) }))
+    .filter((r) => r.bal > 0)
+    .sort((a, b) => b.bal - a.bal);
+
+  return (
+    <div>
+      <SectionTitle>Who owes what</SectionTitle>
+      {rows.length === 0 && (
+        <div style={{ padding: "13px 15px", background: "#E4F0E8", border: "1px solid #B8D9C4",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13.5, color: "#22304A" }}>
+          Every pupil has paid in full.
+        </div>
+      )}
+      <div style={{ display: "grid", gap: 5 }}>
+        {rows.map(({ s, due, paid, bal }) => {
+          const share = due ? Math.round((paid / due) * 100) : 0;
+          return (
+            <button key={s.id} onClick={() => onStatement(s)} className="lift"
+              style={{ textAlign: "left", padding: "10px 12px", borderRadius: 4, cursor: "pointer",
+                background: "#F5F1E6", border: "1px solid #E4DFCF",
+                borderLeft: `4px solid ${paid === 0 ? "#B84C3E" : "#C98A2C"}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>
+                  {s.name} <span style={{ color: "#8A8368", fontWeight: 400, fontSize: 12 }}>
+                    · {classNameOf(roster, s.classId)}</span>
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: "#B84C3E" }}>
+                  {cur}{money(bal)}
+                </span>
+              </div>
+              <div style={{ height: 5, background: "#EFEADC", borderRadius: 3, marginTop: 7, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${share}%`, background: share ? "#C98A2C" : "transparent" }} />
+              </div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", marginTop: 4 }}>
+                {paid === 0 ? "nothing paid" : `${share}% paid · ${cur}${money(paid)} of ${cur}${money(due)}`}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// every payment taken, newest first
+function DayBook({ roster, onReceipt }) {
+  const cur = roster.settings.currency || "KSh";
+  const all = [];
+  roster.students.forEach((s) => (s.payments || []).forEach((p) => all.push({ s, p })));
+  all.sort((a, b) => (b.p.date || "").localeCompare(a.p.date || ""));
+
+  const byDay = all.reduce((acc, r) => { (acc[r.p.date] = acc[r.p.date] || []).push(r); return acc; }, {});
+
+  return (
+    <div>
+      <SectionTitle>Day book</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+        Every payment taken, most recent first. Tap one to reprint its receipt.
+      </div>
+      {all.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No payments recorded yet.</div>
+      )}
+      <div style={{ display: "grid", gap: 11 }}>
+        {Object.keys(byDay).sort().reverse().map((date) => {
+          const dayTotal = byDay[date].reduce((a, r) => a + (r.p.amount || 0), 0);
+          return (
+            <div key={date} style={{ border: "1px solid #E4DFCF", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ background: "#22304A", color: "#fff", padding: "8px 12px",
+                    display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 13.5, fontWeight: 600 }}>{fmtDate(date)}</span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 12, color: "#E8B23D" }}>
+                  {cur}{money(dayTotal)}
+                </span>
+              </div>
+              <div style={{ padding: "7px 9px", display: "grid", gap: 4, background: "#FBF9F3" }}>
+                {byDay[date].map((r, i) => (
+                  <button key={i} onClick={() => onReceipt({ student: r.s, payment: r.p })} className="lift"
+                    style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap",
+                      textAlign: "left", padding: "8px 11px", borderRadius: 3, cursor: "pointer",
+                      background: "#F5F1E6", border: "1px solid #E4DFCF" }}>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#22304A" }}>{r.s.name}</span>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552" }}>
+                      {r.p.receiptNo || "—"} · {r.p.method || "cash"}
+                      {r.p.mpesaCode ? ` · ${r.p.mpesaCode}` : ""} ·{" "}
+                      <strong style={{ color: "#3F7A5C" }}>{cur}{money(r.p.amount)}</strong>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           );
         })}
