@@ -78,7 +78,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v31 · finance, history, boundary";
+const APP_VERSION = "v32 · printable fee list";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -1150,6 +1150,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     ]},
     { title: "FINANCIALS", items: [
       { key: "fees", label: "Fees & receipts", icon: "fees" },
+      { key: "feeroll", label: "Printable fee list", icon: "reports" },
     ]},
     { title: "REPORTS", items: [
       { key: "reports", label: "Reports", icon: "reports" },
@@ -1426,6 +1427,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
               )}
             </div>
           )}
+
+          {tab === "feeroll" && <AdminFeeRoll roster={roster} />}
 
           {tab === "fees" && (
             <div>
@@ -5341,13 +5344,240 @@ function HistoryMarks({ snap, classId, term }) {
   );
 }
 
+
+// ---------- Printable fee roll ----------
+// The sheet the office actually needs: every pupil, what they owe, what they
+// have paid, and where they stand — on paper, so it can be worked through at a
+// desk or pinned up for the bursar to tick off.
+function FeeRoll({ roster, filter, classId, onBack }) {
+  const cur = roster.settings.currency || "KSh";
+
+  const all = roster.students
+    .filter((s) => !classId || s.classId === classId)
+    .map((s) => {
+      const due = s.feeDue || 0, paid = s.feePaid || 0;
+      return { s, due, paid, bal: due - paid,
+               state: paid <= 0 ? "none" : paid < due ? "part" : "full" };
+    });
+
+  const rows = all
+    .filter((r) => filter === "all" ? true
+                 : filter === "cleared" ? r.state === "full"
+                 : filter === "owing" ? r.state !== "full"
+                 : r.state === "none")
+    .sort((a, b) => {
+      // worst first when listing debtors; alphabetical when listing the cleared
+      if (filter === "cleared") return a.s.name.localeCompare(b.s.name);
+      if (b.bal !== a.bal) return b.bal - a.bal;
+      return a.s.name.localeCompare(b.s.name);
+    });
+
+  const t = rows.reduce((a, r) => ({ due: a.due + r.due, paid: a.paid + r.paid, bal: a.bal + r.bal }),
+                        { due: 0, paid: 0, bal: 0 });
+
+  const TITLE = {
+    all: "Fee Roll — all pupils",
+    owing: "Fee Roll — pupils with a balance",
+    none: "Fee Roll — pupils who have paid nothing",
+    cleared: "Fee Roll — pupils paid in full",
+  }[filter];
+
+  return (
+    <DocShell title="Fee roll" onBack={onBack}>
+      <DocHeader subtitle={TITLE} />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap",
+            gap: 8, marginBottom: 14, fontSize: 12 }}>
+        <div><strong>Class:</strong> {classId ? classNameOf(roster, classId) : "All classes"}</div>
+        <div><strong>Term:</strong> {DEFAULT_TERM}</div>
+        <div><strong>Printed:</strong> {fmtDate(todayISO())}</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9, marginBottom: 16 }}>
+        {[["PUPILS", rows.length, "#22304A"],
+          ["EXPECTED", `${cur}${money(t.due)}`, "#22304A"],
+          ["COLLECTED", `${cur}${money(t.paid)}`, "#3F7A5C"],
+          ["OUTSTANDING", `${cur}${money(t.bal)}`, t.bal > 0 ? "#B84C3E" : "#3F7A5C"]].map(([l, v, ink]) => (
+          <div key={l} style={{ border: "1px solid #E4DFCF", borderRadius: 4,
+                padding: "8px 9px", background: "#F5F1E6", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 7.5, color: "#8A8368", letterSpacing: 1 }}>{l}</div>
+            <div style={{ fontSize: 13.5, fontWeight: "bold", marginTop: 2, color: ink }}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ padding: "18px 14px", border: "1px dashed #B8B2A0", borderRadius: 4,
+              background: "#F5F1E6", textAlign: "center", fontSize: 13, color: "#6B6552" }}>
+          {filter === "owing" || filter === "none"
+            ? "No pupil is in arrears. Every fee has been settled."
+            : "No pupils to list."}
+        </div>
+      ) : (
+        <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 16 }}>
+          <thead>
+            <tr>
+              <th style={{ ...docTh, width: 26 }}>#</th>
+              <th style={docTh}>Pupil</th>
+              <th style={docTh}>Adm No</th>
+              {!classId && <th style={docTh}>Class</th>}
+              <th style={{ ...docTh, textAlign: "right" }}>Fee due</th>
+              <th style={{ ...docTh, textAlign: "right" }}>Paid</th>
+              <th style={{ ...docTh, textAlign: "right" }}>Balance</th>
+              <th style={{ ...docTh, textAlign: "center", width: 46 }}>Status</th>
+              <th style={{ ...docTh, textAlign: "center", width: 62 }}>Signature</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={r.s.id}>
+                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 9.5, color: "#8A8368" }}>{i + 1}</td>
+                <td style={{ ...docTd, fontSize: 11.5, fontWeight: 600 }}>{r.s.name}</td>
+                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10 }}>{r.s.id}</td>
+                {!classId && <td style={{ ...docTd, fontSize: 10.5 }}>{classNameOf(roster, r.s.classId)}</td>}
+                <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5 }}>
+                  {money(r.due)}
+                </td>
+                <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5,
+                      color: r.paid > 0 ? "#3F7A5C" : "#B84C3E" }}>
+                  {money(r.paid)}
+                </td>
+                <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5,
+                      fontWeight: 700, color: r.bal > 0 ? "#B84C3E" : "#3F7A5C" }}>
+                  {money(r.bal)}
+                </td>
+                <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontSize: 8, fontWeight: 700,
+                      color: r.state === "full" ? "#3F7A5C" : r.state === "part" ? "#C98A2C" : "#B84C3E" }}>
+                  {r.state === "full" ? "PAID" : r.state === "part" ? "PART" : "NIL"}
+                </td>
+                {/* left blank on purpose: a parent signs when settling at the desk */}
+                <td style={{ ...docTd }}></td>
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={classId ? 3 : 4} style={{ ...docTd, borderTop: "2px solid #22304A", fontWeight: "bold" }}>
+                Totals — {rows.length} pupil{rows.length === 1 ? "" : "s"}
+              </td>
+              <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "right",
+                    fontFamily: FONT.mono, fontWeight: 700 }}>{money(t.due)}</td>
+              <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "right",
+                    fontFamily: FONT.mono, fontWeight: 700, color: "#3F7A5C" }}>{money(t.paid)}</td>
+              <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "right",
+                    fontFamily: FONT.mono, fontWeight: 700,
+                    color: t.bal > 0 ? "#B84C3E" : "#3F7A5C" }}>{money(t.bal)}</td>
+              <td colSpan={2} style={{ ...docTd, borderTop: "2px solid #22304A" }}></td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ fontSize: 10, color: "#6B6552", lineHeight: 1.5, marginBottom: 20 }}>
+        <strong>PAID</strong> — settled in full &nbsp;·&nbsp; <strong>PART</strong> — some paid, balance
+        outstanding &nbsp;·&nbsp; <strong>NIL</strong> — nothing received.
+        <div style={{ marginTop: 5 }}>
+          This sheet lists pupils' fee balances. Keep it in the office rather than displaying it where
+          pupils can read it — no child should learn of a family's debt from a notice board.
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 24 }}>
+        <div style={docSig}>Bursar</div>
+        <div style={docSig}>Head Teacher</div>
+      </div>
+    </DocShell>
+  );
+}
+
+// Choosing which roll to print.
+function FeeRollPicker({ roster, onPrint }) {
+  const [filter, setFilter] = useState("owing");
+  const [classId, setClassId] = useState("");
+  const cur = roster.settings.currency || "KSh";
+
+  const pool = roster.students.filter((s) => !classId || s.classId === classId);
+  const count = (f) => pool.filter((s) => {
+    const due = s.feeDue || 0, paid = s.feePaid || 0;
+    return f === "all" ? true
+         : f === "cleared" ? paid >= due && due > 0
+         : f === "owing" ? paid < due
+         : paid <= 0;
+  }).length;
+
+  const OPTIONS = [
+    ["owing", "Still owing", "Everyone with a balance, largest first"],
+    ["none", "Paid nothing", "Those who have not paid at all"],
+    ["cleared", "Paid in full", "For confirming who is settled"],
+    ["all", "Everyone", "The complete roll, paid and unpaid"],
+  ];
+
+  return (
+    <div>
+      <SectionTitle>Printable fee list</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14, lineHeight: 1.6 }}>
+        A sheet for the desk: every pupil with what they owe, what they have paid, and a column to
+        sign as each settles.
+      </div>
+
+      <select value={classId} onChange={(e) => setClassId(e.target.value)}
+        style={{ ...darkInput(), width: "100%", maxWidth: 320, marginBottom: 14 }}>
+        <option value="">All classes ({roster.students.length} pupils)</option>
+        {roster.classes.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name} ({roster.students.filter((s) => s.classId === c.id).length})
+          </option>
+        ))}
+      </select>
+
+      <div style={{ display: "grid", gap: 7, marginBottom: 18 }}>
+        {OPTIONS.map(([k, label, why]) => {
+          const n = count(k);
+          const on = filter === k;
+          return (
+            <button key={k} onClick={() => setFilter(k)} className="lift"
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                gap: 10, textAlign: "left", padding: "11px 13px", borderRadius: 4, cursor: "pointer",
+                background: on ? "#E4F0E8" : "#F5F1E6",
+                border: `1px solid ${on ? "#3F7A5C" : "#E4DFCF"}` }}>
+              <span>
+                <span style={{ fontFamily: FONT.body, fontSize: 14, fontWeight: 700, color: "#22304A" }}>{label}</span>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 2 }}>{why}</div>
+              </span>
+              <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700,
+                    color: n === 0 ? "#8A8368" : on ? "#2E6B4F" : "#22304A" }}>{n}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <button onClick={() => onPrint({ filter, classId })} style={{ ...primaryBtn(), fontSize: 14.5, padding: "11px 20px" }}>
+        Open printable list
+      </button>
+    </div>
+  );
+}
+
+
+// Admin gets the same printable roll as the bursar — the head teacher is the
+// one who has to answer for arrears at a management meeting.
+function AdminFeeRoll({ roster }) {
+  const [roll, setRoll] = useState(null);
+  if (roll) return <FeeRoll roster={roster} filter={roll.filter} classId={roll.classId} onBack={() => setRoll(null)} />;
+  return <FeeRollPicker roster={roster} onPrint={setRoll} />;
+}
+
 // ---------- Finance portal ----------
 function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }) {
   const [tab, setTab] = useState("collect");
   const [menuOpen, setMenuOpen] = useState(false);
   const [statementFor, setStatementFor] = useState(null);
   const [receipt, setReceipt] = useState(null);
+  const [roll, setRoll] = useState(null);
   const cur = roster.settings.currency || "KSh";
+
+  if (roll) {
+    return <FeeRoll roster={roster} filter={roll.filter} classId={roll.classId}
+             onBack={() => setRoll(null)} />;
+  }
 
   if (statementFor) {
     return <FeeStatement roster={roster} student={statementFor} term={DEFAULT_TERM}
@@ -5365,6 +5595,7 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
     ]},
     { title: "MONEY", items: [
       { key: "arrears", label: "Who owes what", icon: "approvals" },
+      { key: "roll", label: "Printable fee list", icon: "reports" },
       { key: "daybook", label: "Day book", icon: "backup" },
     ]},
   ];
@@ -5413,6 +5644,8 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
           )}
 
           {tab === "arrears" && <Arrears roster={roster} onStatement={setStatementFor} />}
+
+          {tab === "roll" && <FeeRollPicker roster={roster} onPrint={setRoll} />}
           {tab === "daybook" && <DayBook roster={roster} onReceipt={setReceipt} />}
         </div>
       </div>
