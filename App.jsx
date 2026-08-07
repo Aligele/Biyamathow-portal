@@ -80,7 +80,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v34 · printable leave records";
+const APP_VERSION = "v35 · approval alerts";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -1119,18 +1119,28 @@ function Sidebar({ open, onClose, groups, active, onPick, heading, subheading })
 }
 
 // Header bar with the menu button and the current section name.
-function PortalHeader({ title, section, onMenu, onExit }) {
+function PortalHeader({ title, section, onMenu, onExit, badge = 0 }) {
   return (
     <div className="no-print" style={{
       display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
       background: "rgba(27,51,39,0.92)", borderBottom: "1px solid #2E4B3A",
       position: "sticky", top: 0, zIndex: 120, backdropFilter: "blur(6px)",
     }}>
-      <button onClick={onMenu} aria-label="Menu" style={{
-        display: "flex", flexDirection: "column", gap: 4, background: "transparent",
-        border: "1px solid #3E6350", borderRadius: 6, padding: "9px 10px",
-      }}>
+      <button onClick={onMenu} aria-label={badge > 0 ? `Menu — ${badge} waiting for approval` : "Menu"}
+        style={{
+          display: "flex", flexDirection: "column", gap: 4, background: "transparent",
+          border: "1px solid #3E6350", borderRadius: 6, padding: "9px 10px", position: "relative",
+        }}>
         {[0, 1, 2].map((i) => <span key={i} style={{ width: 16, height: 2, background: "#E8B23D", borderRadius: 2, display: "block" }} />)}
+        {/* a count here means it is visible from every screen, not only the dashboard */}
+        {badge > 0 && (
+          <span className="pulse" style={{
+            position: "absolute", top: -7, right: -7, background: "#B84C3E", color: "#fff",
+            borderRadius: 10, minWidth: 19, height: 19, display: "grid", placeItems: "center",
+            fontFamily: FONT.mono, fontSize: 10.5, fontWeight: 700, padding: "0 5px",
+            border: "2px solid #1B3327",
+          }}>{badge > 99 ? "99+" : badge}</span>
+        )}
       </button>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: FONT.mono, color: "#8AA090", fontSize: 9.5, letterSpacing: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
@@ -1158,16 +1168,52 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
   const [receipt, setReceipt] = useState(null);   // { student, payment } to print
   const cur = roster.settings.currency;
 
+  // Everything anyone is waiting on the administrator for. Gathered in one
+  // place because five separate queues is how a request gets forgotten.
+  const [leaveRows, setLeaveRows] = useState([]);
+  useEffect(() => {
+    let live = true;
+    const pull = () => leaveList(true)
+      .then((r) => { if (live) setLeaveRows(r || []); })
+      .catch(() => {});
+    pull();
+    const t = setInterval(pull, 60000);        // refresh while the page is open
+    return () => { live = false; clearInterval(t); };
+  }, []);
+
   let pendingCount = 0;
   Object.values(roster.marks || {}).forEach((terms) =>
     Object.values(terms || {}).forEach((rec) => { if (statusOf(rec) === "submitted") pendingCount++; }));
+
+  const today = todayISO();
+  const pendingLeave = leaveRows.filter((r) => r.status === "pending");
+  const pendingDiscipline = (roster.discipline || []).filter((d) => (d.status || "open") === "open");
+  const pendingArrivals = Object.values(roster.checkins?.[today] || {})
+    .filter((c) => c && (c.approved === null || (c.outStatus === "early" && c.outApproved === null)));
+
+  const ALERTS = [
+    { key: "approvals",  n: pendingCount,            tone: "#B84C3E",
+      one: "set of results waiting to be published", many: "sets of results waiting to be published",
+      why: "A teacher has sent marks and cannot publish them" },
+    { key: "leave",      n: pendingLeave.length,     tone: "#C98A2C",
+      one: "leave application to decide", many: "leave applications to decide",
+      why: "Staff cannot plan until you answer" },
+    { key: "discipline", n: pendingDiscipline.length, tone: "#6B5B95",
+      one: "discipline case to review", many: "discipline cases to review",
+      why: "A teacher has reported an incident" },
+    { key: "signins",    n: pendingArrivals.length,  tone: "#3B6E8F",
+      one: "arrival or departure to approve", many: "arrivals or departures to approve",
+      why: "Late arrivals and early departures need your decision" },
+  ].filter((a) => a.n > 0);
+
+  const alertTotal = ALERTS.reduce((a, x) => a + x.n, 0);
 
   const NAV = [
     { title: "DASHBOARD", items: [
       { key: "overview", label: "Overview", icon: "overview" },
       { key: "approvals", label: "Approvals", icon: "approvals", badge: pendingCount },
       { key: "memos", label: "Memos to staff", icon: "subjects" },
-      { key: "leave", label: "Leave applications", icon: "duty" },
+      { key: "leave", label: "Leave applications", icon: "duty", badge: pendingLeave.length },
     ]},
     { title: "ACADEMICS", items: [
       { key: "marks", label: "Exam results", icon: "marks" },
@@ -1178,10 +1224,10 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     ]},
     { title: "PEOPLE", items: [
       { key: "students", label: "Students", icon: "students" },
-      { key: "discipline", label: "Discipline cases", icon: "approvals" },
+      { key: "discipline", label: "Discipline cases", icon: "approvals", badge: pendingDiscipline.length },
       { key: "photos", label: "Pupil photos", icon: "students" },
       { key: "idcards", label: "Student ID cards", icon: "logins" },
-      { key: "signins", label: "Arrival sign-ins", icon: "duty" },
+      { key: "signins", label: "Arrival sign-ins", icon: "duty", badge: pendingArrivals.length },
       { key: "teachers", label: "Teachers", icon: "teachers" },
       { key: "logins", label: "Staff logins", icon: "logins" },
       { key: "staff", label: "Staff attendance", icon: "staff" },
@@ -1296,13 +1342,18 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
   return (
     <div>
       <PortalHeader title={SCHOOL_NAME.toUpperCase()} section={NAV.flatMap((g) => g.items).find((i) => i.key === tab)?.label || tab}
-        onMenu={() => setMenuOpen(true)} onExit={onExit} />
+        onMenu={() => setMenuOpen(true)} onExit={onExit} badge={alertTotal} />
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} groups={NAV} active={tab} onPick={setTab}
         heading="Administration" subheading={who?.name || "Signed in"} />
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
 
-          {tab === "overview" && <AdminOverview roster={roster} />}
+          {tab === "overview" && (
+            <>
+              <PendingAlerts alerts={ALERTS} total={alertTotal} onGo={setTab} />
+              <AdminOverview roster={roster} />
+            </>
+          )}
 
           {tab === "approvals" && <Approvals roster={roster} saveRoster={saveRoster} />}
 
@@ -6550,6 +6601,62 @@ function LeaveRegisterDoc({ roster, rows, from, to, onBack }) {
         <div style={docSig}>Official School Stamp</div>
       </div>
     </DocShell>
+  );
+}
+
+
+// Everything anyone is waiting on the administrator for, in one place. Five
+// separate queues is how a teacher's request goes unanswered for a fortnight.
+function PendingAlerts({ alerts, total, onGo }) {
+  if (total === 0) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "11px 13px",
+            marginBottom: 20, borderRadius: 4, background: "#E4F0E8", border: "1px solid #B8D9C4" }}>
+        <span style={{ color: "#3F7A5C", fontSize: 15 }}>&#10003;</span>
+        <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#22304A" }}>
+          Nothing is waiting for your approval.
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="enter" style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9, flexWrap: "wrap" }}>
+        <span style={{ background: "#B84C3E", color: "#fff", borderRadius: 11,
+              minWidth: 22, height: 22, display: "grid", placeItems: "center",
+              fontFamily: FONT.mono, fontSize: 11.5, fontWeight: 700, padding: "0 6px" }}>
+          {total}
+        </span>
+        <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#22304A" }}>
+          Waiting for you
+        </span>
+      </div>
+      <div style={{ display: "grid", gap: 6 }}>
+        {alerts.map((a) => (
+          <button key={a.key} onClick={() => onGo(a.key)} className="lift"
+            style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left",
+              width: "100%", padding: "11px 13px", borderRadius: 4, cursor: "pointer",
+              background: "#F5F1E6", border: "1px solid #E4DFCF",
+              borderLeft: `4px solid ${a.tone}` }}>
+            <span style={{ background: a.tone, color: "#fff", borderRadius: 10,
+                  minWidth: 21, height: 21, display: "grid", placeItems: "center",
+                  fontFamily: FONT.mono, fontSize: 11, fontWeight: 700, flex: "0 0 auto" }}>
+              {a.n}
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>
+                {a.n === 1 ? a.one : a.many}
+              </span>
+              <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 2 }}>
+                {a.why}
+              </div>
+            </span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 13, color: a.tone }}>&#8594;</span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
