@@ -313,3 +313,26 @@ export function currentPosition({ timeout = 15000 } = {}) {
     );
   });
 }
+
+// ---------- leave applications ----------
+export const leaveApply = (kind, starts, ends, reason, cover) =>
+  rpc("leave_apply", { p_token: getToken(), p_kind: kind, p_starts: starts,
+                       p_ends: ends, p_reason: reason, p_cover: cover });
+export const leaveList   = (all) => rpc("leave_list",   { p_token: getToken(), p_all: !!all });
+export const leaveDecide = (id, status, note) =>
+  rpc("leave_decide", { p_token: getToken(), p_id: id, p_status: status, p_note: note });
+export const leaveCancel = (id) => rpc("leave_cancel", { p_token: getToken(), p_id: id });
+export const leaveToday  = ()   => rpc("leave_today",  { p_token: getToken() });
+
+// ---------- expenditure ----------
+// Fees collected are only half the account; where the money went is the half
+// people ask about.
+export const expenseCategories = () => rpc("expense_categories_list", {});
+export const expenseAdd = (e) => rpc("expense_add", {
+  p_token: getToken(), p_date: e.date, p_category: e.category, p_description: e.description,
+  p_amount: e.amount, p_paid_to: e.paidTo || null, p_method: e.method || "cash",
+  p_reference: e.reference || null, p_approved_by: e.approvedBy || null, p_note: e.note || null,
+});
+export const expenseList    = (from, to) => rpc("expense_list",    { p_token: getToken(), p_from: from || null, p_to: to || null });
+export const expenseSummary = (from, to) => rpc("expense_summary", { p_token: getToken(), p_from: from || null, p_to: to || null });
+export const expenseDelete  = (id, reason) => rpc("expense_delete", { p_token: getToken(), p_id: id, p_reason: reason });

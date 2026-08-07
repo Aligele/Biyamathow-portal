@@ -8,6 +8,8 @@ import {
   photoSet, photoDelete, photosGet, photosWhich,
   healthCheck, backupsList, backupNow, backupRestore, staffResetPassword,
   geofenceGet, geofenceSet, locationRecent, locationRecord, currentPosition, metresBetween,
+  leaveApply, leaveList, leaveDecide, leaveCancel, leaveToday,
+  expenseCategories, expenseAdd, expenseList, expenseSummary, expenseDelete,
   mpesaClaim, mpesaLookup, mpesaRecent, mpesaRelease,
 } from "./store.js";
 
@@ -78,7 +80,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v32 · printable fee list";
+const APP_VERSION = "v33 · leave, spending, clash guard";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -198,6 +200,42 @@ const teachingAssignments = (roster, teacherId) => {
       subjects: [...byClass[c.id]].filter((sub) => subjectsForClass(roster, c.id).includes(sub)),
     }))
     .filter((a) => a.subjects.length > 0);
+};
+
+// A teacher can only be in one room at a time. This looks across every class
+// for the same day and period, so a clash is caught when it is created rather
+// than discovered on the morning it matters.
+const teacherClashAt = (roster, day, periodId, teacherId, exceptClassId) => {
+  if (!teacherId) return null;
+  for (const [cid, days] of Object.entries(roster.timetable || {})) {
+    if (cid === exceptClassId) continue;
+    const lesson = days?.[day]?.[periodId];
+    if (lesson && lesson.teacherId === teacherId) {
+      return { classId: cid, subject: lesson.subject };
+    }
+  }
+  return null;
+};
+
+// Every clash currently in the timetable — used to show the administrator
+// anything that slipped in before this check existed.
+const allTimetableClashes = (roster) => {
+  const seen = {};   // day|period|teacher -> [ {classId, subject} ]
+  Object.entries(roster.timetable || {}).forEach(([cid, days]) => {
+    Object.entries(days || {}).forEach(([day, periods]) => {
+      Object.entries(periods || {}).forEach(([pid, lesson]) => {
+        if (!lesson?.teacherId) return;
+        const k = `${day}|${pid}|${lesson.teacherId}`;
+        (seen[k] = seen[k] || []).push({ classId: cid, subject: lesson.subject });
+      });
+    });
+  });
+  return Object.entries(seen)
+    .filter(([, v]) => v.length > 1)
+    .map(([k, v]) => {
+      const [day, periodId, teacherId] = k.split("|");
+      return { day, periodId, teacherId, where: v };
+    });
 };
 
 const levelLabelForClass = (roster, classId) => {
@@ -1129,6 +1167,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
       { key: "overview", label: "Overview", icon: "overview" },
       { key: "approvals", label: "Approvals", icon: "approvals", badge: pendingCount },
       { key: "memos", label: "Memos to staff", icon: "subjects" },
+      { key: "leave", label: "Leave applications", icon: "duty" },
     ]},
     { title: "ACADEMICS", items: [
       { key: "marks", label: "Exam results", icon: "marks" },
@@ -1151,6 +1190,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     { title: "FINANCIALS", items: [
       { key: "fees", label: "Fees & receipts", icon: "fees" },
       { key: "feeroll", label: "Printable fee list", icon: "reports" },
+      { key: "spending", label: "Where money went", icon: "reports" },
     ]},
     { title: "REPORTS", items: [
       { key: "reports", label: "Reports", icon: "reports" },
@@ -1267,6 +1307,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "approvals" && <Approvals roster={roster} saveRoster={saveRoster} />}
 
           {tab === "memos" && <MemoBoard roster={roster} saveRoster={saveRoster} who={who} />}
+
+          {tab === "leave" && <LeaveApprovals roster={roster} />}
 
           {tab === "logins" && <StaffAccounts roster={roster} who={who} />}
 
@@ -1429,6 +1471,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           )}
 
           {tab === "feeroll" && <AdminFeeRoll roster={roster} />}
+
+          {tab === "spending" && <SpendReport roster={roster} refreshKey={0} />}
 
           {tab === "fees" && (
             <div>
@@ -2442,7 +2486,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
   return (
     <div>
       <PortalHeader title={`${classNameOf(roster, classId).toUpperCase()} · ${teacher.name.toUpperCase()}`}
-        section={{ memos: "Memos", signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
+        section={{ memos: "Memos", leave: "Leave", signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
                    reportcards: "Report cards", timetable: "My timetable",
                    register: "Register a pupil", photos: "Pupil photos", examtt: "Exam timetable",
                    discipline: "Discipline report" }[tab] || tab}
@@ -2452,6 +2496,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
         groups={[
           { title: "DAILY", items: [
             { key: "memos", label: "Memos", icon: "subjects", badge: unreadMemos(roster, teacher.id).length },
+            { key: "leave", label: "Apply for leave", icon: "duty" },
             { key: "signin", label: "Sign in (arrival)", icon: "duty" },
             { key: "attendance", label: "Pupil attendance", icon: "attendance" },
           ]},
@@ -2484,6 +2529,8 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
             </GeoGate>
           )}
           {tab === "memos" && <MemoBoard roster={roster} saveRoster={saveRoster} who={who} teacherId={teacher.id} />}
+
+          {tab === "leave" && <MyLeave who={who} />}
 
           {tab === "signin" && (
             <GeoGate action="signin" label="Signing in">
@@ -3137,6 +3184,7 @@ function YearEnd({ roster, saveRoster }) {
 function TimetableAdmin({ roster, saveRoster }) {
   const [classId, setClassId] = useState("");
   const [entry, setEntry] = useState({ day: "Mon", periodId: "", subject: "", teacherId: "" });
+  const [clashMsg, setClashMsg] = useState("");
   const [showPeriods, setShowPeriods] = useState(false);
   const [printing, setPrinting] = useState(false);
   const periods = roster.settings.periods || DEFAULT_PERIODS;
@@ -3144,6 +3192,17 @@ function TimetableAdmin({ roster, saveRoster }) {
 
   const addLesson = () => {
     if (!classId || !entry.periodId || !entry.subject) return;
+
+    // Refuse to put a teacher in two rooms at the same time.
+    const clash = teacherClashAt(roster, entry.day, entry.periodId, entry.teacherId, classId);
+    if (clash) {
+      const who = roster.teachers.find((t) => t.id === entry.teacherId)?.name || "That teacher";
+      const per = periods.find((x) => x.id === entry.periodId);
+      setClashMsg(`${who} already teaches ${clash.subject} to ${classNameOf(roster, clash.classId)} `
+        + `on ${entry.day} at ${per?.time || "that period"}. Choose a different teacher or period.`);
+      return;
+    }
+    setClashMsg("");
     saveRoster(setLessonIn(roster, classId, entry.day, entry.periodId, { subject: entry.subject, teacherId: entry.teacherId || "" }), "Lesson added");
     setEntry({ ...entry, subject: "", teacherId: "" });
   };
@@ -3190,12 +3249,32 @@ function TimetableAdmin({ roster, saveRoster }) {
               <option value="">Subject…</option>
               {subjectsForClass(roster, classId).map((sub) => <option key={sub} value={sub}>{sub}</option>)}
             </select>
-            <select value={entry.teacherId} onChange={(e) => setEntry({ ...entry, teacherId: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
+            <select value={entry.teacherId} onChange={(e) => { setEntry({ ...entry, teacherId: e.target.value }); setClashMsg(""); }}
+              style={{ ...darkInput(), flex: 1, minWidth: 120 }}>
               <option value="">Teacher (optional)…</option>
-              {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {roster.teachers.map((t) => {
+                // say who is already busy before the choice is made
+                const busy = entry.periodId
+                  ? teacherClashAt(roster, entry.day, entry.periodId, t.id, classId) : null;
+                return (
+                  <option key={t.id} value={t.id} disabled={!!busy}>
+                    {t.name}{busy ? ` — busy with ${classNameOf(roster, busy.classId)}` : ""}
+                  </option>
+                );
+              })}
             </select>
             <button onClick={addLesson} disabled={!entry.periodId || !entry.subject} style={primaryBtn()}>Add lesson</button>
           </div>
+
+          {clashMsg && (
+            <div className="enter" style={{ padding: "10px 13px", borderRadius: 4, marginBottom: 14,
+                  background: "#F7E4E1", border: "1px solid #E8C4BD", borderLeft: "4px solid #B84C3E",
+                  fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", lineHeight: 1.55 }}>
+              <strong style={{ color: "#B84C3E" }}>Clash.</strong> {clashMsg}
+            </div>
+          )}
+
+          <ClashReport roster={roster} periods={periods} />
 
           <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
             {DAYS.map((day) => {
@@ -5565,6 +5644,681 @@ function AdminFeeRoll({ roster }) {
   return <FeeRollPicker roster={roster} onPrint={setRoll} />;
 }
 
+
+// Any clash already sitting in the timetable. Useful once, after this check
+// was added, and thereafter as reassurance that there are none.
+function ClashReport({ roster, periods }) {
+  const clashes = allTimetableClashes(roster);
+  if (clashes.length === 0) return null;
+
+  const periodLabel = (pid) => {
+    const p = periods.find((x) => x.id === pid);
+    return p ? `Period ${p.label}${p.time ? " (" + p.time + ")" : ""}` : pid;
+  };
+
+  return (
+    <div style={{ padding: "12px 14px", borderRadius: 5, marginBottom: 16,
+          background: "#F7E4E1", border: "1px solid #E8C4BD", borderLeft: "4px solid #B84C3E" }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 700, color: "#22304A" }}>
+        {clashes.length} clash{clashes.length === 1 ? "" : "es"} in the timetable
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", margin: "4px 0 9px" }}>
+        These teachers are timetabled in two places at once. Remove one of each pair.
+      </div>
+      <div style={{ display: "grid", gap: 5 }}>
+        {clashes.map((c, i) => {
+          const who = roster.teachers.find((t) => t.id === c.teacherId)?.name || "Unknown teacher";
+          return (
+            <div key={i} style={{ padding: "8px 11px", background: "#fff", borderRadius: 3,
+                  border: "1px solid #E8C4BD" }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#22304A" }}>
+                {who} — {DAY_FULL[c.day] || c.day}, {periodLabel(c.periodId)}
+              </div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#B84C3E", marginTop: 3 }}>
+                {c.where.map((w) => `${classNameOf(roster, w.classId)} (${w.subject})`).join("  vs  ")}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Leave ----------
+const LEAVE_KINDS = {
+  annual:        { label: "Annual leave",        ink: "#3F7A5C", note: "Planned time off" },
+  sick:          { label: "Sick leave",          ink: "#B84C3E", note: "Illness or medical appointment" },
+  emergency:     { label: "Emergency",           ink: "#C98A2C", note: "Something urgent and unforeseen" },
+  compassionate: { label: "Compassionate",       ink: "#6B5B95", note: "Bereavement or family crisis" },
+  maternity:     { label: "Maternity",           ink: "#3B6E8F", note: "" },
+  paternity:     { label: "Paternity",           ink: "#3B6E8F", note: "" },
+  study:         { label: "Study leave",         ink: "#22304A", note: "Course or examinations" },
+  unpaid:        { label: "Unpaid leave",        ink: "#8A8368", note: "" },
+};
+const LEAVE_TONE = {
+  pending:   { bg: "#F5E8DC", edge: "#E8CBA0", ink: "#C98A2C", label: "Awaiting decision" },
+  approved:  { bg: "#E4F0E8", edge: "#B8D9C4", ink: "#3F7A5C", label: "Approved" },
+  declined:  { bg: "#F7E4E1", edge: "#E8C4BD", ink: "#B84C3E", label: "Declined" },
+  cancelled: { bg: "#F5F1E6", edge: "#E4DFCF", ink: "#8A8368", label: "Withdrawn" },
+};
+
+// A member of staff applying for, and tracking, their own leave.
+function MyLeave({ who }) {
+  const [rows, setRows] = useState(null);
+  const [form, setForm] = useState({ kind: "annual", starts: todayISO(), ends: todayISO(), reason: "", cover: "" });
+  const [err, setErr] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try { setRows(await leaveList(false) || []); } catch (e) { setRows([]); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const days = (() => {
+    const a = new Date(form.starts), b = new Date(form.ends);
+    if (isNaN(a) || isNaN(b) || b < a) return 0;
+    return Math.round((b - a) / 86400000) + 1;
+  })();
+
+  const apply = async () => {
+    if (days < 1) return setErr("Check the dates — the end cannot be before the start.");
+    if (!form.reason.trim()) return setErr("Give a brief reason. The head teacher needs it to decide.");
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      await leaveApply(form.kind, form.starts, form.ends, form.reason, form.cover);
+      setMsg("Your application has been sent to the head teacher.");
+      setForm({ ...form, reason: "", cover: "" });
+      await load();
+    } catch (e) { setErr(String(e.message || e).replace(/^leave_apply \d+: /, "")); }
+    setBusy(false);
+  };
+
+  const withdraw = async (id) => {
+    if (!window.confirm("Withdraw this application?")) return;
+    try { await leaveCancel(id); await load(); } catch (e) { setErr(String(e.message || e)); }
+  };
+
+  return (
+    <div>
+      <SectionTitle>Leave</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+        Apply here and the head teacher decides. You will see the answer on this screen.
+      </div>
+
+      {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+      {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E4F0E8",
+            border: "1px solid #B8D9C4", fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginBottom: 12 }}>{msg}</div>}
+
+      <div style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: 13, marginBottom: 20 }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.3, color: "#8A8368",
+              textTransform: "uppercase", marginBottom: 7 }}>Kind of leave</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          {Object.entries(LEAVE_KINDS).map(([k, v]) => (
+            <button key={k} onClick={() => { setForm({ ...form, kind: k }); setErr(""); }}
+              style={{ padding: "6px 12px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12, fontWeight: 600,
+                cursor: "pointer",
+                border: `1px solid ${form.kind === k ? v.ink : "#D8D2C2"}`,
+                background: form.kind === k ? v.ink : "#fff",
+                color: form.kind === k ? "#fff" : "#6B6552" }}>{v.label}</button>
+          ))}
+        </div>
+        {LEAVE_KINDS[form.kind].note && (
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8368", marginTop: -6, marginBottom: 10 }}>
+            {LEAVE_KINDS[form.kind].note}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 9 }}>
+          <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552" }}>From</span>
+          <input type="date" value={form.starts}
+            onChange={(e) => setForm({ ...form, starts: e.target.value,
+              ends: e.target.value > form.ends ? e.target.value : form.ends })}
+            style={{ ...darkInput(), minWidth: 140 }} />
+          <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552" }}>to</span>
+          <input type="date" value={form.ends} min={form.starts}
+            onChange={(e) => setForm({ ...form, ends: e.target.value })}
+            style={{ ...darkInput(), minWidth: 140 }} />
+          <span style={{ fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
+                color: days > 0 ? "#22304A" : "#B84C3E" }}>
+            {days > 0 ? `${days} day${days === 1 ? "" : "s"}` : "check dates"}
+          </span>
+        </div>
+
+        <textarea value={form.reason} onChange={(e) => { setForm({ ...form, reason: e.target.value }); setErr(""); }}
+          placeholder="Reason — a sentence is enough"
+          style={{ ...darkInput(), width: "100%", height: 62, resize: "vertical", marginBottom: 9 }} />
+
+        <input value={form.cover} onChange={(e) => setForm({ ...form, cover: e.target.value })}
+          placeholder="Who will take your classes? (optional but helps)"
+          style={{ ...darkInput(), width: "100%", marginBottom: 11 }} />
+
+        <button onClick={apply} disabled={busy || days < 1}
+          style={{ ...primaryBtn(), opacity: busy || days < 1 ? 0.5 : 1 }}>
+          {busy ? "Sending…" : "Apply for leave"}
+        </button>
+      </div>
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        Your applications
+      </div>
+      {rows === null && <div className="skeleton" style={{ height: 56 }} />}
+      {rows && rows.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>You have not applied for any leave.</div>
+      )}
+      <div style={{ display: "grid", gap: 6 }}>
+        {(rows || []).map((r) => {
+          const tone = LEAVE_TONE[r.status] || LEAVE_TONE.pending;
+          const kind = LEAVE_KINDS[r.kind] || { label: r.kind };
+          return (
+            <div key={r.id} style={{ padding: "11px 13px", borderRadius: 4, background: tone.bg,
+                  border: `1px solid ${tone.edge}`, borderLeft: `4px solid ${tone.ink}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 700, color: "#22304A" }}>
+                  {kind.label} · {r.days} day{r.days === 1 ? "" : "s"}
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 9.5, fontWeight: 700, color: tone.ink }}>
+                  {tone.label.toUpperCase()}
+                </span>
+              </div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", marginTop: 3 }}>
+                {fmtDate(r.starts_on)} — {fmtDate(r.ends_on)}
+              </div>
+              {r.reason && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#22304A", marginTop: 5 }}>{r.reason}</div>}
+              {r.decision_note && (
+                <div style={{ fontFamily: FONT.body, fontSize: 12, color: tone.ink, marginTop: 5, fontStyle: "italic" }}>
+                  {r.decided_by}: {r.decision_note}
+                </div>
+              )}
+              {r.status === "pending" && (
+                <button onClick={() => withdraw(r.id)} style={{ background: "none", border: "none",
+                      color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11, marginTop: 7, cursor: "pointer" }}>
+                  withdraw
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// The head teacher's queue.
+function LeaveApprovals({ roster }) {
+  const [rows, setRows] = useState(null);
+  const [notes, setNotes] = useState({});
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(null);
+
+  const load = async () => { try { setRows(await leaveList(true) || []); } catch (e) { setRows([]); } };
+  useEffect(() => { load(); }, []);
+
+  const decide = async (id, status) => {
+    setBusy(id); setErr("");
+    try { await leaveDecide(id, status, notes[id] || ""); await load(); }
+    catch (e) { setErr(String(e.message || e)); }
+    setBusy(null);
+  };
+
+  const pending = (rows || []).filter((r) => r.status === "pending");
+  const decided = (rows || []).filter((r) => r.status !== "pending");
+  const away = (rows || []).filter((r) => r.status === "approved"
+    && todayISO() >= r.starts_on && todayISO() <= r.ends_on);
+
+  return (
+    <div>
+      <SectionTitle>Leave applications</SectionTitle>
+
+      {away.length > 0 && (
+        <div style={{ padding: "11px 13px", borderRadius: 4, background: "#E3E9F5",
+              border: "1px solid #BCCAE6", borderLeft: "4px solid #3B6E8F", marginBottom: 14 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 700, color: "#22304A" }}>
+            Away today
+          </div>
+          {away.map((r) => (
+            <div key={r.id} style={{ fontFamily: FONT.body, fontSize: 12, color: "#22304A", marginTop: 3 }}>
+              {r.staff_name} — {(LEAVE_KINDS[r.kind] || {}).label || r.kind}, back {fmtDate(
+                new Date(new Date(r.ends_on).getTime() + 86400000).toISOString().slice(0, 10))}
+              {r.cover_by ? ` · covered by ${r.cover_by}` : " · no cover arranged"}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 16 }}>
+        <StatCard label="Waiting" value={pending.length} tone={pending.length ? "#C98A2C" : "#3F7A5C"} />
+        <StatCard label="Away today" value={away.length} tone={away.length ? "#3B6E8F" : "#3F7A5C"} />
+        <StatCard label="Decided" value={decided.length} />
+      </div>
+
+      {rows === null && <div className="skeleton" style={{ height: 70 }} />}
+      {rows && pending.length === 0 && (
+        <div style={{ padding: "12px 14px", background: "#E4F0E8", border: "1px solid #B8D9C4",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#22304A", marginBottom: 16 }}>
+          Nothing waiting for a decision.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 8, marginBottom: 22 }}>
+        {pending.map((r) => {
+          const kind = LEAVE_KINDS[r.kind] || { label: r.kind, ink: "#8A8368" };
+          return (
+            <div key={r.id} className="enter" style={{ padding: "12px 14px", borderRadius: 5,
+                  background: "#F5E8DC", border: "1px solid #E8CBA0", borderLeft: `4px solid ${kind.ink}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#22304A" }}>
+                  {r.staff_name}
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, color: kind.ink }}>
+                  {kind.label.toUpperCase()}
+                </span>
+              </div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6B6552", marginTop: 3 }}>
+                {fmtDate(r.starts_on)} — {fmtDate(r.ends_on)} · {r.days} day{r.days === 1 ? "" : "s"}
+              </div>
+              {r.reason && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginTop: 6 }}>{r.reason}</div>}
+              <div style={{ fontFamily: FONT.body, fontSize: 11.5, marginTop: 5,
+                    color: r.cover_by ? "#3F7A5C" : "#B84C3E" }}>
+                {r.cover_by ? `Cover: ${r.cover_by}` : "No cover arranged — ask before approving"}
+              </div>
+
+              <input value={notes[r.id] || ""} onChange={(e) => setNotes({ ...notes, [r.id]: e.target.value })}
+                placeholder="A word back to them (optional)"
+                style={{ ...darkInput(), width: "100%", marginTop: 9, marginBottom: 8, fontSize: 12.5 }} />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => decide(r.id, "approved")} disabled={busy === r.id}
+                  style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve</button>
+                <button onClick={() => decide(r.id, "declined")} disabled={busy === r.id}
+                  style={{ ...primaryBtn(), background: "#B84C3E" }}>Decline</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {decided.length > 0 && (
+        <>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+            Decided
+          </div>
+          <div style={{ display: "grid", gap: 5 }}>
+            {decided.slice(0, 40).map((r) => {
+              const tone = LEAVE_TONE[r.status] || LEAVE_TONE.cancelled;
+              return (
+                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", gap: 9,
+                      flexWrap: "wrap", padding: "8px 12px", borderRadius: 3, background: "#F5F1E6",
+                      border: "1px solid #E4DFCF", borderLeft: `3px solid ${tone.ink}` }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A" }}>
+                    {r.staff_name} <span style={{ color: "#8A8368" }}>
+                      · {(LEAVE_KINDS[r.kind] || {}).label || r.kind}</span>
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 10, color: tone.ink }}>
+                    {fmtDate(r.starts_on)}–{fmtDate(r.ends_on)} · {tone.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+// ---------- Expenditure ----------
+// Recording where the money went. Every entry gets a voucher number, because
+// "we spent it on cement" without a voucher is not an account.
+function SpendRecord({ roster, who, onVoucher }) {
+  const cur = roster.settings.currency || "KSh";
+  const [cats, setCats] = useState([]);
+  const [f, setF] = useState({ date: todayISO(), category: "", description: "", amount: "",
+                               paidTo: "", method: "cash", reference: "", approvedBy: "", note: "" });
+  const [err, setErr] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
+
+  useEffect(() => { expenseCategories().then((c) => setCats(c || [])).catch(() => setCats([])); }, []);
+
+  const save = async () => {
+    if (!f.category) return setErr("Choose what kind of spending this is.");
+    if (!f.description.trim()) return setErr("Say what the money was spent on.");
+    const amt = Number(f.amount);
+    if (!amt || amt <= 0) return setErr("Enter an amount.");
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      const v = await expenseAdd({ ...f, amount: amt });
+      setMsg(`Recorded as voucher ${v}.`);
+      setF({ ...f, description: "", amount: "", paidTo: "", reference: "", note: "" });
+      onVoucher?.();
+    } catch (e) { setErr(String(e.message || e).replace(/^expense_add \d+: /, "")); }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <SectionTitle>Record spending</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14, lineHeight: 1.6 }}>
+        Every payment out gets a voucher number. Record it when it happens, not from memory at
+        month end.
+      </div>
+
+      {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+      {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E4F0E8",
+            border: "1px solid #B8D9C4", fontFamily: FONT.body, fontSize: 13, color: "#22304A",
+            marginBottom: 12, fontWeight: 600 }}>{msg}</div>}
+
+      <div style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5, padding: 13 }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.3, color: "#8A8368",
+              textTransform: "uppercase", marginBottom: 7 }}>What kind of spending</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
+          {cats.map((c) => (
+            <button key={c.key} onClick={() => { setF({ ...f, category: c.key }); setErr(""); }}
+              style={{ padding: "6px 12px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12,
+                fontWeight: 600, cursor: "pointer",
+                border: `1px solid ${f.category === c.key ? "#22304A" : "#D8D2C2"}`,
+                background: f.category === c.key ? "#22304A" : "#fff",
+                color: f.category === c.key ? "#fff" : "#6B6552" }}>{c.label}</button>
+          ))}
+        </div>
+
+        <input value={f.description} onChange={(e) => { setF({ ...f, description: e.target.value }); setErr(""); }}
+          placeholder="What was it for? e.g. Cement for the Grade 3 classroom floor"
+          style={{ ...darkInput(), width: "100%", marginBottom: 9 }} />
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+          <input type="number" inputMode="numeric" value={f.amount} min="1"
+            onChange={(e) => { setF({ ...f, amount: e.target.value }); setErr(""); }}
+            placeholder={`Amount in ${cur}`}
+            style={{ ...darkInput(), flex: 1, minWidth: 120, fontFamily: FONT.mono, fontSize: 15 }} />
+          <input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })}
+            style={{ ...darkInput(), minWidth: 140 }} />
+        </div>
+
+        <input value={f.paidTo} onChange={(e) => setF({ ...f, paidTo: e.target.value })}
+          placeholder="Paid to — supplier, contractor or member of staff"
+          style={{ ...darkInput(), width: "100%", marginBottom: 9 }} />
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
+          {[["cash","Cash"],["mpesa","M-Pesa"],["bank","Bank"],["cheque","Cheque"]].map(([k,l]) => (
+            <button key={k} onClick={() => setF({ ...f, method: k })}
+              style={{ padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12,
+                fontWeight: 600, cursor: "pointer",
+                border: `1px solid ${f.method === k ? "#22304A" : "#D8D2C2"}`,
+                background: f.method === k ? "#22304A" : "#fff",
+                color: f.method === k ? "#fff" : "#6B6552" }}>{l}</button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+          <input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })}
+            placeholder={f.method === "mpesa" ? "M-Pesa code" : f.method === "cheque" ? "Cheque number" : "Receipt or invoice number"}
+            style={{ ...darkInput(), flex: 1, minWidth: 140, fontFamily: FONT.mono }} />
+          <input value={f.approvedBy} onChange={(e) => setF({ ...f, approvedBy: e.target.value })}
+            placeholder="Authorised by"
+            style={{ ...darkInput(), flex: 1, minWidth: 130 }} />
+        </div>
+
+        <button onClick={save} disabled={busy} style={{ ...primaryBtn(), opacity: busy ? 0.5 : 1 }}>
+          {busy ? "Recording…" : "Record this payment"}
+        </button>
+
+        <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 9, lineHeight: 1.5 }}>
+          Keep the receipt or invoice. The voucher number written on it is what ties the paper to
+          this record.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Where the money went — the report the committee asks for.
+function SpendReport({ roster, refreshKey }) {
+  const cur = roster.settings.currency || "KSh";
+  const [range, setRange] = useState("term");
+  const [sum, setSum] = useState(null);
+  const [rows, setRows] = useState(null);
+  const [printing, setPrinting] = useState(false);
+  const [err, setErr] = useState("");
+
+  const bounds = () => {
+    const now = new Date(), y = now.getFullYear();
+    if (range === "month") return [new Date(y, now.getMonth(), 1).toISOString().slice(0,10), todayISO()];
+    if (range === "year")  return [`${y}-01-01`, todayISO()];
+    if (range === "all")   return [null, null];
+    const m = now.getMonth();                       // rough Kenyan terms
+    const t = m < 4 ? [`${y}-01-01`, `${y}-04-30`] : m < 8 ? [`${y}-05-01`, `${y}-08-31`] : [`${y}-09-01`, `${y}-12-31`];
+    return t;
+  };
+
+  const load = async () => {
+    const [a, b] = bounds();
+    setErr("");
+    try { setSum(await expenseSummary(a, b) || []); setRows(await expenseList(a, b) || []); }
+    catch (e) { setErr(String(e.message || e)); setSum([]); setRows([]); }
+  };
+  useEffect(() => { load(); }, [range, refreshKey]);
+
+  const total = (sum || []).reduce((a, r) => a + Number(r.total), 0);
+  const collected = roster.students.reduce((a, s) => a + (s.feePaid || 0), 0);
+
+  if (printing) {
+    const [a, b] = bounds();
+    return <SpendReportDoc roster={roster} sum={sum || []} rows={rows || []}
+             from={a} to={b} collected={collected} onBack={() => setPrinting(false)} />;
+  }
+
+  const RANGES = [["month","This month"],["term","This term"],["year","This year"],["all","Everything"]];
+  const PALETTE = ["#3F7A5C","#C98A2C","#3B6E8F","#B84C3E","#6B5B95","#2E6B4F","#8A6A2C","#22304A"];
+
+  return (
+    <div>
+      <SectionTitle>Where the money went</SectionTitle>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        {RANGES.map(([k, l]) => (
+          <button key={k} onClick={() => setRange(k)}
+            style={{ padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5,
+              fontWeight: 600, cursor: "pointer",
+              border: `1px solid ${range === k ? "#22304A" : "#D8D2C2"}`,
+              background: range === k ? "#22304A" : "#fff",
+              color: range === k ? "#fff" : "#6B6552" }}>{l}</button>
+        ))}
+      </div>
+
+      {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginBottom: 18 }}>
+        <StatCard label="Fees collected" value={`${cur}${money(collected)}`} tone="#3F7A5C" />
+        <StatCard label="Spent" value={`${cur}${money(total)}`} tone="#B84C3E" />
+        <StatCard label="Difference" value={`${cur}${money(collected - total)}`}
+          tone={collected - total >= 0 ? "#3F7A5C" : "#B84C3E"} />
+        <StatCard label="Vouchers" value={(rows || []).length} />
+      </div>
+
+      {sum === null && <div className="skeleton" style={{ height: 90 }} />}
+      {sum && sum.length === 0 && (
+        <div style={{ padding: "13px 15px", background: "#F5F1E6", border: "1px solid #E4DFCF",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>
+          No spending recorded for this period.
+        </div>
+      )}
+
+      {sum && sum.length > 0 && (
+        <>
+          <div style={{ display: "grid", gap: 7, marginBottom: 18 }}>
+            {sum.map((r, i) => {
+              const share = total ? Math.round((Number(r.total) / total) * 100) : 0;
+              const ink = PALETTE[i % PALETTE.length];
+              return (
+                <div key={r.category} style={{ padding: "10px 12px", background: "#F5F1E6",
+                      border: "1px solid #E4DFCF", borderRadius: 4, borderLeft: `4px solid ${ink}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>
+                      {r.label}
+                    </span>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: ink }}>
+                      {cur}{money(Number(r.total))}
+                    </span>
+                  </div>
+                  <div style={{ height: 6, background: "#EFEADC", borderRadius: 3, marginTop: 7, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${share}%`, background: ink }} />
+                  </div>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", marginTop: 4 }}>
+                    {share}% of spending · {r.items} voucher{r.items === 1 ? "" : "s"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), marginBottom: 20 }}>
+            Open printable report
+          </button>
+        </>
+      )}
+
+      {rows && rows.length > 0 && (
+        <>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+            Every voucher
+          </div>
+          <div style={{ display: "grid", gap: 5 }}>
+            {rows.map((r) => (
+              <div key={r.id} style={{ padding: "9px 12px", background: "#F5F1E6",
+                    border: "1px solid #E4DFCF", borderRadius: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#22304A" }}>
+                    {r.description}
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 12.5, fontWeight: 700, color: "#B84C3E" }}>
+                    {cur}{money(Number(r.amount))}
+                  </span>
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", marginTop: 3 }}>
+                  {r.voucher_no} · {fmtDate(r.spent_on)} · {r.method}
+                  {r.paid_to ? ` · to ${r.paid_to}` : ""}
+                  {r.reference ? ` · ${r.reference}` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// The printable account: money in, money out, and what remains.
+function SpendReportDoc({ roster, sum, rows, from, to, collected, onBack }) {
+  const cur = roster.settings.currency || "KSh";
+  const total = sum.reduce((a, r) => a + Number(r.total), 0);
+
+  return (
+    <DocShell title="Expenditure report" onBack={onBack}>
+      <DocHeader subtitle="Statement of Income and Expenditure" />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap",
+            gap: 8, marginBottom: 16, fontSize: 12 }}>
+        <div><strong>Period:</strong> {from ? fmtDate(from) : "from the beginning"} — {to ? fmtDate(to) : "today"}</div>
+        <div><strong>Printed:</strong> {fmtDate(todayISO())}</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 11, marginBottom: 20 }}>
+        {[["FEES COLLECTED", collected, "#3F7A5C"],
+          ["TOTAL SPENT", total, "#B84C3E"],
+          ["BALANCE", collected - total, collected - total >= 0 ? "#3F7A5C" : "#B84C3E"]].map(([l, v, ink]) => (
+          <div key={l} style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "10px 11px",
+                background: "#F5F1E6", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#8A8368", letterSpacing: 1 }}>{l}</div>
+            <div style={{ fontSize: 15, fontWeight: "bold", marginTop: 3, color: ink }}>{cur}{money(v)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ fontWeight: "bold", marginBottom: 7 }}>Spending by category</div>
+      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 20 }}>
+        <thead>
+          <tr>
+            <th style={docTh}>Category</th>
+            <th style={{ ...docTh, textAlign: "center", width: 60 }}>Vouchers</th>
+            <th style={{ ...docTh, textAlign: "right" }}>Amount</th>
+            <th style={{ ...docTh, textAlign: "right", width: 60 }}>Share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sum.map((r) => (
+            <tr key={r.category}>
+              <td style={{ ...docTd, fontSize: 11.5, fontWeight: 600 }}>{r.label}</td>
+              <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontSize: 10.5 }}>{r.items}</td>
+              <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 11.5 }}>
+                {money(Number(r.total))}
+              </td>
+              <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552" }}>
+                {total ? Math.round((Number(r.total) / total) * 100) : 0}%
+              </td>
+            </tr>
+          ))}
+          <tr>
+            <td style={{ ...docTd, borderTop: "2px solid #22304A", fontWeight: "bold" }}>Total spent</td>
+            <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "center",
+                  fontFamily: FONT.mono }}>{rows.length}</td>
+            <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "right",
+                  fontFamily: FONT.mono, fontWeight: 700 }}>{money(total)}</td>
+            <td style={{ ...docTd, borderTop: "2px solid #22304A" }}></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style={{ fontWeight: "bold", marginBottom: 7 }}>Vouchers in detail</div>
+      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 18 }}>
+        <thead>
+          <tr>
+            <th style={{ ...docTh, width: 62 }}>Voucher</th>
+            <th style={{ ...docTh, width: 54 }}>Date</th>
+            <th style={docTh}>Description</th>
+            <th style={docTh}>Paid to</th>
+            <th style={{ ...docTh, width: 44 }}>Method</th>
+            <th style={{ ...docTh, textAlign: "right", width: 58 }}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 9 }}>{r.voucher_no}</td>
+              <td style={{ ...docTd, fontSize: 9.5 }}>{fmtDate(r.spent_on)}</td>
+              <td style={{ ...docTd, fontSize: 10.5 }}>
+                {r.description}
+                {r.reference && <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#6B6552" }}>{r.reference}</div>}
+              </td>
+              <td style={{ ...docTd, fontSize: 10 }}>{r.paid_to || "—"}</td>
+              <td style={{ ...docTd, fontSize: 9.5, textTransform: "capitalize" }}>{r.method}</td>
+              <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5 }}>
+                {money(Number(r.amount))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div style={{ fontSize: 10, color: "#6B6552", lineHeight: 1.55, marginBottom: 24 }}>
+        Prepared from the school's own records. Each voucher number corresponds to a receipt or
+        invoice held in the office. Fees collected covers the current roll; balances brought forward
+        from earlier years are not included.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 26, marginTop: 26 }}>
+        <div style={docSig}>Bursar</div>
+        <div style={docSig}>Head Teacher</div>
+        <div style={docSig}>Chair, Management Committee</div>
+      </div>
+    </DocShell>
+  );
+}
+
 // ---------- Finance portal ----------
 function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }) {
   const [tab, setTab] = useState("collect");
@@ -5572,6 +6326,7 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
   const [statementFor, setStatementFor] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [roll, setRoll] = useState(null);
+  const [spendKey, setSpendKey] = useState(0);
   const cur = roster.settings.currency || "KSh";
 
   if (roll) {
@@ -5593,10 +6348,14 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
       { key: "collect", label: "Record a payment", icon: "fees" },
       { key: "statements", label: "Fee statements", icon: "reports" },
     ]},
-    { title: "MONEY", items: [
+    { title: "MONEY IN", items: [
       { key: "arrears", label: "Who owes what", icon: "approvals" },
       { key: "roll", label: "Printable fee list", icon: "reports" },
       { key: "daybook", label: "Day book", icon: "backup" },
+    ]},
+    { title: "MONEY OUT", items: [
+      { key: "spend", label: "Record spending", icon: "fees" },
+      { key: "spendreport", label: "Where money went", icon: "reports" },
     ]},
   ];
 
@@ -5646,6 +6405,10 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
           {tab === "arrears" && <Arrears roster={roster} onStatement={setStatementFor} />}
 
           {tab === "roll" && <FeeRollPicker roster={roster} onPrint={setRoll} />}
+
+          {tab === "spend" && <SpendRecord roster={roster} who={who} onVoucher={() => setSpendKey((k) => k + 1)} />}
+
+          {tab === "spendreport" && <SpendReport roster={roster} refreshKey={spendKey} />}
           {tab === "daybook" && <DayBook roster={roster} onReceipt={setReceipt} />}
         </div>
       </div>
