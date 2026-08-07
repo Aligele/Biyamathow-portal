@@ -80,7 +80,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v33 · leave, spending, clash guard";
+const APP_VERSION = "v34 · printable leave records";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -2530,7 +2530,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           )}
           {tab === "memos" && <MemoBoard roster={roster} saveRoster={saveRoster} who={who} teacherId={teacher.id} />}
 
-          {tab === "leave" && <MyLeave who={who} />}
+          {tab === "leave" && <MyLeave who={who} roster={roster} />}
 
           {tab === "signin" && (
             <GeoGate action="signin" label="Signing in">
@@ -5705,8 +5705,9 @@ const LEAVE_TONE = {
 };
 
 // A member of staff applying for, and tracking, their own leave.
-function MyLeave({ who }) {
+function MyLeave({ who, roster }) {
   const [rows, setRows] = useState(null);
+  const [printing, setPrinting] = useState(null);
   const [form, setForm] = useState({ kind: "annual", starts: todayISO(), ends: todayISO(), reason: "", cover: "" });
   const [err, setErr] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
 
@@ -5739,11 +5740,16 @@ function MyLeave({ who }) {
     try { await leaveCancel(id); await load(); } catch (e) { setErr(String(e.message || e)); }
   };
 
+  if (printing) {
+    return <LeaveFormDoc roster={roster} application={printing} onBack={() => setPrinting(null)} />;
+  }
+
   return (
     <div>
       <SectionTitle>Leave</SectionTitle>
       <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
-        Apply here and the head teacher decides. You will see the answer on this screen.
+        Apply here and the head teacher decides. You will see the answer on this screen, and can
+        print the form for your own records.
       </div>
 
       {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
@@ -5831,12 +5837,17 @@ function MyLeave({ who }) {
                   {r.decided_by}: {r.decision_note}
                 </div>
               )}
-              {r.status === "pending" && (
-                <button onClick={() => withdraw(r.id)} style={{ background: "none", border: "none",
-                      color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11, marginTop: 7, cursor: "pointer" }}>
-                  withdraw
+              <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                <button onClick={() => setPrinting(r)} style={{ ...primaryBtn(), padding: "6px 13px", fontSize: 12 }}>
+                  Print this form
                 </button>
-              )}
+                {r.status === "pending" && (
+                  <button onClick={() => withdraw(r.id)} style={{ background: "none", border: "none",
+                        color: "#B84C3E", fontFamily: FONT.mono, fontSize: 11, cursor: "pointer" }}>
+                    withdraw
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -5848,6 +5859,8 @@ function MyLeave({ who }) {
 // The head teacher's queue.
 function LeaveApprovals({ roster }) {
   const [rows, setRows] = useState(null);
+  const [printing, setPrinting] = useState(null);     // one application
+  const [register, setRegister] = useState(false);    // the whole register
   const [notes, setNotes] = useState({});
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(null);
@@ -5866,6 +5879,14 @@ function LeaveApprovals({ roster }) {
   const decided = (rows || []).filter((r) => r.status !== "pending");
   const away = (rows || []).filter((r) => r.status === "approved"
     && todayISO() >= r.starts_on && todayISO() <= r.ends_on);
+
+  if (printing) {
+    return <LeaveFormDoc roster={roster} application={printing} onBack={() => setPrinting(null)} />;
+  }
+  if (register) {
+    return <LeaveRegisterDoc roster={roster} rows={rows || []} from={null} to={null}
+             onBack={() => setRegister(false)} />;
+  }
 
   return (
     <div>
@@ -5890,11 +5911,17 @@ function LeaveApprovals({ roster }) {
       {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
             border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 14 }}>
         <StatCard label="Waiting" value={pending.length} tone={pending.length ? "#C98A2C" : "#3F7A5C"} />
         <StatCard label="Away today" value={away.length} tone={away.length ? "#3B6E8F" : "#3F7A5C"} />
         <StatCard label="Decided" value={decided.length} />
       </div>
+
+      {(rows || []).length > 0 && (
+        <button onClick={() => setRegister(true)} style={{ ...primaryBtn(), marginBottom: 18 }}>
+          Print the leave register
+        </button>
+      )}
 
       {rows === null && <div className="skeleton" style={{ height: 70 }} />}
       {rows && pending.length === 0 && (
@@ -5930,11 +5957,14 @@ function LeaveApprovals({ roster }) {
               <input value={notes[r.id] || ""} onChange={(e) => setNotes({ ...notes, [r.id]: e.target.value })}
                 placeholder="A word back to them (optional)"
                 style={{ ...darkInput(), width: "100%", marginTop: 9, marginBottom: 8, fontSize: 12.5 }} />
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <button onClick={() => decide(r.id, "approved")} disabled={busy === r.id}
                   style={{ ...primaryBtn(), background: "#3F7A5C" }}>Approve</button>
                 <button onClick={() => decide(r.id, "declined")} disabled={busy === r.id}
                   style={{ ...primaryBtn(), background: "#B84C3E" }}>Decline</button>
+                <button onClick={() => setPrinting(r)} style={{ ...backBtnStyle(), color: "#22304A" }}>
+                  print form
+                </button>
               </div>
             </div>
           );
@@ -5957,8 +5987,13 @@ function LeaveApprovals({ roster }) {
                     {r.staff_name} <span style={{ color: "#8A8368" }}>
                       · {(LEAVE_KINDS[r.kind] || {}).label || r.kind}</span>
                   </span>
-                  <span style={{ fontFamily: FONT.mono, fontSize: 10, color: tone.ink }}>
-                    {fmtDate(r.starts_on)}–{fmtDate(r.ends_on)} · {tone.label}
+                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 10, color: tone.ink }}>
+                      {fmtDate(r.starts_on)}–{fmtDate(r.ends_on)} · {tone.label}
+                    </span>
+                    <button onClick={() => setPrinting(r)} style={{ background: "none", border: "none",
+                          color: "#22304A", fontFamily: FONT.mono, fontSize: 10, cursor: "pointer",
+                          textDecoration: "underline" }}>print</button>
                   </span>
                 </div>
               );
@@ -6314,6 +6349,205 @@ function SpendReportDoc({ roster, sum, rows, from, to, collected, onBack }) {
         <div style={docSig}>Bursar</div>
         <div style={docSig}>Head Teacher</div>
         <div style={docSig}>Chair, Management Committee</div>
+      </div>
+    </DocShell>
+  );
+}
+
+
+// ---------- Printable leave form ----------
+// The document that goes in the staff file. Written so it stands on its own:
+// someone reading it in two years should not need the portal to understand
+// what was asked for, what was decided, and by whom.
+function LeaveFormDoc({ roster, application, onBack }) {
+  const r = application;
+  const kind = LEAVE_KINDS[r.kind] || { label: r.kind };
+  const tone = LEAVE_TONE[r.status] || LEAVE_TONE.pending;
+  const backOn = (() => {
+    const d = new Date(r.ends_on);
+    if (isNaN(d)) return "";
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  return (
+    <DocShell title="Leave form" onBack={onBack}>
+      <DocHeader subtitle="Application for Leave of Absence" />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap",
+            gap: 8, marginBottom: 18, fontSize: 12 }}>
+        <div><strong>Reference:</strong> <span style={{ fontFamily: FONT.mono }}>LV/{String(r.id).padStart(4, "0")}</span></div>
+        <div><strong>Applied:</strong> {fmtDate(String(r.applied_at).slice(0, 10))}</div>
+        <div><strong>Printed:</strong> {fmtDate(todayISO())}</div>
+      </div>
+
+      {/* the decision, stated plainly at the top where it will be looked for */}
+      <div style={{ border: `2px solid ${tone.ink}`, borderRadius: 4, padding: "11px 14px",
+            background: tone.bg, marginBottom: 20, textAlign: "center" }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 8.5, letterSpacing: 1.6, color: "#6B6552" }}>
+          STATUS OF THIS APPLICATION
+        </div>
+        <div style={{ fontSize: 17, fontWeight: "bold", color: tone.ink, marginTop: 3,
+              letterSpacing: 0.5, textTransform: "uppercase" }}>
+          {tone.label}
+        </div>
+        {r.decided_by && (
+          <div style={{ fontSize: 10.5, color: "#6B6552", marginTop: 3 }}>
+            by {r.decided_by}{r.decided_at ? ` on ${fmtDate(String(r.decided_at).slice(0, 10))}` : ""}
+          </div>
+        )}
+      </div>
+
+      <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 18 }}>
+        <tbody>
+          {[
+            ["Name of applicant", r.staff_name],
+            ["Kind of leave", kind.label],
+            ["First day of absence", fmtDate(r.starts_on)],
+            ["Last day of absence", fmtDate(r.ends_on)],
+            ["Number of days", `${r.days} day${r.days === 1 ? "" : "s"}`],
+            ["Expected back at work", backOn ? fmtDate(backOn) : "—"],
+            ["Cover arranged with", r.cover_by || "— none recorded —"],
+          ].map(([k, v]) => (
+            <tr key={k}>
+              <td style={{ ...docTd, width: "42%", background: "#F5F1E6", fontWeight: 600, fontSize: 11 }}>{k}</td>
+              <td style={{ ...docTd, fontSize: 11.5,
+                    color: v && String(v).startsWith("—") ? "#B84C3E" : "#22304A" }}>{v}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div style={{ fontWeight: "bold", marginBottom: 6, fontSize: 12 }}>Reason given</div>
+      <div style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "11px 13px",
+            background: "#FBF9F3", minHeight: 52, fontSize: 11.5, lineHeight: 1.6, marginBottom: 18 }}>
+        {r.reason || "— no reason recorded —"}
+      </div>
+
+      {r.decision_note && (
+        <>
+          <div style={{ fontWeight: "bold", marginBottom: 6, fontSize: 12 }}>Note from the head teacher</div>
+          <div style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "11px 13px",
+                background: "#FBF9F3", fontSize: 11.5, lineHeight: 1.6, marginBottom: 18 }}>
+            {r.decision_note}
+          </div>
+        </>
+      )}
+
+      <div style={{ fontSize: 10, color: "#6B6552", lineHeight: 1.55, marginBottom: 26,
+            borderTop: "1px solid #E4DFCF", paddingTop: 10 }}>
+        This form records an application made through the school portal and the decision taken on it.
+        {r.status === "approved" && " The applicant is authorised to be absent for the days shown above."}
+        {r.status === "pending" && " No decision has yet been taken. The applicant should not be absent until it has."}
+        {r.status === "declined" && " The application was not granted. The applicant is expected at work as normal."}
+        {" "}File a copy in the staff record.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 20 }}>
+        <div style={docSig}>Applicant</div>
+        <div style={docSig}>Head Teacher</div>
+      </div>
+    </DocShell>
+  );
+}
+
+// ---------- Printable leave register ----------
+// Every application over a period, for the school file and for TSC returns.
+function LeaveRegisterDoc({ roster, rows, from, to, onBack }) {
+  const total = rows.reduce((a, r) => a + (r.status === "approved" ? r.days : 0), 0);
+  const byKind = rows.filter((r) => r.status === "approved")
+    .reduce((acc, r) => { acc[r.kind] = (acc[r.kind] || 0) + r.days; return acc; }, {});
+
+  return (
+    <DocShell title="Leave register" onBack={onBack}>
+      <DocHeader subtitle="Register of Staff Leave" />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap",
+            gap: 8, marginBottom: 16, fontSize: 12 }}>
+        <div><strong>Period:</strong> {from ? fmtDate(from) : "from the beginning"} — {to ? fmtDate(to) : "today"}</div>
+        <div><strong>Applications:</strong> {rows.length}</div>
+        <div><strong>Printed:</strong> {fmtDate(todayISO())}</div>
+      </div>
+
+      {Object.keys(byKind).length > 0 && (
+        <>
+          <div style={{ fontWeight: "bold", marginBottom: 6, fontSize: 12 }}>Days approved, by kind</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(92px,1fr))",
+                gap: 8, marginBottom: 18 }}>
+            {Object.entries(byKind).sort((a, b) => b[1] - a[1]).map(([k, d]) => (
+              <div key={k} style={{ border: "1px solid #E4DFCF", borderRadius: 4, padding: "8px 9px",
+                    background: "#F5F1E6", textAlign: "center" }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 7.5, color: "#8A8368", letterSpacing: 0.8 }}>
+                  {((LEAVE_KINDS[k] || {}).label || k).toUpperCase()}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: "bold", marginTop: 2,
+                      color: (LEAVE_KINDS[k] || {}).ink || "#22304A" }}>{d}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {rows.length === 0 ? (
+        <div style={{ padding: "18px 14px", border: "1px dashed #B8B2A0", borderRadius: 4,
+              background: "#F5F1E6", textAlign: "center", fontSize: 12.5, color: "#6B6552" }}>
+          No leave was applied for in this period.
+        </div>
+      ) : (
+        <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 18 }}>
+          <thead>
+            <tr>
+              <th style={{ ...docTh, width: 24 }}>#</th>
+              <th style={docTh}>Name</th>
+              <th style={docTh}>Kind</th>
+              <th style={{ ...docTh, width: 56 }}>From</th>
+              <th style={{ ...docTh, width: 56 }}>To</th>
+              <th style={{ ...docTh, textAlign: "center", width: 34 }}>Days</th>
+              <th style={docTh}>Cover</th>
+              <th style={{ ...docTh, textAlign: "center", width: 54 }}>Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const tone = LEAVE_TONE[r.status] || LEAVE_TONE.pending;
+              return (
+                <tr key={r.id}>
+                  <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 9, color: "#8A8368" }}>{i + 1}</td>
+                  <td style={{ ...docTd, fontSize: 11, fontWeight: 600 }}>{r.staff_name}</td>
+                  <td style={{ ...docTd, fontSize: 10 }}>{(LEAVE_KINDS[r.kind] || {}).label || r.kind}</td>
+                  <td style={{ ...docTd, fontSize: 9.5 }}>{fmtDate(r.starts_on)}</td>
+                  <td style={{ ...docTd, fontSize: 9.5 }}>{fmtDate(r.ends_on)}</td>
+                  <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontSize: 10.5 }}>{r.days}</td>
+                  <td style={{ ...docTd, fontSize: 9.5, color: r.cover_by ? "#22304A" : "#B84C3E" }}>
+                    {r.cover_by || "none"}
+                  </td>
+                  <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontSize: 8,
+                        fontWeight: 700, color: tone.ink }}>
+                    {r.status.toUpperCase()}
+                  </td>
+                </tr>
+              );
+            })}
+            <tr>
+              <td colSpan={5} style={{ ...docTd, borderTop: "2px solid #22304A", fontWeight: "bold", fontSize: 11 }}>
+                Total days approved
+              </td>
+              <td style={{ ...docTd, borderTop: "2px solid #22304A", textAlign: "center",
+                    fontFamily: FONT.mono, fontWeight: 700 }}>{total}</td>
+              <td colSpan={2} style={{ ...docTd, borderTop: "2px solid #22304A" }}></td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ fontSize: 10, color: "#6B6552", lineHeight: 1.55, marginBottom: 24 }}>
+        A record of leave applied for and decided through the school portal. Where no cover is shown,
+        none was recorded at the time of application.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 20 }}>
+        <div style={docSig}>Head Teacher</div>
+        <div style={docSig}>Official School Stamp</div>
       </div>
     </DocShell>
   );
