@@ -336,3 +336,25 @@ export const expenseAdd = (e) => rpc("expense_add", {
 export const expenseList    = (from, to) => rpc("expense_list",    { p_token: getToken(), p_from: from || null, p_to: to || null });
 export const expenseSummary = (from, to) => rpc("expense_summary", { p_token: getToken(), p_from: from || null, p_to: to || null });
 export const expenseDelete  = (id, reason) => rpc("expense_delete", { p_token: getToken(), p_id: id, p_reason: reason });
+
+// ---------- holiday work ----------
+export const assignmentSave = (a) => rpc("assignment_save", {
+  p_token: getToken(), p_id: a.id || null, p_class: a.classId, p_subject: a.subject,
+  p_title: a.title, p_instructions: a.instructions || null, p_body: a.body,
+  p_due: a.due || null, p_published: a.published !== false,
+});
+export const assignmentDelete = (id) => rpc("assignment_delete", { p_token: getToken(), p_id: id });
+export const assignmentsForClass = (classId) =>
+  rpc("assignments_for_class", { p_token: getToken(), p_class: classId || null });
+export const submissionsFor = (assignmentId) =>
+  rpc("submissions_for", { p_token: getToken(), p_assignment: assignmentId });
+export const submissionMark = (id, score, outOf, comment) =>
+  rpc("submission_mark", { p_token: getToken(), p_id: id, p_score: score, p_out_of: outOf, p_comment: comment });
+
+// The family side carries the admission number and PIN each time rather than a
+// session, so a household can only ever reach its own child's work.
+export const assignmentsForStudent = (adm, pin) =>
+  rpc("assignments_for_student", { p_adm: adm, p_pin: pin });
+export const submissionSend = (adm, pin, assignmentId, answer, photo) =>
+  rpc("submission_send", { p_adm: adm, p_pin: pin, p_assignment: assignmentId,
+                           p_answer: answer || null, p_photo: photo || null });

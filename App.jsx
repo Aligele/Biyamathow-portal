@@ -9,6 +9,8 @@ import {
   healthCheck, backupsList, backupNow, backupRestore, staffResetPassword,
   geofenceGet, geofenceSet, locationRecent, locationRecord, currentPosition, metresBetween,
   leaveApply, leaveList, leaveDecide, leaveCancel, leaveToday,
+  assignmentSave, assignmentDelete, assignmentsForClass, submissionsFor, submissionMark,
+  assignmentsForStudent, submissionSend,
   expenseCategories, expenseAdd, expenseList, expenseSummary, expenseDelete,
   mpesaClaim, mpesaLookup, mpesaRecent, mpesaRelease,
 } from "./store.js";
@@ -80,7 +82,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v35 · approval alerts";
+const APP_VERSION = "v36 · holiday work";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -872,7 +874,9 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
     try {
       const payload = await parentLookup(adm.trim(), pin.trim());
       if (!payload) { setErr("Admission number or PIN not recognised."); setBusy(false); return; }
-      onParentSignedIn(payload);
+      // kept so the family can fetch and send holiday work, which checks the
+      // pair on every call rather than trusting a session
+      onParentSignedIn({ ...payload, _adm: adm.trim(), _pin: pin.trim() });
     } catch (e) {
       setErr(isOffline()
         ? "You are offline — a connection is needed to view results."
@@ -1242,6 +1246,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
       { key: "reports", label: "Reports", icon: "reports" },
       { key: "year end", label: "End of year", icon: "yearend" },
       { key: "history", label: "History", icon: "reports" },
+      { key: "holidaywork", label: "Holiday work", icon: "subjects" },
     ]},
     { title: "SYSTEM", items: [
       { key: "health", label: "System health", icon: "approvals" },
@@ -1635,6 +1640,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "year end" && <YearEnd roster={roster} saveRoster={saveRoster} />}
 
           {tab === "history" && <History roster={roster} />}
+
+          {tab === "holidaywork" && <AdminHolidayWork roster={roster} />}
 
           {tab === "health" && <SystemHealth roster={roster} />}
 
@@ -2540,6 +2547,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
         section={{ memos: "Memos", leave: "Leave", signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
                    reportcards: "Report cards", timetable: "My timetable",
                    register: "Register a pupil", photos: "Pupil photos", examtt: "Exam timetable",
+                   holiday: "Holiday work",
                    discipline: "Discipline report" }[tab] || tab}
         onMenu={() => setMenuOpen(true)} onExit={onExit} />
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} active={tab} onPick={setTab}
@@ -2554,6 +2562,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           { title: "ACADEMICS", items: [
             { key: "results", label: "Exam results", icon: "marks" },
             { key: "reportcards", label: "Print report cards", icon: "reports" },
+            { key: "holiday", label: "Holiday work", icon: "subjects" },
             { key: "timetable", label: "My timetable", icon: "timetable" },
             { key: "examtt", label: "Exam timetable", icon: "marks" },
           ]},
@@ -2596,6 +2605,8 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           {tab === "discipline" && <DisciplineReport roster={roster} saveRoster={saveRoster} classId={classId} actorName={teacher.name} role="teacher" />}
 
           {tab === "reportcards" && <TeacherReportCards roster={roster} classId={classId} teacher={teacher} />}
+
+          {tab === "holiday" && <HolidayWork roster={roster} teacher={teacher} classId={classId} />}
 
           {tab === "timetable" && <MyTimetable roster={roster} teacher={teacher} />}
 
@@ -2679,6 +2690,7 @@ function TeacherAttendance({ roster, saveRoster, classId, students }) {
 function ParentView({ payload, onExit }) {
   const [term, setTerm] = useState(DEFAULT_TERM);
   const [printDoc, setPrintDoc] = useState(null);
+  const [showWork, setShowWork] = useState(false);
   if (!payload) return <div style={{ color: "#F5F3EE", padding: 30 }}>Session ended. <button onClick={onExit} style={backBtnStyle()}>go back</button></div>;
 
   const student = payload.student;
@@ -2743,7 +2755,11 @@ function ParentView({ payload, onExit }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+            <button onClick={() => setShowWork(!showWork)}
+              style={{ ...primaryBtn(), background: showWork ? "#22304A" : "#C98A2C" }}>
+              {showWork ? "Hide holiday work" : "Holiday work"}
+            </button>
             <button onClick={() => setPrintDoc("invoice")} style={primaryBtn()}>Fee invoice</button>
             <button onClick={() => setPrintDoc("statement")} style={{ ...primaryBtn(), background: "#22304A" }}>Fee statement</button>
             <button onClick={() => setPrintDoc("timetable")} style={{ ...primaryBtn(), background: "#3F7A5C" }}>Class timetable</button>
@@ -2751,6 +2767,12 @@ function ParentView({ payload, onExit }) {
               <button onClick={() => setPrintDoc("examtt")} style={{ ...primaryBtn(), background: "#22304A" }}>Exam timetable</button>
             )}
           </div>
+
+          {showWork && payload._adm && (
+            <div className="enter" style={{ marginBottom: 22, paddingTop: 4 }}>
+              <FamilyWork roster={roster} payload={payload} adm={payload._adm} pin={payload._pin} />
+            </div>
+          )}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
             <SectionTitle>Results — {term}</SectionTitle>
@@ -6656,6 +6678,660 @@ function PendingAlerts({ alerts, total, onGo }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+
+// ---------- Holiday work: the teacher's side ----------
+function HolidayWork({ roster, teacher, classId }) {
+  const [rows, setRows] = useState(null);
+  const [editing, setEditing] = useState(null);      // null | {} | existing row
+  const [marking, setMarking] = useState(null);      // an assignment being marked
+  const [printing, setPrinting] = useState(null);    // an assignment being printed
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    try { setRows(await assignmentsForClass(classId) || []); }
+    catch (e) { setErr(String(e.message || e)); setRows([]); }
+  };
+  useEffect(() => { load(); }, [classId]);
+
+  if (printing) return <WorksheetDoc roster={roster} work={printing} onBack={() => setPrinting(null)} />;
+  if (marking)  return <MarkSubmissions roster={roster} work={marking}
+                          onBack={() => { setMarking(null); load(); }} />;
+  if (editing)  return <WorkEditor roster={roster} teacher={teacher} classId={classId} work={editing}
+                          onDone={() => { setEditing(null); load(); }} />;
+
+  return (
+    <div>
+      <SectionTitle>Holiday work</SectionTitle>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14, lineHeight: 1.6 }}>
+        Set work for the holidays. Families read it on the phone or print it, and send the answers
+        back — typed, or as a photograph of the exercise book.
+      </div>
+
+      {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+
+      <button onClick={() => setEditing({})} style={{ ...primaryBtn(), marginBottom: 18 }}>
+        Set new work
+      </button>
+
+      {rows === null && <div className="skeleton" style={{ height: 70 }} />}
+      {rows && rows.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>
+          No holiday work set for this class yet.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {(rows || []).map((w) => {
+          const total = roster.students.filter((s) => s.classId === w.class_id).length;
+          const overdue = w.due_on && w.due_on < todayISO();
+          return (
+            <div key={w.id} style={{ padding: "12px 14px", borderRadius: 5, background: "#F5F1E6",
+                  border: "1px solid #E4DFCF",
+                  borderLeft: `4px solid ${w.published ? "#3F7A5C" : "#8A8368"}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#22304A" }}>
+                  {w.title}
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: w.published ? "#3F7A5C" : "#8A8368" }}>
+                  {w.published ? "SENT TO FAMILIES" : "NOT SENT"}
+                </span>
+              </div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", marginTop: 3 }}>
+                {w.subject} · set {fmtDate(w.set_on)}
+                {w.due_on && <span style={{ color: overdue ? "#B84C3E" : "#6B6552" }}> · due {fmtDate(w.due_on)}</span>}
+              </div>
+
+              {/* how many have answered — the thing a teacher looks for */}
+              <div style={{ marginTop: 9 }}>
+                <div style={{ height: 6, background: "#EFEADC", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", background: "#3F7A5C",
+                        width: `${total ? Math.round((w.submitted / total) * 100) : 0}%` }} />
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6B6552", marginTop: 4 }}>
+                  {w.submitted} of {total} answered · {w.marked} marked
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 11, flexWrap: "wrap" }}>
+                <button onClick={() => setMarking(w)} style={{ ...primaryBtn(), padding: "6px 13px", fontSize: 12,
+                      background: w.submitted > w.marked ? "#C98A2C" : "#22304A" }}>
+                  {w.submitted > w.marked ? `Mark ${w.submitted - w.marked} waiting` : "See answers"}
+                </button>
+                <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#22304A" }}>print worksheet</button>
+                <button onClick={() => setEditing(w)} style={{ ...backBtnStyle(), color: "#22304A" }}>edit</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Writing or editing a piece of work.
+function WorkEditor({ roster, teacher, classId, work, onDone }) {
+  const isNew = !work.id;
+  const [f, setF] = useState({
+    subject: work.subject || (subjectsForClass(roster, classId)[0] || ""),
+    title: work.title || "",
+    instructions: work.instructions || "",
+    body: work.body || "",
+    due: work.due_on || "",
+    published: work.published !== false,
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const save = async () => {
+    if (!f.title.trim()) return setErr("Give the work a title.");
+    if (!f.body.trim()) return setErr("Write the questions.");
+    setBusy(true); setErr("");
+    try {
+      await assignmentSave({ id: work.id, classId, subject: f.subject, title: f.title,
+        instructions: f.instructions, body: f.body, due: f.due || null, published: f.published });
+      onDone();
+    } catch (e) { setErr(String(e.message || e).replace(/^assignment_save \d+: /, "")); setBusy(false); }
+  };
+
+  const remove = async () => {
+    if (!window.confirm("Delete this work? Any answers already sent will go with it.")) return;
+    setBusy(true);
+    try { await assignmentDelete(work.id); onDone(); }
+    catch (e) { setErr(String(e.message || e)); setBusy(false); }
+  };
+
+  return (
+    <div>
+      <button onClick={onDone} style={{ ...backBtnStyle(), color: "#22304A", marginBottom: 12 }}>← back</button>
+      <SectionTitle>{isNew ? "Set new work" : "Edit work"}</SectionTitle>
+
+      {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+        <select value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })}
+          style={{ ...darkInput(), flex: 1, minWidth: 150 }}>
+          {subjectsForClass(roster, classId).map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <input type="date" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value })}
+          style={{ ...darkInput(), minWidth: 140 }} />
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8368", marginTop: -4, marginBottom: 11 }}>
+        The date is when the work should be handed in.
+      </div>
+
+      <input value={f.title} onChange={(e) => { setF({ ...f, title: e.target.value }); setErr(""); }}
+        placeholder="Title, e.g. Holiday revision — multiplication"
+        style={{ ...darkInput(), width: "100%", marginBottom: 9 }} />
+
+      <textarea value={f.instructions} onChange={(e) => setF({ ...f, instructions: e.target.value })}
+        placeholder="Instructions to the pupil (optional) — e.g. Do all the questions in your exercise book."
+        style={{ ...darkInput(), width: "100%", height: 58, resize: "vertical", marginBottom: 9 }} />
+
+      <textarea value={f.body} onChange={(e) => { setF({ ...f, body: e.target.value }); setErr(""); }}
+        placeholder={"The questions. Put each on its own line:\n\n1. 7 x 8 =\n2. 9 x 6 =\n3. Write three sentences about the rains."}
+        style={{ ...darkInput(), width: "100%", height: 190, resize: "vertical",
+                 marginBottom: 11, fontFamily: FONT.mono, fontSize: 13, lineHeight: 1.65 }} />
+
+      <button onClick={() => setF({ ...f, published: !f.published })}
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+          padding: "10px 12px", borderRadius: 4, cursor: "pointer", marginBottom: 13,
+          background: f.published ? "#E4F0E8" : "#F5F1E6",
+          border: `1px solid ${f.published ? "#3F7A5C" : "#E4DFCF"}` }}>
+        <span style={{ width: 17, height: 17, borderRadius: 3, flex: "0 0 17px",
+          border: `1.5px solid ${f.published ? "#3F7A5C" : "#B8B2A0"}`,
+          background: f.published ? "#3F7A5C" : "transparent", color: "#fff",
+          fontSize: 12, lineHeight: "15px", textAlign: "center" }}>{f.published ? "✓" : ""}</span>
+        <span>
+          <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>
+            Send this to families
+          </span>
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 2 }}>
+            {f.published ? "Parents can see it as soon as you save" : "Kept as a draft — nobody sees it yet"}
+          </div>
+        </span>
+      </button>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={save} disabled={busy} style={{ ...primaryBtn(), opacity: busy ? 0.5 : 1 }}>
+          {busy ? "Saving…" : isNew ? "Save and send" : "Save changes"}
+        </button>
+        {!isNew && (
+          <button onClick={remove} disabled={busy} style={{ ...primaryBtn(), background: "#B84C3E" }}>
+            Delete
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Marking what came back ----------
+function MarkSubmissions({ roster, work, onBack }) {
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [marks, setMarks] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    try { setRows(await submissionsFor(work.id) || []); }
+    catch (e) { setErr(String(e.message || e)); setRows([]); }
+  };
+  useEffect(() => { load(); }, [work.id]);
+
+  const classPupils = roster.students.filter((s) => s.classId === work.class_id);
+  const answered = new Set((rows || []).map((r) => r.student_id));
+  const missing = classPupils.filter((s) => !answered.has(s.id));
+
+  const save = async (r) => {
+    const m = marks[r.id] || {};
+    setBusy(r.id); setErr("");
+    try {
+      await submissionMark(r.id, m.score === "" ? null : Number(m.score),
+        m.outOf === "" ? null : Number(m.outOf), m.comment || "");
+      await load(); setOpen(null);
+    } catch (e) { setErr(String(e.message || e)); }
+    setBusy(null);
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{ ...backBtnStyle(), color: "#22304A", marginBottom: 12 }}>← back</button>
+      <SectionTitle>{work.title}</SectionTitle>
+      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", marginBottom: 14 }}>
+        {work.subject} · {classNameOf(roster, work.class_id)}
+        {work.due_on ? ` · due ${fmtDate(work.due_on)}` : ""}
+      </div>
+
+      {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(100px,1fr))", gap: 10, marginBottom: 16 }}>
+        <StatCard label="Answered" value={(rows || []).length} tone="#3F7A5C" />
+        <StatCard label="Marked" value={(rows || []).filter((r) => r.marked).length} />
+        <StatCard label="Not yet" value={missing.length} tone={missing.length ? "#C98A2C" : "#3F7A5C"} />
+      </div>
+
+      {rows === null && <div className="skeleton" style={{ height: 70 }} />}
+      {rows && rows.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368", marginBottom: 16 }}>
+          Nobody has sent answers yet.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 7, marginBottom: 20 }}>
+        {(rows || []).map((r) => {
+          const m = marks[r.id] || { score: r.score ?? "", outOf: r.out_of ?? 10, comment: r.comment ?? "" };
+          const isOpen = open === r.id;
+          return (
+            <div key={r.id} style={{ borderRadius: 5, border: "1px solid #E4DFCF", overflow: "hidden",
+                  borderLeft: `4px solid ${r.marked ? "#3F7A5C" : "#C98A2C"}` }}>
+              <button onClick={() => { setOpen(isOpen ? null : r.id); setMarks({ ...marks, [r.id]: m }); }}
+                style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 9,
+                  flexWrap: "wrap", padding: "11px 13px", border: "none", textAlign: "left",
+                  background: "#F5F1E6", cursor: "pointer" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#22304A" }}>
+                  {r.student_name || r.student_id}
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 11,
+                      color: r.marked ? "#3F7A5C" : "#C98A2C" }}>
+                  {r.marked ? `${r.score}/${r.out_of}` : "not marked"} {isOpen ? "▾" : "▸"}
+                </span>
+              </button>
+
+              {isOpen && (
+                <div style={{ padding: "12px 13px", background: "#FBF9F3" }}>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#8A8368",
+                        letterSpacing: 1, marginBottom: 6 }}>
+                    SENT {new Date(r.submitted_at).toLocaleString(undefined,
+                      { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </div>
+
+                  {r.answer_text && (
+                    <div style={{ background: "#fff", border: "1px solid #E4DFCF", borderRadius: 4,
+                          padding: "10px 12px", fontFamily: FONT.body, fontSize: 13, color: "#22304A",
+                          whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 10 }}>
+                      {r.answer_text}
+                    </div>
+                  )}
+                  {r.photo && (
+                    <img src={r.photo} alt="the pupil's work"
+                      style={{ width: "100%", borderRadius: 4, border: "1px solid #E4DFCF", marginBottom: 10 }} />
+                  )}
+
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+                    <input type="number" inputMode="numeric" value={m.score}
+                      onChange={(e) => setMarks({ ...marks, [r.id]: { ...m, score: e.target.value } })}
+                      placeholder="score" style={{ ...darkInput(), width: 82, fontFamily: FONT.mono }} />
+                    <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>out of</span>
+                    <input type="number" inputMode="numeric" value={m.outOf}
+                      onChange={(e) => setMarks({ ...marks, [r.id]: { ...m, outOf: e.target.value } })}
+                      style={{ ...darkInput(), width: 82, fontFamily: FONT.mono }} />
+                  </div>
+                  <textarea value={m.comment}
+                    onChange={(e) => setMarks({ ...marks, [r.id]: { ...m, comment: e.target.value } })}
+                    placeholder="A word back to the pupil — what was good, what to look at again"
+                    style={{ ...darkInput(), width: "100%", height: 60, resize: "vertical", marginBottom: 9 }} />
+                  <button onClick={() => save(r)} disabled={busy === r.id}
+                    style={{ ...primaryBtn(), background: "#3F7A5C" }}>
+                    {busy === r.id ? "Saving…" : r.marked ? "Update the mark" : "Save the mark"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {missing.length > 0 && (
+        <>
+          <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#22304A", marginBottom: 7 }}>
+            Still to send ({missing.length})
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {missing.map((s) => (
+              <span key={s.id} style={{ fontFamily: FONT.body, fontSize: 12, color: "#B84C3E",
+                    background: "#F7E4E1", border: "1px solid #E8C4BD", borderRadius: 12,
+                    padding: "4px 11px" }}>{s.name}</span>
+            ))}
+          </div>
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8368", marginTop: 8, lineHeight: 1.5 }}>
+            Some families have no smartphone. Send these pupils home with a printed sheet, and accept
+            the exercise book when school returns.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- The printable worksheet ----------
+// Made to be photocopied: generous line spacing, room to write, and the
+// school's name at the top so a loose sheet is identifiable.
+function WorksheetDoc({ roster, work, onBack }) {
+  const lines = String(work.body || "").split("\n");
+
+  return (
+    <DocShell title="Worksheet" onBack={onBack}>
+      <DocHeader subtitle="Holiday Work" />
+
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap",
+            gap: 8, marginBottom: 14, fontSize: 12 }}>
+        <div><strong>Class:</strong> {classNameOf(roster, work.class_id)}</div>
+        <div><strong>Subject:</strong> {work.subject}</div>
+        {work.due_on && <div><strong>Hand in by:</strong> {fmtDate(work.due_on)}</div>}
+      </div>
+
+      {/* the pupil writes their own name — one sheet photocopies for the class */}
+      <div style={{ display: "flex", gap: 22, marginBottom: 16, fontSize: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 170, borderBottom: "1px solid #22304A", paddingBottom: 2 }}>
+          Name: 
+        </div>
+        <div style={{ width: 120, borderBottom: "1px solid #22304A", paddingBottom: 2 }}>
+          Adm No: 
+        </div>
+      </div>
+
+      <div style={{ fontSize: 15, fontWeight: "bold", marginBottom: 8 }}>{work.title}</div>
+
+      {work.instructions && (
+        <div style={{ border: "1px solid #E4DFCF", background: "#F5F1E6", borderRadius: 4,
+              padding: "9px 12px", fontSize: 11.5, marginBottom: 16, lineHeight: 1.55 }}>
+          {work.instructions}
+        </div>
+      )}
+
+      {/* each line gets room underneath to write the answer */}
+      <div style={{ marginBottom: 22 }}>
+        {lines.map((line, i) => {
+          const blank = line.trim() === "";
+          if (blank) return <div key={i} style={{ height: 10 }} />;
+          const isQuestion = /^\s*\d+[\.\)]/.test(line);
+          return (
+            <div key={i} style={{ marginBottom: isQuestion ? 4 : 8 }}>
+              <div style={{ fontSize: 12.5, lineHeight: 1.6, fontWeight: isQuestion ? 600 : 400 }}>
+                {line}
+              </div>
+              {isQuestion && (
+                <div style={{ borderBottom: "1px dotted #B8B2A0", height: 26, marginTop: 2 }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ borderTop: "1px solid #E4DFCF", paddingTop: 10, fontSize: 10,
+            color: "#6B6552", lineHeight: 1.55, marginBottom: 20 }}>
+        Work set by {work.set_by} on {fmtDate(work.set_on)}.
+        Answers may be sent through the school portal — typed, or as a photograph of this sheet —
+        or handed in when school returns.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 16 }}>
+        <div style={docSig}>Pupil</div>
+        <div style={docSig}>Parent or Guardian</div>
+      </div>
+    </DocShell>
+  );
+}
+
+
+// ---------- Holiday work: the family's side ----------
+function FamilyWork({ roster, payload, adm, pin }) {
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [photos, setPhotos] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [printing, setPrinting] = useState(null);
+  const fileRefs = useRef({});
+
+  const load = async () => {
+    try { setRows(await assignmentsForStudent(adm, pin) || []); }
+    catch (e) { setErr(String(e.message || e)); setRows([]); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const pick = async (id, file) => {
+    if (!file) return;
+    setBusy(id); setErr("");
+    try {
+      // A photograph of a page needs to be readable, not beautiful. 1100px on
+      // the long edge keeps handwriting legible while staying small enough to
+      // send over a weak connection.
+      const small = await shrinkPage(file);
+      setPhotos({ ...photos, [id]: small });
+    } catch (e) { setErr(String(e.message || e)); }
+    setBusy(null);
+  };
+
+  const send = async (w) => {
+    const text = answers[w.id] || "";
+    const photo = photos[w.id] || "";
+    if (!text.trim() && !photo) {
+      return setErr("Write the answers, or take a photograph of the page.");
+    }
+    setBusy(w.id); setErr(""); setMsg("");
+    try {
+      await submissionSend(adm, pin, w.id, text, photo);
+      setMsg("Sent to the teacher.");
+      setPhotos({ ...photos, [w.id]: "" });
+      setAnswers({ ...answers, [w.id]: "" });
+      setOpen(null);
+      await load();
+    } catch (e) { setErr(String(e.message || e).replace(/^submission_send \d+: /, "")); }
+    setBusy(null);
+  };
+
+  if (printing) {
+    return <WorksheetDoc roster={roster}
+      work={{ ...printing, class_id: payload.classId, set_on: printing.set_on }}
+      onBack={() => setPrinting(null)} />;
+  }
+
+  const waiting = (rows || []).filter((w) => !w.submitted_at);
+
+  return (
+    <div>
+      <SectionTitle>Holiday work</SectionTitle>
+
+      {rows === null && <div className="skeleton" style={{ height: 70 }} />}
+      {rows && rows.length === 0 && (
+        <div style={{ padding: "13px 15px", background: "#F5F1E6", border: "1px solid #E4DFCF",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#6B6552" }}>
+          No holiday work has been set.
+        </div>
+      )}
+
+      {waiting.length > 0 && (
+        <div style={{ padding: "10px 13px", borderRadius: 4, background: "#F5E8DC",
+              border: "1px solid #E8CBA0", fontFamily: FONT.body, fontSize: 12.5,
+              color: "#22304A", marginBottom: 14 }}>
+          <strong>{waiting.length} piece{waiting.length === 1 ? "" : "s"} of work</strong> still to send.
+        </div>
+      )}
+
+      {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+      {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E4F0E8",
+            border: "1px solid #B8D9C4", fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", marginBottom: 12 }}>{msg}</div>}
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {(rows || []).map((w) => {
+          const isOpen = open === w.id;
+          const overdue = w.due_on && w.due_on < todayISO() && !w.submitted_at;
+          const edge = w.marked ? "#3F7A5C" : w.submitted_at ? "#3B6E8F" : overdue ? "#B84C3E" : "#C98A2C";
+          return (
+            <div key={w.id} style={{ borderRadius: 5, border: "1px solid #E4DFCF",
+                  overflow: "hidden", borderLeft: `4px solid ${edge}` }}>
+              <div style={{ padding: "12px 14px", background: "#F5F1E6" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#22304A" }}>
+                    {w.title}
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 9.5, fontWeight: 700, color: edge }}>
+                    {w.marked ? `MARKED ${w.score}/${w.out_of}`
+                      : w.submitted_at ? "SENT" : overdue ? "OVERDUE" : "TO DO"}
+                  </span>
+                </div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552", marginTop: 3 }}>
+                  {w.subject} · set by {w.set_by}
+                  {w.due_on && <span style={{ color: overdue ? "#B84C3E" : "#6B6552" }}> · hand in by {fmtDate(w.due_on)}</span>}
+                </div>
+
+                {w.instructions && (
+                  <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A",
+                        marginTop: 8, lineHeight: 1.55 }}>{w.instructions}</div>
+                )}
+
+                {/* the teacher's comment matters most — show it without a tap */}
+                {w.marked && w.comment && (
+                  <div style={{ marginTop: 9, padding: "9px 11px", borderRadius: 4,
+                        background: "#E4F0E8", border: "1px solid #B8D9C4",
+                        fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", lineHeight: 1.55 }}>
+                    <strong>{w.marked_by}:</strong> {w.comment}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 8, marginTop: 11, flexWrap: "wrap" }}>
+                  <button onClick={() => setOpen(isOpen ? null : w.id)}
+                    style={{ ...primaryBtn(), padding: "7px 14px", fontSize: 12.5 }}>
+                    {isOpen ? "Close" : w.submitted_at ? "See the work" : "Do the work"}
+                  </button>
+                  <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#22304A" }}>
+                    print it
+                  </button>
+                </div>
+              </div>
+
+              {isOpen && (
+                <div style={{ padding: "13px 14px", background: "#FBF9F3" }}>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 13, color: "#22304A",
+                        whiteSpace: "pre-wrap", lineHeight: 1.75, background: "#fff",
+                        border: "1px solid #E4DFCF", borderRadius: 4, padding: "12px 13px",
+                        marginBottom: 14 }}>
+                    {w.body}
+                  </div>
+
+                  {w.submitted_at && (
+                    <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#3F7A5C", marginBottom: 10 }}>
+                      Sent on {fmtDate(String(w.submitted_at).slice(0, 10))}.
+                      {!w.marked && " The teacher has not marked it yet."}
+                      {" "}You can send it again if you want to change your answers.
+                    </div>
+                  )}
+
+                  <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2,
+                        color: "#8A8368", marginBottom: 7 }}>SEND YOUR ANSWERS</div>
+
+                  <textarea value={answers[w.id] || ""}
+                    onChange={(e) => { setAnswers({ ...answers, [w.id]: e.target.value }); setErr(""); }}
+                    placeholder="Type the answers here…"
+                    style={{ ...darkInput(), width: "100%", height: 110, resize: "vertical",
+                             marginBottom: 9, lineHeight: 1.6 }} />
+
+                  <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 8 }}>
+                    Or photograph the page from the exercise book — that is usually easier.
+                  </div>
+
+                  <input ref={(el) => { fileRefs.current[w.id] = el; }} type="file"
+                    accept="image/*" capture="environment" style={{ display: "none" }}
+                    onChange={(e) => { pick(w.id, e.target.files?.[0]); e.target.value = ""; }} />
+                  <button onClick={() => fileRefs.current[w.id]?.click()} disabled={busy === w.id}
+                    style={{ ...primaryBtn(), background: "#22304A", marginBottom: 10 }}>
+                    {busy === w.id ? "Working…" : photos[w.id] ? "Take another photograph" : "Take a photograph"}
+                  </button>
+
+                  {photos[w.id] && (
+                    <div style={{ marginBottom: 11 }}>
+                      <img src={photos[w.id]} alt="the work"
+                        style={{ width: "100%", borderRadius: 4, border: "1px solid #E4DFCF" }} />
+                      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 5 }}>
+                        Check the writing can be read before sending.
+                      </div>
+                    </div>
+                  )}
+
+                  <button onClick={() => send(w)} disabled={busy === w.id}
+                    style={{ ...primaryBtn(), background: "#3F7A5C", width: "100%",
+                             opacity: busy === w.id ? 0.5 : 1, fontSize: 14.5, padding: "11px" }}>
+                    {busy === w.id ? "Sending…" : "Send to the teacher"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// A photographed page: readable, not beautiful. Long edge to 1100px keeps
+// handwriting legible while staying small enough for a weak connection.
+async function shrinkPage(file, maxEdge = 1100, quality = 0.72) {
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error("Could not read that photograph"));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("That file is not a usable photograph"));
+    i.src = dataUrl;
+  });
+  const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+  const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+
+// Admin sees holiday work across every class, so the head teacher can tell
+// whether work was actually set and whether anyone answered.
+function AdminHolidayWork({ roster }) {
+  const [classId, setClassId] = useState("");
+  if (!classId) {
+    return (
+      <div>
+        <SectionTitle>Holiday work</SectionTitle>
+        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552", marginBottom: 14 }}>
+          Choose a class to see what was set and how many pupils answered.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 9 }}>
+          {roster.classes.map((c) => (
+            <button key={c.id} onClick={() => setClassId(c.id)} className="lift"
+              style={{ textAlign: "left", padding: "13px 14px", borderRadius: 6, cursor: "pointer",
+                background: "#fff", border: "1px solid #E4DFCF", borderLeft: "4px solid #22304A" }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 700, color: "#22304A" }}>{c.name}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368", marginTop: 3 }}>
+                {roster.students.filter((s) => s.classId === c.id).length} pupils
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <button onClick={() => setClassId("")} style={{ ...backBtnStyle(), color: "#22304A", marginBottom: 12 }}>
+        ← all classes
+      </button>
+      <HolidayWork roster={roster} teacher={null} classId={classId} />
     </div>
   );
 }
