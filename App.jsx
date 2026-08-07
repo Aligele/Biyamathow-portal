@@ -11,6 +11,8 @@ import {
   leaveApply, leaveList, leaveDecide, leaveCancel, leaveToday,
   assignmentSave, assignmentDelete, assignmentsForClass, submissionsFor, submissionMark,
   assignmentsForStudent, submissionSend,
+  workFileAdd, workFileDelete, workFilesList, workFilesForStudent,
+  submissionFileAdd, submissionFilesList, downloadWorkFile, readFileAsBase64, storageUsed,
   expenseCategories, expenseAdd, expenseList, expenseSummary, expenseDelete,
   mpesaClaim, mpesaLookup, mpesaRecent, mpesaRelease,
 } from "./store.js";
@@ -82,7 +84,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v36 · holiday work";
+const APP_VERSION = "v37 · file sharing";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -6689,6 +6691,7 @@ function HolidayWork({ roster, teacher, classId }) {
   const [editing, setEditing] = useState(null);      // null | {} | existing row
   const [marking, setMarking] = useState(null);      // an assignment being marked
   const [printing, setPrinting] = useState(null);    // an assignment being printed
+  const [filesFor, setFilesFor] = useState(null);    // which work's files are open
   const [err, setErr] = useState("");
 
   const load = async () => {
@@ -6764,7 +6767,13 @@ function HolidayWork({ roster, teacher, classId }) {
                 </button>
                 <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#22304A" }}>print worksheet</button>
                 <button onClick={() => setEditing(w)} style={{ ...backBtnStyle(), color: "#22304A" }}>edit</button>
+                <button onClick={() => setFilesFor(filesFor === w.id ? null : w.id)}
+                  style={{ ...backBtnStyle(), color: "#22304A" }}>
+                  {filesFor === w.id ? "hide files" : "files"}
+                </button>
               </div>
+
+              {filesFor === w.id && <WorkFiles assignmentId={w.id} />}
             </div>
           );
         })}
@@ -6965,6 +6974,8 @@ function MarkSubmissions({ roster, work, onBack }) {
                     <img src={r.photo} alt="the pupil's work"
                       style={{ width: "100%", borderRadius: 4, border: "1px solid #E4DFCF", marginBottom: 10 }} />
                   )}
+
+                  <SubmissionFiles submissionId={r.id} />
 
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
                     <input type="number" inputMode="numeric" value={m.score}
@@ -7230,6 +7241,8 @@ function FamilyWork({ roster, payload, adm, pin }) {
                     </div>
                   )}
 
+                  <FamilyWorkFiles assignmentId={w.id} adm={adm} pin={pin} />
+
                   <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2,
                         color: "#8A8368", marginBottom: 7 }}>SEND YOUR ANSWERS</div>
 
@@ -7260,6 +7273,8 @@ function FamilyWork({ roster, payload, adm, pin }) {
                       </div>
                     </div>
                   )}
+
+                  <FamilyUploadBack assignmentId={w.id} adm={adm} pin={pin} onSent={load} />
 
                   <button onClick={() => send(w)} disabled={busy === w.id}
                     style={{ ...primaryBtn(), background: "#3F7A5C", width: "100%",
@@ -7332,6 +7347,289 @@ function AdminHolidayWork({ roster }) {
         ← all classes
       </button>
       <HolidayWork roster={roster} teacher={null} classId={classId} />
+      <StoragePanel />
+    </div>
+  );
+}
+
+
+// ---------- Files attached to a piece of work ----------
+const prettyBytes = (n) => n < 1024 ? `${n} B`
+  : n < 1048576 ? `${Math.round(n / 1024)} KB`
+  : `${(n / 1048576).toFixed(1)} MB`;
+
+// A base64 payload is about a third larger than the file it came from.
+const actualSize = (b64Bytes) => prettyBytes(Math.round(b64Bytes * 0.75));
+
+const fileIcon = (name = "", mime = "") => {
+  const ext = name.split(".").pop().toLowerCase();
+  if (mime.startsWith("image/") || ["jpg","jpeg","png","gif","webp"].includes(ext)) return "IMG";
+  if (ext === "pdf") return "PDF";
+  if (["doc","docx"].includes(ext)) return "DOC";
+  if (["xls","xlsx","csv"].includes(ext)) return "XLS";
+  if (["ppt","pptx"].includes(ext)) return "PPT";
+  return "FILE";
+};
+
+// Shown to whoever is looking — a teacher managing files, or a family
+// downloading them.
+function FileList({ files, onDownload, onRemove, busyId, empty = "No files." }) {
+  if (!files) return <div className="skeleton" style={{ height: 42 }} />;
+  if (files.length === 0) {
+    return <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#8A8368" }}>{empty}</div>;
+  }
+  return (
+    <div style={{ display: "grid", gap: 5 }}>
+      {files.map((f) => (
+        <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10,
+              padding: "9px 11px", borderRadius: 4, background: "#fff", border: "1px solid #E4DFCF" }}>
+          <span style={{ fontFamily: FONT.mono, fontSize: 8.5, fontWeight: 700, color: "#fff",
+                background: "#22304A", borderRadius: 3, padding: "3px 5px", flex: "0 0 auto" }}>
+            {fileIcon(f.filename, f.mime || "")}
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {f.filename}
+            </div>
+            <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#8A8368" }}>
+              {actualSize(f.bytes)}{f.uploaded_by ? ` · ${f.uploaded_by}` : ""}
+            </div>
+          </span>
+          <button onClick={() => onDownload(f)} disabled={busyId === f.id}
+            style={{ ...primaryBtn(), padding: "5px 11px", fontSize: 11.5,
+                     opacity: busyId === f.id ? 0.5 : 1 }}>
+            {busyId === f.id ? "…" : "download"}
+          </button>
+          {onRemove && (
+            <button onClick={() => onRemove(f)} style={{ background: "none", border: "none",
+                  color: "#B84C3E", fontFamily: FONT.mono, fontSize: 10.5, cursor: "pointer" }}>
+              remove
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The teacher's file panel on a piece of work.
+function WorkFiles({ assignmentId }) {
+  const [files, setFiles] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+  const ref = useRef(null);
+
+  const load = async () => {
+    try { setFiles(await workFilesList(assignmentId) || []); }
+    catch (e) { setFiles([]); }
+  };
+  useEffect(() => { load(); }, [assignmentId]);
+
+  const pick = async (list) => {
+    setErr(""); setBusy("upload");
+    for (const file of Array.from(list || [])) {
+      try {
+        const f = await readFileAsBase64(file);
+        await workFileAdd(assignmentId, f.name, f.mime, f.data);
+      } catch (e) {
+        setErr(String(e.message || e).replace(/^work_file_add \d+: /, ""));
+        break;
+      }
+    }
+    await load(); setBusy(null);
+  };
+
+  const grab = async (f) => {
+    setBusy(f.id); setErr("");
+    try { await downloadWorkFile(f.id); } catch (e) { setErr(String(e.message || e)); }
+    setBusy(null);
+  };
+
+  const remove = async (f) => {
+    if (!window.confirm(`Remove ${f.filename}?`)) return;
+    try { await workFileDelete(f.id); await load(); } catch (e) { setErr(String(e.message || e)); }
+  };
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #D8D2C2" }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2, color: "#8A8368",
+            marginBottom: 7 }}>FILES FOR THE PUPILS</div>
+
+      {err && <div style={{ padding: "8px 11px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12,
+            color: "#B84C3E", marginBottom: 9, lineHeight: 1.5 }}>{err}</div>}
+
+      <FileList files={files} onDownload={grab} onRemove={remove} busyId={busy}
+        empty="Nothing attached yet." />
+
+      <input ref={ref} type="file" multiple style={{ display: "none" }}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png"
+        onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
+      <button onClick={() => ref.current?.click()} disabled={busy === "upload"}
+        style={{ ...primaryBtn(), background: "#22304A", marginTop: 9, fontSize: 12.5, padding: "7px 14px" }}>
+        {busy === "upload" ? "Uploading…" : "Attach a file"}
+      </button>
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#8A8368", marginTop: 6, lineHeight: 1.5 }}>
+        PDF, Word, Excel, PowerPoint or a picture. Up to 4 MB each, five per piece of work.
+        Keep them small — families pay for every megabyte they download.
+      </div>
+    </div>
+  );
+}
+
+
+// What the teacher attached, for the family to download.
+function FamilyWorkFiles({ assignmentId, adm, pin }) {
+  const [files, setFiles] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    workFilesForStudent(adm, pin, assignmentId)
+      .then((f) => setFiles(f || [])).catch(() => setFiles([]));
+  }, [assignmentId]);
+
+  const grab = async (f) => {
+    setBusy(f.id); setErr("");
+    try { await downloadWorkFile(f.id, adm, pin); }
+    catch (e) { setErr(String(e.message || e)); }
+    setBusy(null);
+  };
+
+  if (files && files.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2,
+            color: "#8A8368", marginBottom: 7 }}>FROM THE TEACHER</div>
+      {err && <div style={{ padding: "8px 11px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12,
+            color: "#B84C3E", marginBottom: 8 }}>{err}</div>}
+      <FileList files={files} onDownload={grab} busyId={busy} />
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#8A8368", marginTop: 6, lineHeight: 1.5 }}>
+        Downloading uses your data. If you are on a weak connection, wait until you have
+        a better signal.
+      </div>
+    </div>
+  );
+}
+
+// The pupil sending a file back — a scan, a photograph, or typed work from a
+// computer.
+function FamilyUploadBack({ assignmentId, adm, pin, onSent }) {
+  const [sent, setSent] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const ref = useRef(null);
+
+  const send = async (list) => {
+    setErr(""); setBusy(true);
+    const done = [];
+    for (const file of Array.from(list || [])) {
+      try {
+        const f = await readFileAsBase64(file);
+        await submissionFileAdd(adm, pin, assignmentId, f.name, f.mime, f.data);
+        done.push(f.name);
+      } catch (e) {
+        setErr(String(e.message || e).replace(/^submission_file_add \d+: /, ""));
+        break;
+      }
+    }
+    if (done.length) { setSent(done); onSent?.(); }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ marginBottom: 11 }}>
+      <input ref={ref} type="file" multiple style={{ display: "none" }}
+        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+        onChange={(e) => { send(e.target.files); e.target.value = ""; }} />
+      <button onClick={() => ref.current?.click()} disabled={busy}
+        style={{ ...primaryBtn(), background: "#6B5B95", width: "100%",
+                 opacity: busy ? 0.5 : 1, marginBottom: 8 }}>
+        {busy ? "Sending the file…" : "Send a file instead"}
+      </button>
+      {err && <div style={{ padding: "8px 11px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12,
+            color: "#B84C3E", marginBottom: 8, lineHeight: 1.5 }}>{err}</div>}
+      {sent && (
+        <div className="enter" style={{ padding: "8px 11px", borderRadius: 4, background: "#E4F0E8",
+              border: "1px solid #B8D9C4", fontFamily: FONT.body, fontSize: 12,
+              color: "#22304A", marginBottom: 8 }}>
+          Sent to the teacher: {sent.join(", ")}
+        </div>
+      )}
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#8A8368", lineHeight: 1.5 }}>
+        A typed document, a scan, or a photograph from a computer. Up to 4 MB each.
+      </div>
+    </div>
+  );
+}
+
+
+// Files a pupil sent back, on the marking screen.
+function SubmissionFiles({ submissionId }) {
+  const [files, setFiles] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    submissionFilesList(submissionId).then((f) => setFiles(f || [])).catch(() => setFiles([]));
+  }, [submissionId]);
+
+  const grab = async (f) => {
+    setBusy(f.id); setErr("");
+    try { await downloadWorkFile(f.id); } catch (e) { setErr(String(e.message || e)); }
+    setBusy(null);
+  };
+
+  if (files && files.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2,
+            color: "#8A8368", marginBottom: 6 }}>FILES SENT BY THE PUPIL</div>
+      {err && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#B84C3E", marginBottom: 7 }}>{err}</div>}
+      <FileList files={files} onDownload={grab} busyId={busy} />
+    </div>
+  );
+}
+
+// Admin: how much room the files are taking. Worth watching, because files are
+// far larger than anything else the portal stores.
+function StoragePanel() {
+  const [u, setU] = useState(null);
+  useEffect(() => { storageUsed().then((r) => setU(Array.isArray(r) ? r[0] : r)).catch(() => {}); }, []);
+  if (!u) return null;
+
+  const FREE = 500 * 1048576;                 // Supabase free tier
+  const share = Math.min(100, Math.round((Number(u.db_bytes) / FREE) * 100));
+  const tight = share > 70;
+
+  return (
+    <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid #E4DFCF" }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        Room used
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 12 }}>
+        <StatCard label="Files stored" value={u.files} />
+        <StatCard label="Files take" value={prettyBytes(Number(u.total_bytes) * 0.75)} />
+        <StatCard label="Whole database" value={prettyBytes(Number(u.db_bytes))}
+          tone={tight ? "#B84C3E" : "#3F7A5C"} />
+      </div>
+      <div style={{ height: 8, background: "#EFEADC", borderRadius: 4, overflow: "hidden",
+            border: "1px solid #E4DFCF" }}>
+        <div style={{ height: "100%", width: `${share}%`,
+              background: tight ? "#B84C3E" : share > 40 ? "#C98A2C" : "#3F7A5C" }} />
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: tight ? "#B84C3E" : "#6B6552",
+            marginTop: 6, lineHeight: 1.55 }}>
+        {share}% of the 500 MB free allowance.
+        {tight
+          ? " Getting full. Delete old holiday work, which takes its files with it, or move to a paid plan."
+          : " Files are much larger than anything else here, so this is the number to watch."}
+      </div>
     </div>
   );
 }

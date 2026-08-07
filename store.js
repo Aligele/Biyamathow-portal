@@ -358,3 +358,57 @@ export const assignmentsForStudent = (adm, pin) =>
 export const submissionSend = (adm, pin, assignmentId, answer, photo) =>
   rpc("submission_send", { p_adm: adm, p_pin: pin, p_assignment: assignmentId,
                            p_answer: answer || null, p_photo: photo || null });
+
+// ---------- files attached to work ----------
+export const workFileAdd = (assignmentId, filename, mime, data) =>
+  rpc("work_file_add", { p_token: getToken(), p_assignment: assignmentId,
+                         p_filename: filename, p_mime: mime, p_data: data });
+export const workFileDelete = (id) => rpc("work_file_delete", { p_token: getToken(), p_id: id });
+export const workFilesList  = (assignmentId) =>
+  rpc("work_files_list", { p_token: getToken(), p_assignment: assignmentId });
+export const workFilesForStudent = (adm, pin, assignmentId) =>
+  rpc("work_files_for_student", { p_adm: adm, p_pin: pin, p_assignment: assignmentId });
+export const submissionFileAdd = (adm, pin, assignmentId, filename, mime, data) =>
+  rpc("submission_file_add", { p_adm: adm, p_pin: pin, p_assignment: assignmentId,
+                               p_filename: filename, p_mime: mime, p_data: data });
+export const submissionFilesList = (submissionId, adm, pin) =>
+  rpc("submission_files_list", { p_token: adm ? null : getToken(), p_submission: submissionId,
+                                 p_adm: adm || null, p_pin: pin || null });
+export const storageUsed = () => rpc("storage_used", { p_token: getToken() });
+
+// Fetches a file and hands it to the browser to save. Only the file actually
+// wanted is ever downloaded — listings carry names and sizes only.
+export async function downloadWorkFile(id, adm, pin) {
+  const rows = await rpc("work_file_get", {
+    p_token: adm ? null : getToken(), p_id: id, p_adm: adm || null, p_pin: pin || null,
+  });
+  const f = Array.isArray(rows) ? rows[0] : rows;
+  if (!f) throw new Error("That file could not be fetched.");
+
+  const bin = atob(f.data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: f.mime || "application/octet-stream" }));
+
+  const a = document.createElement("a");
+  a.href = url; a.download = f.filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return f.filename;
+}
+
+// Reads a chosen file as base64, refusing anything too large before it is sent.
+export function readFileAsBase64(file, maxBytes = 4200000) {
+  return new Promise((resolve, reject) => {
+    if (file.size > maxBytes) {
+      return reject(new Error(
+        `${file.name} is ${(file.size / 1048576).toFixed(1)} MB. The limit is about 4 MB — ` +
+        `families pay for every megabyte they download.`));
+    }
+    const r = new FileReader();
+    r.onload = () => resolve({ name: file.name, mime: file.type || "application/octet-stream",
+                               data: String(r.result).split(",")[1] });
+    r.onerror = () => reject(new Error("That file could not be read."));
+    r.readAsDataURL(file);
+  });
+}
