@@ -85,7 +85,7 @@ const STATUS = {
   late: { label: "Late", ink: "#8A6A00", mark: "L" },
 };
 
-const APP_VERSION = "v41 · yellow, green, black, white";
+const APP_VERSION = "v42 · yellow, green and white";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -309,7 +309,7 @@ const DEFAULT_PERIODS = [
 ];
 
 const PERIOD_TYPES = {
-  lesson: { label: "Lesson", bg: "#FFFFFF", fg: "#111111", band: null },
+  lesson: { label: "Lesson", bg: "#FFFFFF", fg: "#0A2E1A", band: null },
   break:  { label: "Break",  bg: "#FFF6D6", fg: "#8A6A2C", band: "#FFF6D6" },
   lunch:  { label: "Lunch",  bg: "#E3F5E9", fg: "#0B5C2D", band: "#E3F5E9" },
 };
@@ -364,7 +364,7 @@ const cbcBand = (score) => {
 const gradeOf = (score) => cbcBand(score)?.code || "—";
 const gradeLevel = (score) => cbcBand(score)?.level ?? null;
 const gradeLabel = (score) => cbcBand(score)?.label || "—";
-const gradeInk = (score) => cbcBand(score)?.ink || "#6A6A63";
+const gradeInk = (score) => cbcBand(score)?.ink || "#5E6E64";
 
 // Older records stored a single number; treat that as the main exam mark.
 const normEntry = (e) => (typeof e === "number" ? { exam: e } : (e || {}));
@@ -635,7 +635,7 @@ function SyncBadge({ state, offline, onRetry }) {
     error:   { text: "⚠ Not saved yet — retrying", bg: "#4A1410", fg: "#F0A99B", border: "#8C1C14" },
   };
   // Offline is not a fault — work is held on the device and syncs later.
-  const offlineSaved = { text: "⛅ Offline — saved on this phone", bg: "#3A2E00", fg: "#FFD84D", border: "#7A5C00" };
+  const offlineSaved = { text: "⛅ Offline — saved on this phone", bg: "#0A2E1A", fg: "#FFD84D", border: "#7A5C00" };
   const s = offline ? offlineSaved : (map[state] || map.saved);
   return (
     <div className="no-print" style={{
@@ -647,7 +647,7 @@ function SyncBadge({ state, offline, onRetry }) {
     }}>
       <span>{s.text}</span>
       {state === "error" && !offline && (
-        <button onClick={onRetry} style={{ background: "#FFC400", color: "#0D0D0D", border: "none", borderRadius: 12, padding: "3px 10px", fontFamily: FONT.mono, fontSize: 11, fontWeight: 700 }}>Retry now</button>
+        <button onClick={onRetry} style={{ background: "#FFC400", color: "#073D22", border: "none", borderRadius: 12, padding: "3px 10px", fontFamily: FONT.mono, fontSize: 11, fontWeight: 700 }}>Retry now</button>
       )}
     </div>
   );
@@ -656,12 +656,12 @@ function SyncBadge({ state, offline, onRetry }) {
 // ================= SHELL =================
 function Shell({ children }) {
   return (
-    <div style={{ minHeight: "100vh", background: "#0D0D0D" }}>
+    <div style={{ minHeight: "100vh", background: "#073D22" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; }
         body { margin: 0; }
-        ::selection { background: #FFC400; color: #0D0D0D; }
+        ::selection { background: #FFC400; color: #073D22; }
         button { font-family: inherit; cursor: pointer; }
         input, select { font-family: inherit; }
         button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #FFC400; outline-offset: 2px; }
@@ -673,15 +673,20 @@ function Shell({ children }) {
            written on it. Green carries action, black carries structure, white
            carries the reading. */
 
+        /* Nothing should fall back to the browser's black. Anything without an
+           explicit colour inherits the darkest green instead. */
+        body, input, select, textarea, button { color: #0A2E1A; }
+
         :root {
-          --black:      #0D0D0D;
-          --ink:        #111111;
+          --forest:     #073D22;
+          --ink:        #0A2E1A;
+          --ink:        #0A2E1A;
           --green:      #0E7A3C;
           --green-deep: #0B5C2D;
           --yellow:     #FFC400;
           --yellow-ink: #8A6A00;
-          --paper:      #F7F7F4;
-          --line:       #E3E3DD;
+          --paper:      #F4F8F5;
+          --line:       #DCE6E0;
         }
 
         /* the focus ring is yellow — visible on black bars and white panels alike */
@@ -696,7 +701,7 @@ function Shell({ children }) {
         button:not(:disabled):hover  { filter: brightness(1.05); }
 
         /* selection in the school's own colours */
-        ::selection { background: var(--yellow); color: var(--black); }
+        ::selection { background: var(--yellow); color: var(--forest); }
 
         /* a sliver of yellow under every panel heading — the signature */
         .rule-y { position: relative; }
@@ -706,9 +711,9 @@ function Shell({ children }) {
         }
 
         /* scrollbars, on the browsers that allow it */
-        * { scrollbar-color: #BFBFB8 transparent; scrollbar-width: thin; }
+        * { scrollbar-color: #AFC2B6 transparent; scrollbar-width: thin; }
         *::-webkit-scrollbar { width: 9px; height: 9px; }
-        *::-webkit-scrollbar-thumb { background: #BFBFB8; border-radius: 5px; }
+        *::-webkit-scrollbar-thumb { background: #AFC2B6; border-radius: 5px; }
         *::-webkit-scrollbar-thumb:hover { background: var(--green); }
 
         /* inputs settle into green when they hold something valid */
@@ -720,7 +725,7 @@ function Shell({ children }) {
         /* a bar of hazard tape for anything that needs real attention */
         .tape {
           background: repeating-linear-gradient(45deg,
-            var(--yellow) 0 12px, #1A1A1A 12px 24px);
+            var(--yellow) 0 12px, #0A2E1A 12px 24px);
           height: 4px; border-radius: 2px;
         }
 
@@ -740,7 +745,7 @@ function Shell({ children }) {
         .role-card:hover { border-color: #0E7A3C !important; }
 
         /* the version marker should be readable, not a whisper */
-        .version-mark { color: #6E6E67 !important; }
+        .version-mark { color: #6C7F72 !important; }
 
         /* --- interaction: feedback the eye reads faster than text --- */
         button, [role="button"] { transition: transform .11s cubic-bezier(.2,.7,.3,1), filter .15s ease, box-shadow .15s ease; }
@@ -805,12 +810,12 @@ function Shell({ children }) {
           background:
             radial-gradient(60% 40% at 50% 0%, rgba(232,178,61,0.16), transparent 70%),
             radial-gradient(50% 40% at 85% 100%, rgba(255,196,0,0.35), transparent 70%),
-            linear-gradient(180deg, #0D0D0D 0%, #0D0D0D 45%, #0A0A0A 100%);
+            linear-gradient(180deg, #073D22 0%, #073D22 45%, #05301A 100%);
         }
         .role-card { transition: transform .18s ease, border-color .18s ease, background .18s ease; }
         .role-card:active { transform: scale(0.985); }
         @media (hover:hover) { .role-card:hover { border-color: #FFC400; background: #2A4636; } }
-        .rule { height:1px; flex:1; background:linear-gradient(90deg,transparent,#2E2E2E,transparent); }
+        .rule { height:1px; flex:1; background:linear-gradient(90deg,transparent,#155336,transparent); }
         @media print {
           .no-print { display: none !important; }
           html, body { background: #fff !important; }
@@ -828,7 +833,7 @@ function Toast({ msg }) {
   return (
     <div className="chalk-fade" style={{
       position: "fixed", top: 18, left: "50%", transform: "translateX(-50%)",
-      background: "#FFC400", color: "#0D0D0D", padding: "8px 18px", borderRadius: 3,
+      background: "#FFC400", color: "#073D22", padding: "8px 18px", borderRadius: 3,
       fontFamily: FONT.body, fontWeight: 600, fontSize: 13, zIndex: 100,
       boxShadow: "0 4px 14px rgba(0,0,0,0.25)", maxWidth: "84vw", textAlign: "center",
     }}>{msg}</div>
@@ -837,7 +842,7 @@ function Toast({ msg }) {
 
 function Stamp({ status, size = 30 }) {
   const s = STATUS[status];
-  if (!s) return <div style={{ width: size, height: size, borderRadius: "50%", border: "1.5px dashed #C4C4BC" }} />;
+  if (!s) return <div style={{ width: size, height: size, borderRadius: "50%", border: "1.5px dashed #B9C7BF" }} />;
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%", border: `2px solid ${s.ink}`,
@@ -862,15 +867,15 @@ function Seal({ size = 56, ink = "#FFC400" }) {
 }
 
 // ---------- shared styles ----------
-const inputStyle = () => ({ width: "100%", padding: "10px 12px", borderRadius: 3, border: "1px solid #0B5C2D", background: "#0D0D0D", color: "#FFFFFF", fontFamily: FONT.body, fontSize: 14, marginBottom: 4 });
+const inputStyle = () => ({ width: "100%", padding: "10px 12px", borderRadius: 3, border: "1px solid #0B5C2D", background: "#073D22", color: "#FFFFFF", fontFamily: FONT.body, fontSize: 14, marginBottom: 4 });
 const backBtnStyle = () => ({ background: "none", border: "none", color: "#FFC400", fontFamily: FONT.mono, fontSize: 12, padding: 0 });
 const paperPanel = () => ({
-  background: "#FFFFFF", borderRadius: 8, border: "1px solid #E3E3DD",
+  background: "#FFFFFF", borderRadius: 8, border: "1px solid #DCE6E0",
   boxShadow: "0 10px 34px rgba(0,0,0,0.30)",
 });
 const darkInput = () => ({
-  padding: "10px 12px", borderRadius: 4, border: "1.5px solid #CFCFC8",
-  background: "#FFFFFF", color: "#111111", fontSize: 13.5,
+  padding: "10px 12px", borderRadius: 4, border: "1.5px solid #C6D2CA",
+  background: "#FFFFFF", color: "#0A2E1A", fontSize: 13.5,
 });
 // The main action is green — it reads as "go" without needing a label to say
 // so. Black is kept for structure, not for buttons that do things.
@@ -882,7 +887,7 @@ const primaryBtn = () => ({
 // The one thing on a screen that matters most: black on yellow, which the eye
 // finds before it finds anything else.
 const alertBtn = () => ({
-  background: "#FFC400", color: "#0D0D0D", border: "none", borderRadius: 4,
+  background: "#FFC400", color: "#073D22", border: "none", borderRadius: 4,
   padding: "10px 17px", fontFamily: FONT.body, fontSize: 13.5, fontWeight: 800,
   letterSpacing: 0.2, boxShadow: "0 1px 0 rgba(0,0,0,.22)",
 });
@@ -893,7 +898,7 @@ function SectionTitle({ children }) {
   // the screens together without colouring anything that has to be read.
   return (
     <div className="rule-y" style={{ fontFamily: FONT.display, fontSize: 19, fontWeight: 700,
-          color: "#111111", marginBottom: 18, letterSpacing: "-0.01em", display: "inline-block" }}>
+          color: "#0A2E1A", marginBottom: 18, letterSpacing: "-0.01em", display: "inline-block" }}>
       {children}
     </div>
   );
@@ -901,13 +906,13 @@ function SectionTitle({ children }) {
 function StatCard({ label, value, tone }) {
   return (
     <div className="lift" style={{
-      border: "1px solid #E3E3DD", borderRadius: 6, padding: "13px 15px",
-      background: "#FFFFFF", borderTop: `3px solid ${tone || "#111111"}`,
+      border: "1px solid #DCE6E0", borderRadius: 6, padding: "13px 15px",
+      background: "#FFFFFF", borderTop: `3px solid ${tone || "#0A2E1A"}`,
     }}>
-      <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#6A6A63",
+      <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#5E6E64",
             letterSpacing: 1.3, textTransform: "uppercase" }}>{label}</div>
       <div style={{ fontFamily: FONT.display, fontSize: 25, fontWeight: 800,
-            color: tone || "#111111", marginTop: 3, lineHeight: 1 }}>{value}</div>
+            color: tone || "#0A2E1A", marginTop: 3, lineHeight: 1 }}>{value}</div>
     </div>
   );
 }
@@ -918,11 +923,11 @@ function topBar(title, onExit) {
         <Seal size={38} />
         <div>
           <div style={{ fontFamily: FONT.mono, color: "#FFC400", fontSize: 10, letterSpacing: 1.4 }}>{SCHOOL_NAME.toUpperCase()}</div>
-          <div style={{ fontFamily: FONT.mono, color: "#9A9A92", fontSize: 9.5, letterSpacing: 1 }}>{SCHOOL_LOCATION}</div>
+          <div style={{ fontFamily: FONT.mono, color: "#93A69A", fontSize: 9.5, letterSpacing: 1 }}>{SCHOOL_LOCATION}</div>
           <div style={{ fontFamily: FONT.display, color: "#FFFFFF", fontSize: 19, fontWeight: 600 }}>{title}</div>
         </div>
       </div>
-      <button onClick={onExit} style={{ background: "transparent", border: "1px solid #2E2E2E", color: "#FFFFFF", borderRadius: 3, padding: "7px 14px", fontFamily: FONT.body, fontSize: 12, whiteSpace: "nowrap" }}>Sign out</button>
+      <button onClick={onExit} style={{ background: "transparent", border: "1px solid #155336", color: "#FFFFFF", borderRadius: 3, padding: "7px 14px", fontFamily: FONT.body, fontSize: 12, whiteSpace: "nowrap" }}>Sign out</button>
     </div>
   );
 }
@@ -931,8 +936,8 @@ function TabBar({ tabs, active, onChange }) {
     <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
       {tabs.map((t) => (
         <button key={t} onClick={() => onChange(t)} style={{
-          background: active === t ? "#FFC400" : "transparent", color: active === t ? "#0D0D0D" : "#FFFFFF",
-          border: "1px solid " + (active === t ? "#FFC400" : "#2E2E2E"), borderRadius: 3, padding: "6px 13px",
+          background: active === t ? "#FFC400" : "transparent", color: active === t ? "#073D22" : "#FFFFFF",
+          border: "1px solid " + (active === t ? "#FFC400" : "#155336"), borderRadius: 3, padding: "6px 13px",
           fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600, textTransform: "capitalize",
         }}>{t}</button>
       ))}
@@ -940,12 +945,12 @@ function TabBar({ tabs, active, onChange }) {
   );
 }
 function RowList({ items, render, onRemove }) {
-  if (items.length === 0) return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Nothing here yet.</div>;
+  if (items.length === 0) return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Nothing here yet.</div>;
   return (
     <div style={{ display: "grid", gap: 6 }}>
       {items.map((it) => (
-        <div key={it.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 3 }}>
-          <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>{render(it)}</span>
+        <div key={it.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 3 }}>
+          <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>{render(it)}</span>
           {onRemove && <button onClick={() => onRemove(it.id)} style={{ background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 12 }}>remove</button>}
         </div>
       ))}
@@ -960,7 +965,7 @@ const getMarksFor = (roster, classId, term) => roster.marks?.[classId]?.[termKey
 // Older records only had a boolean, so they map onto the new states cleanly.
 const MARK_STATUS = {
   draft:     { label: "DRAFT — not yet sent to admin",        bg: "#FFF6D6", fg: "#8A6A00", border: "#F0D98A" },
-  submitted: { label: "SENT FOR APPROVAL — awaiting admin",   bg: "#F2F2EE", fg: "#1A1A1A", border: "#CFCFC8" },
+  submitted: { label: "SENT FOR APPROVAL — awaiting admin",   bg: "#EFF5F1", fg: "#0E4A29", border: "#C6D2CA" },
   approved:  { label: "APPROVED — visible to students & parents", bg: "#E3F5E9", fg: "#0E7A3C", border: "#A9DEBC" },
   returned:  { label: "RETURNED BY ADMIN — needs correction", bg: "#FDE8E6", fg: "#C0261B", border: "#F3C0BB" },
 };
@@ -1068,8 +1073,8 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
         <div style={{
           width: 84, height: 84, margin: "0 auto", borderRadius: "50%",
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: "radial-gradient(circle at 35% 25%, #0B5C2D, #141414)",
-          border: "1px solid #2E2E2E",
+          background: "radial-gradient(circle at 35% 25%, #0B5C2D, #0A3A20)",
+          border: "1px solid #155336",
           boxShadow: "0 0 0 6px rgba(232,178,61,0.07), 0 10px 26px rgba(0,0,0,0.35)",
         }}>
           <Seal size={52} />
@@ -1079,7 +1084,7 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
         </div>
         <div style={{ fontFamily: FONT.mono, color: "#93A899", fontSize: 9.5, letterSpacing: 2, marginTop: 5 }}>MINISTRY OF EDUCATION</div>
         <h1 style={{ fontFamily: FONT.display, color: "#F7F5EF", fontSize: 25, margin: "12px 0 0", fontWeight: 700, lineHeight: 1.22 }}>{SCHOOL_NAME}</h1>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 9, padding: "4px 12px", borderRadius: 20, border: "1px solid #333333", background: "rgba(16,16,16,0.66)" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 9, padding: "4px 12px", borderRadius: 20, border: "1px solid #1C6B44", background: "rgba(8,48,27,0.70)" }}>
           <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#FFC400" }} />
           <span style={{ fontFamily: FONT.mono, color: "#FFC400", fontSize: 11, letterSpacing: 0.8 }}>{SCHOOL_LOCATION}</span>
         </div>
@@ -1103,7 +1108,7 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
               onChange={(e) => setCreds({ ...creds, password: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && signIn()} style={inputStyle()} />
             {err && <div style={{ color: "#F08E80", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
-            <button onClick={signIn} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#0D0D0D", opacity: busy ? 0.6 : 1 }}>
+            <button onClick={signIn} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#073D22", opacity: busy ? 0.6 : 1 }}>
               {busy ? "Signing in…" : "Sign in"}
             </button>
             {note && <div style={{ color: "#7BD79B", fontFamily: FONT.body, fontSize: 12, lineHeight: 1.5 }}>{note}</div>}
@@ -1131,10 +1136,10 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
                   onKeyDown={(e) => e.key === "Enter" && sendCode()} style={inputStyle()} />
                 {err && <div style={{ color: "#F08E80", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
                 {note && <div style={{ color: "#7BD79B", fontFamily: FONT.body, fontSize: 12, lineHeight: 1.5 }}>{note}</div>}
-                <button onClick={sendCode} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#0D0D0D", opacity: busy ? 0.6 : 1 }}>
+                <button onClick={sendCode} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#073D22", opacity: busy ? 0.6 : 1 }}>
                   {busy ? "Sending…" : "Send code"}
                 </button>
-                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8A82", marginTop: 4, lineHeight: 1.5 }}>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8FA396", marginTop: 4, lineHeight: 1.5 }}>
                   No email on your account? The school administrator can set a new password for you.
                 </div>
               </>
@@ -1151,7 +1156,7 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
                   onChange={(e) => setReset({ ...reset, pw2: e.target.value })}
                   onKeyDown={(e) => e.key === "Enter" && applyReset()} style={inputStyle()} />
                 {err && <div style={{ color: "#F08E80", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
-                <button onClick={applyReset} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#0D0D0D", opacity: busy ? 0.6 : 1 }}>
+                <button onClick={applyReset} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#073D22", opacity: busy ? 0.6 : 1 }}>
                   {busy ? "Saving…" : "Set new password"}
                 </button>
                 <button onClick={sendCode} disabled={busy} style={{ ...backBtnStyle(), marginTop: 4, textAlign: "left" }}>Send another code</button>
@@ -1173,10 +1178,10 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
             <input placeholder="PIN" type="password" inputMode="numeric" value={pin}
               onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === "Enter" && parentSignIn()} style={inputStyle()} />
             {err && <div style={{ color: "#F08E80", fontFamily: FONT.mono, fontSize: 12 }}>{err}</div>}
-            <button onClick={parentSignIn} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#0D0D0D", opacity: busy ? 0.6 : 1 }}>
+            <button onClick={parentSignIn} disabled={busy} style={{ ...primaryBtn(), background: "#FFC400", color: "#073D22", opacity: busy ? 0.6 : 1 }}>
               {busy ? "Checking…" : "View results"}
             </button>
-            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8A82", marginTop: 4 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8FA396", marginTop: 4 }}>
               Lost the PIN? Ask the school office.
             </div>
           </div>
@@ -1185,7 +1190,7 @@ function RoleGate({ onStaffSignedIn, onParentSignedIn }) {
 
       <div style={{ textAlign: "center", marginTop: 34, fontFamily: FONT.mono, fontSize: 9.5, color: "#0B5C2D", letterSpacing: 1 }}>
         {SCHOOL_MOTTO}
-        <div style={{ marginTop: 6, fontSize: 9, color: "#6E6E67", letterSpacing: 0.6 }}>{APP_VERSION}</div>
+        <div style={{ marginTop: 6, fontSize: 9, color: "#6C7F72", letterSpacing: 0.6 }}>{APP_VERSION}</div>
       </div>
     </div>
     </>
@@ -1199,20 +1204,20 @@ function RoleCard({ title, desc, onClick, glyph }) {
   return (
     <button onClick={onClick} className="role-card lift" style={{
       display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left",
-      background: "#191919", border: "1px solid #333333", borderRadius: 10,
+      background: "#0E4A29", border: "1px solid #1C6B44", borderRadius: 10,
       padding: "16px 17px", color: "#FFFFFF",
       boxShadow: "0 4px 18px rgba(0,0,0,0.55)", position: "relative", overflow: "hidden",
     }}>
       <span style={{
         flex: "0 0 auto", width: 44, height: 44, borderRadius: 10,
         background: "#FFC400", display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#0D0D0D", fontFamily: FONT.mono, fontSize: 18, fontWeight: 800,
+        color: "#073D22", fontFamily: FONT.mono, fontSize: 18, fontWeight: 800,
       }}>{glyph}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: "block", fontFamily: FONT.display, fontSize: 18.5,
               fontWeight: 700, letterSpacing: 0.2 }}>{title}</span>
         <span style={{ display: "block", fontFamily: FONT.body, fontSize: 12.5,
-              color: "#B5B5AE", marginTop: 3, lineHeight: 1.4 }}>{desc}</span>
+              color: "#B3C4B8", marginTop: 3, lineHeight: 1.4 }}>{desc}</span>
       </span>
       <span style={{ flex: "0 0 auto", color: "#FFC400", fontSize: 22, fontFamily: FONT.body }}>›</span>
     </button>
@@ -1260,15 +1265,15 @@ function Sidebar({ open, onClose, groups, active, onPick, heading, subheading })
       }} />
       <nav className="no-print" style={{
         position: "fixed", top: 0, left: 0, bottom: 0, width: 268, maxWidth: "84vw", zIndex: 201,
-        background: "linear-gradient(180deg,#0D0D0D,#0A0A0A)", borderRight: "1px solid #262626",
+        background: "linear-gradient(180deg,#073D22,#05301A)", borderRight: "1px solid #155336",
         transform: open ? "translateX(0)" : "translateX(-102%)", transition: "transform .24s cubic-bezier(.2,.7,.3,1)",
         overflowY: "auto", boxShadow: open ? "6px 0 24px rgba(0,0,0,0.35)" : "none",
       }}>
-        <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #262626", display: "flex", alignItems: "center", gap: 11 }}>
+        <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #155336", display: "flex", alignItems: "center", gap: 11 }}>
           <Seal size={34} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: FONT.display, color: "#FFFFFF", fontSize: 15, fontWeight: 600, lineHeight: 1.2 }}>{heading}</div>
-            <div style={{ fontFamily: FONT.mono, color: "#9A9A92", fontSize: 10, marginTop: 2 }}>{subheading}</div>
+            <div style={{ fontFamily: FONT.mono, color: "#93A69A", fontSize: 10, marginTop: 2 }}>{subheading}</div>
           </div>
         </div>
 
@@ -1288,10 +1293,10 @@ function Sidebar({ open, onClose, groups, active, onPick, heading, subheading })
                     color: on ? "#FFFFFF" : "#B8C4B9", fontFamily: FONT.body, fontSize: 13.5,
                     fontWeight: on ? 600 : 400,
                   }}>
-                    <span style={{ color: on ? "#FFC400" : "#8A8A82", display: "flex" }}><NavIcon d={ICONS[it.icon] || ICONS.overview} /></span>
+                    <span style={{ color: on ? "#FFC400" : "#8FA396", display: "flex" }}><NavIcon d={ICONS[it.icon] || ICONS.overview} /></span>
                     <span style={{ flex: 1 }}>{it.label}</span>
                     {it.badge > 0 && (
-                      <span style={{ background: "#FFC400", color: "#0D0D0D", borderRadius: 10,
+                      <span style={{ background: "#FFC400", color: "#073D22", borderRadius: 10,
                             padding: "1px 8px", fontFamily: FONT.mono, fontSize: 10, fontWeight: 800 }}>{it.badge}</span>
                     )}
                   </button>
@@ -1310,30 +1315,30 @@ function PortalHeader({ title, section, onMenu, onExit, badge = 0 }) {
   return (
     <div className="no-print" style={{
       display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-      background: "rgba(13,13,13,0.96)", borderBottom: "2px solid #FFC400",
+      background: "rgba(7,61,34,0.96)", borderBottom: "2px solid #FFC400",
       position: "sticky", top: 0, zIndex: 120, backdropFilter: "blur(6px)",
     }}>
       <button onClick={onMenu} aria-label={badge > 0 ? `Menu — ${badge} waiting for approval` : "Menu"}
         style={{
           display: "flex", flexDirection: "column", gap: 4, background: "transparent",
-          border: "1px solid #333333", borderRadius: 6, padding: "9px 10px", position: "relative",
+          border: "1px solid #1C6B44", borderRadius: 6, padding: "9px 10px", position: "relative",
         }}>
         {[0, 1, 2].map((i) => <span key={i} style={{ width: 16, height: 2, background: "#FFC400", borderRadius: 2, display: "block" }} />)}
         {/* a count here means it is visible from every screen, not only the dashboard */}
         {badge > 0 && (
           <span className="pulse alert-dot" style={{
-            position: "absolute", top: -7, right: -7, background: "#FFC400", color: "#0D0D0D",
+            position: "absolute", top: -7, right: -7, background: "#FFC400", color: "#073D22",
             borderRadius: 10, minWidth: 19, height: 19, display: "grid", placeItems: "center",
             fontFamily: FONT.mono, fontSize: 10.5, fontWeight: 800, padding: "0 5px",
-            border: "2px solid #0D0D0D",
+            border: "2px solid #073D22",
           }}>{badge > 99 ? "99+" : badge}</span>
         )}
       </button>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: FONT.mono, color: "#9A9A92", fontSize: 9.5, letterSpacing: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
+        <div style={{ fontFamily: FONT.mono, color: "#93A69A", fontSize: 9.5, letterSpacing: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
         <div style={{ fontFamily: FONT.display, color: "#FFFFFF", fontSize: 17, fontWeight: 600, textTransform: "capitalize" }}>{section}</div>
       </div>
-      <button onClick={onExit} style={{ background: "transparent", border: "1px solid #2E2E2E", color: "#FFFFFF", borderRadius: 4, padding: "7px 12px", fontFamily: FONT.body, fontSize: 12, whiteSpace: "nowrap" }}>Sign out</button>
+      <button onClick={onExit} style={{ background: "transparent", border: "1px solid #155336", color: "#FFFFFF", borderRadius: 4, padding: "7px 12px", fontFamily: FONT.body, fontSize: 12, whiteSpace: "nowrap" }}>Sign out</button>
     </div>
   );
 }
@@ -1395,10 +1400,10 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     { key: "leave",      n: pendingLeave.length,     tone: "#8A6A00",
       one: "leave application to decide", many: "leave applications to decide",
       why: "Staff cannot plan until you answer" },
-    { key: "discipline", n: pendingDiscipline.length, tone: "#1A1A1A",
+    { key: "discipline", n: pendingDiscipline.length, tone: "#0E4A29",
       one: "discipline case to review", many: "discipline cases to review",
       why: "A teacher has reported an incident" },
-    { key: "signins",    n: pendingArrivals.length,  tone: "#3B6E8F",
+    { key: "signins",    n: pendingArrivals.length,  tone: "#0A2E1A",
       one: "arrival or departure to approve", many: "arrivals or departures to approve",
       why: "Late arrivals and early departures need your decision" },
   ].filter((a) => a.n > 0);
@@ -1625,7 +1630,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "subjects" && (
             <div>
               <SectionTitle>Subjects</SectionTitle>
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55", marginBottom: 10 }}>These appear in the exam-entry dropdown and can be assigned to teachers.</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50", marginBottom: 10 }}>These appear in the exam-entry dropdown and can be assigned to teachers.</div>
               <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
                 <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)} placeholder="Add another subject" style={{ ...darkInput(), flex: 1 }} onKeyDown={(e) => e.key === "Enter" && addSubject()} />
                 <button onClick={addSubject} style={primaryBtn()}>Add subject</button>
@@ -1641,17 +1646,17 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "teachers" && (
             <div>
               <SectionTitle>Teachers</SectionTitle>
-              <div style={{ padding: "10px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD",
-                            borderRadius: 4, fontFamily: FONT.body, fontSize: 12, color: "#5C5C55",
+              <div style={{ padding: "10px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0",
+                            borderRadius: 4, fontFamily: FONT.body, fontSize: 12, color: "#4A5A50",
                             lineHeight: 1.55, marginBottom: 12 }}>
                 A teacher's class here is the one they register and write report cards for.
                 To let them teach <strong>other</strong> classes, put them on the <strong>Timetable</strong> —
                 every lesson assigned to them there lets them enter marks for that class and subject.
               </div>
-              <div style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5,
+              <div style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5,
                     padding: 13, marginBottom: 16 }}>
-                <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#6A6A63",
-                      textTransform: "uppercase", marginBottom: 6, color: "#5C5C55" }}>The teacher</div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#5E6E64",
+                      textTransform: "uppercase", marginBottom: 6, color: "#4A5A50" }}>The teacher</div>
                 <div style={{ display: "grid", gap: 8, marginBottom: 8,
                       gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
                   <input value={newTeacher.firstName}
@@ -1683,12 +1688,12 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
 
                 <button onClick={() => setShowTeacherMore(!showTeacherMore)}
                   style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer",
-                    fontFamily: FONT.mono, fontSize: 11, color: "#111111" }}>
+                    fontFamily: FONT.mono, fontSize: 11, color: "#0A2E1A" }}>
                   {showTeacherMore ? "▾ hide the rest" : "▸ ID number, qualification and login"}
                 </button>
 
                 {showTeacherMore && (
-                  <div className="enter" style={{ marginTop: 9, paddingTop: 11, borderTop: "1px dashed #CFCFC8",
+                  <div className="enter" style={{ marginTop: 9, paddingTop: 11, borderTop: "1px dashed #C6D2CA",
                         display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
                     <input value={newTeacher.idNumber}
                       onChange={(e) => setNewTeacher({ ...newTeacher, idNumber: e.target.value })}
@@ -1711,39 +1716,39 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                     opacity: (!newTeacher.firstName.trim() || !newTeacher.surname.trim() || !newTeacher.classId) ? 0.5 : 1 }}>
                   Add teacher
                 </button>
-                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 8, lineHeight: 1.5 }}>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 8, lineHeight: 1.5 }}>
                   The TSC number matters for returns to the Sub-County office. The email lets them
                   reset their own password without waiting for you.
                 </div>
               </div>
 
-              {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No teachers yet.</div>}
+              {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No teachers yet.</div>}
               <div style={{ display: "grid", gap: 10 }}>
                 {roster.teachers.map((t) => (
-                  <div key={t.id} style={{ padding: "12px 14px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4 }}>
+                  <div key={t.id} style={{ padding: "12px 14px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                      <span style={{ fontFamily: FONT.body, fontSize: 14, color: "#111111", fontWeight: 600 }}>{t.name}</span>
+                      <span style={{ fontFamily: FONT.body, fontSize: 14, color: "#0A2E1A", fontWeight: 600 }}>{t.name}</span>
                       <span style={{ display: "flex", gap: 12 }}>
-                        <button onClick={() => resetTeacherPassword(t.id)} style={{ background: "none", border: "none", color: "#111111", fontFamily: FONT.mono, fontSize: 11.5 }}>reset password</button>
+                        <button onClick={() => resetTeacherPassword(t.id)} style={{ background: "none", border: "none", color: "#0A2E1A", fontFamily: FONT.mono, fontSize: 11.5 }}>reset password</button>
                         <button onClick={() => removeItem("teachers", t.id)} style={{ background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
                       </span>
                     </div>
-                    <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63", marginTop: 2 }}>{classNameOf(roster, t.classId)} · login: {t.username}</div>
+                    <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64", marginTop: 2 }}>{classNameOf(roster, t.classId)} · login: {t.username}</div>
                     {(() => {
                       const extra = teachingAssignments(roster, t.id).filter((a) => !a.isHomeClass);
                       return extra.length > 0 ? (
-                        <div style={{ margin: "8px 0 4px", padding: "7px 10px", background: "#F2F2EE",
-                                      border: "1px solid #CFCFC8", borderRadius: 4,
-                                      fontFamily: FONT.body, fontSize: 11.5, color: "#111111", lineHeight: 1.5 }}>
+                        <div style={{ margin: "8px 0 4px", padding: "7px 10px", background: "#EFF5F1",
+                                      border: "1px solid #C6D2CA", borderRadius: 4,
+                                      fontFamily: FONT.body, fontSize: 11.5, color: "#0A2E1A", lineHeight: 1.5 }}>
                           <strong>Also teaches</strong> (from the timetable):{" "}
                           {extra.map((a) => `${a.className} — ${a.subjects.join(", ")}`).join(" · ")}
                         </div>
                       ) : null;
                     })()}
-                    <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", margin: "9px 0 5px" }}>
+                    <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", margin: "9px 0 5px" }}>
                       Subjects taught in their own class (tap to toggle):
                       {levelLabelForClass(roster, t.classId) && (
-                        <span style={{ color: "#6A6A63" }}> — {levelLabelForClass(roster, t.classId)}</span>
+                        <span style={{ color: "#5E6E64" }}> — {levelLabelForClass(roster, t.classId)}</span>
                       )}
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1752,7 +1757,7 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                         return (
                           <button key={sub} onClick={() => toggleTeacherSubject(t.id, sub)} style={{
                             padding: "5px 11px", borderRadius: 20, fontSize: 12, fontFamily: FONT.body, fontWeight: 600,
-                            border: `1px solid ${on ? "#0E7A3C" : "#CFCFC8"}`, background: on ? "#0E7A3C" : "#fff", color: on ? "#fff" : "#5C5C55",
+                            border: `1px solid ${on ? "#0E7A3C" : "#C6D2CA"}`, background: on ? "#0E7A3C" : "#fff", color: on ? "#fff" : "#4A5A50",
                           }}>{sub}</button>
                         );
                       })}
@@ -1766,11 +1771,11 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "students" && (
             <div>
               <SectionTitle>Students</SectionTitle>
-              <div style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5,
+              <div style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5,
                     padding: 13, marginBottom: 16 }}>
                 {/* the three names the register needs */}
-                <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#6A6A63",
-                      textTransform: "uppercase", marginBottom: 6, color: "#5C5C55" }}>The pupil</div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#5E6E64",
+                      textTransform: "uppercase", marginBottom: 6, color: "#4A5A50" }}>The pupil</div>
                 <div className="form-row" style={{ display: "grid", gap: 8, marginBottom: 8,
                       gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))" }}>
                   <input value={newStudent.firstName}
@@ -1807,14 +1812,14 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                 {/* everything else is real but not needed to get a child into class today */}
                 <button onClick={() => setShowMore(!showMore)}
                   style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer",
-                    fontFamily: FONT.mono, fontSize: 11, color: "#111111" }}>
+                    fontFamily: FONT.mono, fontSize: 11, color: "#0A2E1A" }}>
                   {showMore ? "▾ hide the rest" : "▸ birth certificate, guardian and contact"}
                 </button>
 
                 {showMore && (
-                  <div className="enter" style={{ marginTop: 9, paddingTop: 11, borderTop: "1px dashed #CFCFC8" }}>
-                    <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#6A6A63",
-                          textTransform: "uppercase", marginBottom: 6, color: "#5C5C55" }}>Birth record</div>
+                  <div className="enter" style={{ marginTop: 9, paddingTop: 11, borderTop: "1px dashed #C6D2CA" }}>
+                    <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#5E6E64",
+                          textTransform: "uppercase", marginBottom: 6, color: "#4A5A50" }}>Birth record</div>
                     <div style={{ display: "grid", gap: 8, marginBottom: 11,
                           gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
                       <input value={newStudent.birthCertNo}
@@ -1825,8 +1830,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                         style={darkInput()} />
                     </div>
 
-                    <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#6A6A63",
-                          textTransform: "uppercase", marginBottom: 6, color: "#5C5C55" }}>Parent or guardian</div>
+                    <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#5E6E64",
+                          textTransform: "uppercase", marginBottom: 6, color: "#4A5A50" }}>Parent or guardian</div>
                     <div style={{ display: "grid", gap: 8,
                           gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
                       <input value={newStudent.parentName}
@@ -1859,12 +1864,12 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                 </button>
               </div>
 
-              <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginBottom: 10, lineHeight: 1.55 }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginBottom: 10, lineHeight: 1.55 }}>
                 Only the names and class are needed to register a child today — the rest can be added
                 later rather than turning a family away. Each pupil gets a PIN; parents sign in with
                 the admission number and PIN, so only they see their child's results.
               </div>
-              {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No students yet.</div>}
+              {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No students yet.</div>}
               <StudentsByClass roster={roster} saveRoster={saveRoster} removeItem={removeItem} openClassId={lastAddedClassId} />
             </div>
           )}
@@ -1872,22 +1877,22 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "marks" && (
             <div>
               <SectionTitle>Exam results</SectionTitle>
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55", marginBottom: 12 }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50", marginBottom: 12 }}>
                 Pick a grade to open its results. Only that grade is loaded, so nothing else is in the way.
               </div>
 
               {marksClassId ? (
                 <>
-                  <button onClick={() => setMarksClassId("")} style={{ ...backBtnStyle(), color: "#111111", marginBottom: 12 }}>
+                  <button onClick={() => setMarksClassId("")} style={{ ...backBtnStyle(), color: "#0A2E1A", marginBottom: 12 }}>
                     ← all grades
                   </button>
                   <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14, flexWrap: "wrap" }}>
-                    <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: "#111111" }}>
+                    <span style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: "#0A2E1A" }}>
                       {classNameOf(roster, marksClassId)}
                     </span>
                     {levelLabelForClass(roster, marksClassId) && (
-                      <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5C5C55", background: "#F7F7F4",
-                                     border: "1px solid #E3E3DD", borderRadius: 10, padding: "2px 9px" }}>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#4A5A50", background: "#F4F8F5",
+                                     border: "1px solid #DCE6E0", borderRadius: 10, padding: "2px 9px" }}>
                         {levelLabelForClass(roster, marksClassId)}
                       </span>
                     )}
@@ -1909,16 +1914,16 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "fees" && (
             <div>
               <SectionTitle>Fees</SectionTitle>
-              <div style={{ marginBottom: 16, background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4, padding: 12 }}>
+              <div style={{ marginBottom: 16, background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4, padding: 12 }}>
                 {/* how the money arrived */}
                 <div style={{ display: "flex", gap: 7, marginBottom: 9, flexWrap: "wrap" }}>
                   {[["cash", "Cash"], ["mpesa", "M-Pesa"], ["bank", "Bank"]].map(([k, label]) => (
                     <button key={k} onClick={() => { setPayment({ ...payment, method: k }); setPayErr(""); }}
                       style={{
                         padding: "6px 15px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
-                        border: `1px solid ${payment.method === k ? "#111111" : "#CFCFC8"}`,
-                        background: payment.method === k ? "#111111" : "#fff",
-                        color: payment.method === k ? "#fff" : "#5C5C55",
+                        border: `1px solid ${payment.method === k ? "#0A2E1A" : "#C6D2CA"}`,
+                        background: payment.method === k ? "#0A2E1A" : "#fff",
+                        color: payment.method === k ? "#fff" : "#4A5A50",
                       }}>{label}</button>
                   ))}
                 </div>
@@ -1956,21 +1961,21 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                 </button>
 
                 {payment.method === "mpesa" && (
-                  <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 8, lineHeight: 1.5 }}>
+                  <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 8, lineHeight: 1.5 }}>
                     Copy the code from the M-Pesa SMS. Each code can only be recorded once — if it has
                     already been used the payment is refused, so the same message cannot be counted twice.
                   </div>
                 )}
               </div>
-              {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Add students first.</div>}
+              {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Add students first.</div>}
               <div style={{ display: "grid", gap: 8 }}>
                 {roster.students.map((s) => {
                   const due = s.feeDue || 0, paid = s.feePaid || 0, bal = due - paid;
                   const pays = [...(s.payments || [])].reverse();
                   return (
-                    <div key={s.id} style={{ padding: "10px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4 }}>
+                    <div key={s.id} style={{ padding: "10px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>{s.name} <span style={{ color: "#6A6A63", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>
+                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>{s.name} <span style={{ color: "#5E6E64", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>
                         <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           <input type="number" defaultValue={due} onBlur={(e) => setFeeDue(s.id, e.target.value)} style={{ ...darkInput(), width: 90, padding: "5px 8px" }} />
                           <span style={{ fontFamily: FONT.mono, fontSize: 12, color: "#0E7A3C" }}>paid {cur}{money(paid)}</span>
@@ -1979,17 +1984,17 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                       </div>
 
                       {pays.length > 0 && (
-                        <div style={{ marginTop: 8, borderTop: "1px solid #E3E3DD", paddingTop: 7, display: "grid", gap: 4 }}>
+                        <div style={{ marginTop: 8, borderTop: "1px solid #DCE6E0", paddingTop: 7, display: "grid", gap: 4 }}>
                           {pays.map((p, i) => (
                             <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55" }}>
+                              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50" }}>
                                 {p.receiptNo || "receipt —"} · {fmtDate(p.date)} · {cur}{money(p.amount)}
                                 {p.mpesaCode
                                   ? <span style={{ color: "#0E7A3C" }}> · M-PESA {p.mpesaCode}</span>
                                   : p.method && p.method !== "cash" ? <span> · {p.method}</span> : null}
                               </span>
                               <button onClick={() => setReceipt({ student: s, payment: p })}
-                                style={{ background: "none", border: "none", color: "#111111", fontFamily: FONT.mono, fontSize: 11, textDecoration: "underline" }}>
+                                style={{ background: "none", border: "none", color: "#0A2E1A", fontFamily: FONT.mono, fontSize: 11, textDecoration: "underline" }}>
                                 print receipt
                               </button>
                             </div>
@@ -2032,21 +2037,21 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "settings" && (
             <div>
               <SectionTitle>Settings</SectionTitle>
-              <div style={{ padding: "10px 12px", borderRadius: 4, background: "#E3F5E9", border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginBottom: 20 }}>
+              <div style={{ padding: "10px 12px", borderRadius: 4, background: "#E3F5E9", border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginBottom: 20 }}>
                 Passwords now live in the <strong>Logins</strong> tab, stored encrypted. The old shared
                 passcode has been retired.
               </div>
 
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55", marginBottom: 8 }}>Pass mark (a student passes at or above this average)</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50", marginBottom: 8 }}>Pass mark (a student passes at or above this average)</div>
               <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center" }}>
                 <select value={roster.settings.passMark} onChange={(e) => saveRoster({ ...roster, settings: { ...roster.settings, passMark: Number(e.target.value) } }, "Pass mark updated")} style={{ ...darkInput(), width: 110 }}>
                   {SCORE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
-                <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55" }}>out of 100</span>
+                <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50" }}>out of 100</span>
               </div>
 
-              <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>School identity</div>
-              <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 10 }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>School identity</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 10 }}>
                 Shown on the login screen, every page header, report cards and invoices.
               </div>
               <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
@@ -2060,16 +2065,16 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                   onBlur={(e) => saveRoster({ ...roster, settings: { ...roster.settings, schoolMotto: e.target.value.trim() || DEFAULT_MOTTO } }, "Motto updated")}
                   placeholder="Motto (shown small on the login screen)" style={darkInput()} />
               </div>
-              <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6A6A63", marginBottom: 22 }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5E6E64", marginBottom: 22 }}>
                 Changes appear after the next page reload.
               </div>
 
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55", marginBottom: 8 }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50", marginBottom: 8 }}>
                 Assessment weighting (must total 100)
               </div>
               <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
                 {ASSESSMENTS.map((a) => (
-                  <label key={a.key} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: FONT.body, fontSize: 12.5, color: "#111111" }}>
+                  <label key={a.key} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A" }}>
                     {a.label}
                     <input type="number" min="0" max="100"
                       value={(roster.settings.weights || DEFAULT_WEIGHTS)[a.key]}
@@ -2088,11 +2093,11 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                 );
               })()}
 
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55", marginBottom: 8 }}>Currency</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50", marginBottom: 8 }}>Currency</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {["KSh", "$", "£", "€"].map((c) => (
                   <button key={c} onClick={() => saveRoster({ ...roster, settings: { ...roster.settings, currency: c } }, "Currency updated")} style={{
-                    ...primaryBtn(), background: cur === c ? "#FFC400" : "#111111", color: cur === c ? "#0D0D0D" : "#FFFFFF",
+                    ...primaryBtn(), background: cur === c ? "#FFC400" : "#0A2E1A", color: cur === c ? "#073D22" : "#FFFFFF",
                   }}>{c}</button>
                 ))}
               </div>
@@ -2128,10 +2133,10 @@ function AdminOverview({ roster }) {
         <StatCard label="Fees collected" value={`${cur}${money(totalPaid)}`} tone="#0E7A3C" />
         <StatCard label="Fees outstanding" value={`${cur}${money(totalDue - totalPaid)}`} tone={totalDue - totalPaid > 0 ? "#C0261B" : "#0E7A3C"} />
         <StatCard label="Fees cleared" value={`${cleared}/${roster.students.length}`} />
-        <StatCard label="Awaiting approval" value={pendingApprovals} tone={pendingApprovals > 0 ? "#1A1A1A" : "#111111"} />
+        <StatCard label="Awaiting approval" value={pendingApprovals} tone={pendingApprovals > 0 ? "#0E4A29" : "#0A2E1A"} />
       </div>
       {roster.students.length === 0 && (
-        <p style={{ fontFamily: FONT.body, color: "#5C5C55", fontSize: 13, marginTop: 18 }}>
+        <p style={{ fontFamily: FONT.body, color: "#4A5A50", fontSize: 13, marginTop: 18 }}>
           Start by adding a class, then a teacher (this creates their login), then students.
         </p>
       )}
@@ -2184,7 +2189,7 @@ function AdminReports({ roster }) {
   });
 
   const Bar = ({ label, value, tone }) => (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderLeft: `4px solid ${tone}`, borderRadius: 3 }}>{label}{value}</div>
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderLeft: `4px solid ${tone}`, borderRadius: 3 }}>{label}{value}</div>
   );
 
   return (
@@ -2194,7 +2199,7 @@ function AdminReports({ roster }) {
         {[["fees", "Fee status"], ["exam", "Results & position"], ["staff", "Teacher attendance"]].map(([v, label]) => (
           <button key={v} onClick={() => setView(v)} style={{
             padding: "6px 13px", borderRadius: 3, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
-            border: `1px solid ${view === v ? "#111111" : "#CFCFC8"}`, background: view === v ? "#111111" : "#fff", color: view === v ? "#fff" : "#5C5C55",
+            border: `1px solid ${view === v ? "#0A2E1A" : "#C6D2CA"}`, background: view === v ? "#0A2E1A" : "#fff", color: view === v ? "#fff" : "#4A5A50",
           }}>{label}</button>
         ))}
       </div>
@@ -2212,11 +2217,11 @@ function AdminReports({ roster }) {
             <div key={title}>
               <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: tone, margin: "0 0 8px" }}>{title} ({list.length})</div>
               {list.length === 0
-                ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63", marginBottom: 14 }}>None.</div>
+                ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64", marginBottom: 14 }}>None.</div>
                 : <div style={{ display: "grid", gap: 5, marginBottom: 16 }}>
                     {list.map((s) => (
                       <Bar key={s.id} tone={tone}
-                        label={<span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>{s.name} <span style={{ color: "#6A6A63", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>}
+                        label={<span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>{s.name} <span style={{ color: "#5E6E64", fontSize: 12 }}>({classNameOf(roster, s.classId)})</span></span>}
                         value={<span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: tone }}>{val(s)}</span>} />
                     ))}
                   </div>}
@@ -2234,7 +2239,7 @@ function AdminReports({ roster }) {
             </select>
             <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 110 }} />
           </div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginBottom: 14 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginBottom: 14 }}>
             Final = CAT 1 {weights.cat1}% + CAT 2 {weights.cat2}% + Exam {weights.exam}%. Pass mark {passMark}.
           </div>
 
@@ -2244,34 +2249,34 @@ function AdminReports({ roster }) {
             <StatCard label="With results" value={allRanked.length} />
           </div>
 
-          {perClass.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No classes with students yet.</div>}
+          {perClass.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No classes with students yet.</div>}
 
           {perClass.map(({ cls, ranked, size }) => (
             <div key={cls.id} style={{ marginBottom: 24 }}>
-              <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
-                {cls.name} <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#6A6A63" }}>· {ranked.length} of {size} with results</span>
+              <div style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
+                {cls.name} <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#5E6E64" }}>· {ranked.length} of {size} with results</span>
               </div>
               {ranked.length === 0
-                ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No results entered for {term}.</div>
+                ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No results entered for {term}.</div>
                 : (
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 340 }}>
                       <thead>
                         <tr>
                           {["Pos", "Student", "Total", "Avg", "Grade", ""].map((h, k) => (
-                            <th key={k} style={{ borderBottom: "1px solid #E3E3DD", padding: "6px 8px", textAlign: k > 1 ? "right" : "left", fontFamily: FONT.mono, fontSize: 9.5, textTransform: "uppercase", color: "#6A6A63", letterSpacing: 0.5 }}>{h}</th>
+                            <th key={k} style={{ borderBottom: "1px solid #DCE6E0", padding: "6px 8px", textAlign: k > 1 ? "right" : "left", fontFamily: FONT.mono, fontSize: 9.5, textTransform: "uppercase", color: "#5E6E64", letterSpacing: 0.5 }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {ranked.map((r) => (
                           <tr key={r.student.id} style={{ background: r.position <= 3 ? "#F7F2E2" : "transparent" }}>
-                            <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 8px", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: r.position === 1 ? "#B8860B" : "#111111" }}>{r.position}</td>
-                            <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 8px", fontFamily: FONT.body, fontSize: 13, color: "#111111" }}>{r.student.name}</td>
-                            <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.total}</td>
-                            <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.average}</td>
-                            <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(r.average) }}>{gradeOf(r.average)}</td>
-                            <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: gradeInk(r.average) }}>L{gradeLevel(r.average)}</td>
+                            <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 8px", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: r.position === 1 ? "#B8860B" : "#0A2E1A" }}>{r.position}</td>
+                            <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 8px", fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A" }}>{r.student.name}</td>
+                            <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.total}</td>
+                            <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12.5 }}>{r.average}</td>
+                            <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(r.average) }}>{gradeOf(r.average)}</td>
+                            <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 8px", textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: gradeInk(r.average) }}>L{gradeLevel(r.average)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2285,18 +2290,18 @@ function AdminReports({ roster }) {
 
       {view === "staff" && (
         <div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>Teacher attendance over the last 30 days. Mark it daily under the <strong>Staff</strong> tab.</div>
-          {staffRows.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No teachers added yet.</div>}
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>Teacher attendance over the last 30 days. Mark it daily under the <strong>Staff</strong> tab.</div>
+          {staffRows.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No teachers added yet.</div>}
           <div style={{ display: "grid", gap: 6 }}>
             {staffRows.map((r) => (
-              <div key={r.t.id} style={{ padding: "10px 13px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4 }}>
+              <div key={r.t.id} style={{ padding: "10px 13px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-                  <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>{r.t.name} <span style={{ color: "#6A6A63", fontSize: 12, fontWeight: 400 }}>({classNameOf(roster, r.t.classId)})</span></span>
-                  <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: r.rate === null ? "#6A6A63" : r.rate >= 90 ? "#0E7A3C" : r.rate >= 75 ? "#8A6A00" : "#C0261B" }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>{r.t.name} <span style={{ color: "#5E6E64", fontSize: 12, fontWeight: 400 }}>({classNameOf(roster, r.t.classId)})</span></span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: r.rate === null ? "#5E6E64" : r.rate >= 90 ? "#0E7A3C" : r.rate >= 75 ? "#8A6A00" : "#C0261B" }}>
                     {r.rate === null ? "no records" : `${r.rate}%`}
                   </span>
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55", marginTop: 4 }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50", marginTop: 4 }}>
                   present {r.present} · late {r.late} · absent {r.absent} · days marked {r.marked}
                 </div>
               </div>
@@ -2333,21 +2338,21 @@ function StaffAttendance({ roster, saveRoster }) {
         <SectionTitle>Teacher attendance</SectionTitle>
         <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} style={darkInput()} />
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>Each tap saves right away.</div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>Each tap saves right away.</div>
 
-      {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Add teachers first.</div>}
+      {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Add teachers first.</div>}
       <div style={{ display: "grid", gap: 6 }}>
         {roster.teachers.map((t) => (
-          <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 3 }}>
+          <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 3 }}>
             <div>
-              <div style={{ fontFamily: FONT.body, fontSize: 14, color: "#111111", fontWeight: 500 }}>{t.name}</div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63" }}>{classNameOf(roster, t.classId)}</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 14, color: "#0A2E1A", fontWeight: 500 }}>{t.name}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64" }}>{classNameOf(roster, t.classId)}</div>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {Object.entries(STATUS).map(([key, val]) => (
                 <button key={key} onClick={() => setMark(t.id, key)} title={val.label} style={{
                   width: 34, height: 34, borderRadius: "50%",
-                  border: `2px solid ${dayLog[t.id] === key ? val.ink : "#CFCFC8"}`,
+                  border: `2px solid ${dayLog[t.id] === key ? val.ink : "#C6D2CA"}`,
                   background: dayLog[t.id] === key ? val.ink : "transparent",
                   color: dayLog[t.id] === key ? "#fff" : val.ink,
                   fontFamily: FONT.mono, fontWeight: 700, fontSize: 13,
@@ -2363,8 +2368,8 @@ function StaffAttendance({ roster, saveRoster }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {history.map((h) => (
             <div key={h.d} style={{ textAlign: "center", minWidth: 62 }}>
-              <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#6A6A63" }}>{fmtDate(h.d)}</div>
-              <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#111111" }}>{h.total ? `${h.present}/${h.total}` : "—"}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#5E6E64" }}>{fmtDate(h.d)}</div>
+              <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#0A2E1A" }}>{h.total ? `${h.present}/${h.total}` : "—"}</div>
             </div>
           ))}
         </div>
@@ -2424,7 +2429,7 @@ function StudentsByClass({ roster, saveRoster, removeItem, openClassId }) {
         style={{ ...darkInput(), width: "100%", marginBottom: 10 }} />
 
       {q && (
-        <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55", marginBottom: 8 }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50", marginBottom: 8 }}>
           {total} match{total === 1 ? "" : "es"}
         </div>
       )}
@@ -2433,13 +2438,13 @@ function StudentsByClass({ roster, saveRoster, removeItem, openClassId }) {
         {shown.map((g) => {
           const isOpen = q ? true : !!open[g.id];
           return (
-            <div key={g.id} style={{ border: "1px solid #E3E3DD", borderRadius: 5, overflow: "hidden" }}>
+            <div key={g.id} style={{ border: "1px solid #DCE6E0", borderRadius: 5, overflow: "hidden" }}>
               <button onClick={() => setOpen({ ...open, [g.id]: !open[g.id] })}
                 style={{
                   width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
                   gap: 10, padding: "11px 13px", border: "none", textAlign: "left",
-                  background: g.id === "__none" ? "#FDE8E6" : (isOpen ? "#111111" : "#F7F7F4"),
-                  color: g.id === "__none" ? "#C0261B" : (isOpen ? "#fff" : "#111111"),
+                  background: g.id === "__none" ? "#FDE8E6" : (isOpen ? "#0A2E1A" : "#F4F8F5"),
+                  color: g.id === "__none" ? "#C0261B" : (isOpen ? "#fff" : "#0A2E1A"),
                 }}>
                 <span style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600 }}>
                   {g.name}
@@ -2447,8 +2452,8 @@ function StudentsByClass({ roster, saveRoster, removeItem, openClassId }) {
                 <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{
                     fontFamily: FONT.mono, fontSize: 11, padding: "2px 9px", borderRadius: 10,
-                    background: isOpen ? "rgba(255,255,255,0.18)" : "#E3E3DD",
-                    color: isOpen ? "#fff" : "#5C5C55",
+                    background: isOpen ? "rgba(255,255,255,0.18)" : "#DCE6E0",
+                    color: isOpen ? "#fff" : "#4A5A50",
                   }}>{g.pupils.length}</span>
                   <span style={{ fontFamily: FONT.mono, fontSize: 12 }}>{isOpen ? "▾" : "▸"}</span>
                 </span>
@@ -2457,24 +2462,24 @@ function StudentsByClass({ roster, saveRoster, removeItem, openClassId }) {
               {isOpen && (
                 <div style={{ padding: "8px 10px", display: "grid", gap: 5, background: "#FFFFFF" }}>
                   {g.pupils.length === 0 && (
-                    <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6A6A63", padding: "4px 2px" }}>
+                    <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5E6E64", padding: "4px 2px" }}>
                       No pupils in this class yet.
                     </div>
                   )}
                   {g.pupils.map((st) => (
-                    <div key={st.id} style={{ padding: "9px 11px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4 }}>
+                    <div key={st.id} style={{ padding: "9px 11px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", fontWeight: 600 }}>{st.name}</span>
+                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", fontWeight: 600 }}>{st.name}</span>
                         <span style={{ display: "flex", gap: 11, alignItems: "center" }}>
-                          <span style={{ fontFamily: FONT.mono, fontSize: 12, background: "#fff", border: "1px solid #CFCFC8", borderRadius: 3, padding: "2px 8px", color: "#111111" }}>
+                          <span style={{ fontFamily: FONT.mono, fontSize: 12, background: "#fff", border: "1px solid #C6D2CA", borderRadius: 3, padding: "2px 8px", color: "#0A2E1A" }}>
                             PIN {st.pin || "—"}
                           </span>
-                          <button onClick={() => newPin(st)} style={{ background: "none", border: "none", color: "#111111", fontFamily: FONT.mono, fontSize: 11 }}>new PIN</button>
+                          <button onClick={() => newPin(st)} style={{ background: "none", border: "none", color: "#0A2E1A", fontFamily: FONT.mono, fontSize: 11 }}>new PIN</button>
                           <button onClick={() => removeItem("students", st.id)} style={{ background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
                         </span>
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-                        <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63" }}>
+                        <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64" }}>
                           {st.id}{st.parentName ? " · guardian: " + st.parentName : ""}
                         </span>
                         <select value={st.classId} onChange={(e) => move(st, e.target.value)}
@@ -2517,15 +2522,15 @@ function ClassPicker({ roster, onPick }) {
   };
 
   const TONE = {
-    none:      { bg: "#F7F7F4", fg: "#6A6A63", edge: "#CFCFC8" },
+    none:      { bg: "#F4F8F5", fg: "#5E6E64", edge: "#C6D2CA" },
     draft:     { bg: "#FFF6D6", fg: "#8A6A00", edge: "#F0D98A" },
-    submitted: { bg: "#F2F2EE", fg: "#1A1A1A", edge: "#CFCFC8" },
+    submitted: { bg: "#EFF5F1", fg: "#0E4A29", edge: "#C6D2CA" },
     approved:  { bg: "#E3F5E9", fg: "#0E7A3C", edge: "#A9DEBC" },
     returned:  { bg: "#FDE8E6", fg: "#C0261B", edge: "#F3C0BB" },
   };
 
   if (roster.classes.length === 0) {
-    return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Add classes first.</div>;
+    return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Add classes first.</div>;
   }
 
   return (
@@ -2537,11 +2542,11 @@ function ClassPicker({ roster, onPick }) {
         return (
           <button key={c.id} onClick={() => onPick(c.id)} style={{
             textAlign: "left", padding: "13px 14px", borderRadius: 6,
-            background: "#fff", border: `1px solid #E3E3DD`,
+            background: "#fff", border: `1px solid #DCE6E0`,
             borderLeft: `4px solid ${tone.fg}`, display: "grid", gap: 5,
           }}>
-            <span style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: "#111111" }}>{c.name}</span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63" }}>
+            <span style={{ fontFamily: FONT.display, fontSize: 16, fontWeight: 700, color: "#0A2E1A" }}>{c.name}</span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64" }}>
               {count} pupil{count === 1 ? "" : "s"}
             </span>
             <span style={{
@@ -2574,7 +2579,7 @@ function TeacherResults({ roster, saveRoster, teacher }) {
       <div>
         <SectionTitle>Exam results</SectionTitle>
         <div style={{ padding: "13px 15px", borderRadius: 5, background: "#FFF6D6", border: "1px solid #F0D98A",
-                      fontFamily: FONT.body, fontSize: 13, color: "#111111", lineHeight: 1.6 }}>
+                      fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", lineHeight: 1.6 }}>
           You have not been given any subjects yet, so there is nothing to enter.
           <div style={{ marginTop: 8 }}>
             Ask the administrator to either tap your subject chips under <strong>Teachers</strong>,
@@ -2592,28 +2597,28 @@ function TeacherResults({ roster, saveRoster, teacher }) {
 
       {!current && (
         <>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
             You teach {assignments.length} class{assignments.length === 1 ? "" : "es"}. Choose one to enter results.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px,1fr))", gap: 9 }}>
             {assignments.map((a) => {
               const rec = getMarksFor(roster, a.classId, DEFAULT_TERM);
               const st = statusOf(rec);
-              const tone = { draft: "#8A6A00", submitted: "#1A1A1A", approved: "#0E7A3C", returned: "#C0261B" }[st] || "#6A6A63";
+              const tone = { draft: "#8A6A00", submitted: "#0E4A29", approved: "#0E7A3C", returned: "#C0261B" }[st] || "#5E6E64";
               const count = roster.students.filter((s) => s.classId === a.classId).length;
               return (
                 <button key={a.classId} onClick={() => setPicked(a.classId)} style={{
                   textAlign: "left", padding: "13px 14px", borderRadius: 6, background: "#fff",
-                  border: "1px solid #E3E3DD", borderLeft: `4px solid ${tone}`, display: "grid", gap: 5,
+                  border: "1px solid #DCE6E0", borderLeft: `4px solid ${tone}`, display: "grid", gap: 5,
                 }}>
-                  <span style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 700, color: "#111111" }}>
+                  <span style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 700, color: "#0A2E1A" }}>
                     {a.className}
                     {a.isHomeClass && <span style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#B8860B", marginLeft: 6 }}>MY CLASS</span>}
                   </span>
-                  <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63" }}>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64" }}>
                     {count} pupil{count === 1 ? "" : "s"} · {a.subjects.length} subject{a.subjects.length === 1 ? "" : "s"}
                   </span>
-                  <span style={{ fontFamily: FONT.body, fontSize: 11, color: "#5C5C55", lineHeight: 1.35 }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 11, color: "#4A5A50", lineHeight: 1.35 }}>
                     {a.subjects.join(", ")}
                   </span>
                 </button>
@@ -2626,20 +2631,20 @@ function TeacherResults({ roster, saveRoster, teacher }) {
       {current && (
         <>
           {assignments.length > 1 && (
-            <button onClick={() => setPicked("")} style={{ ...backBtnStyle(), color: "#111111", marginBottom: 12 }}>
+            <button onClick={() => setPicked("")} style={{ ...backBtnStyle(), color: "#0A2E1A", marginBottom: 12 }}>
               ← my classes
             </button>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#111111" }}>{current.className}</span>
+            <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#0A2E1A" }}>{current.className}</span>
             {levelLabelForClass(roster, current.classId) && (
-              <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#5C5C55", background: "#F7F7F4",
-                             border: "1px solid #E3E3DD", borderRadius: 10, padding: "2px 9px" }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#4A5A50", background: "#F4F8F5",
+                             border: "1px solid #DCE6E0", borderRadius: 10, padding: "2px 9px" }}>
                 {levelLabelForClass(roster, current.classId)}
               </span>
             )}
           </div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginBottom: 12 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginBottom: 12 }}>
             You may enter: {current.subjects.join(", ")}
           </div>
 
@@ -2726,7 +2731,7 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
         <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 120 }} />
       </div>
 
-      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginBottom: 10 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginBottom: 10 }}>
         Final mark = CAT 1 ({weights.cat1}%) + CAT 2 ({weights.cat2}%) + Main Exam ({weights.exam}%). Weights are set in Settings.
         {levelLabelForClass(roster, classId) && (
           <div style={{ marginTop: 3 }}>
@@ -2736,13 +2741,13 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
       </div>
 
       {record.note && status === "returned" && (
-        <div style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6", border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginBottom: 10 }}>
+        <div style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6", border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginBottom: 10 }}>
           <strong>Admin says:</strong> {record.note}
         </div>
       )}
 
       {locked && (
-        <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7F7F4", border: "1px solid #E3E3DD", fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 10 }}>
+        <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F4F8F5", border: "1px solid #DCE6E0", fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 10 }}>
           {status === "submitted"
             ? (role === "teacher"
                 ? "Marks are locked while admin reviews them. Tap “Withdraw & edit” if you need to change something."
@@ -2752,7 +2757,7 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
       )}
 
       {allowedSubjects.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#C0261B" }}>No subjects assigned to you — ask admin to assign the subjects you teach.</div>}
-      {allowedSubjects.length > 0 && students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No students in this class yet.</div>}
+      {allowedSubjects.length > 0 && students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No students in this class yet.</div>}
 
       {allowedSubjects.length > 0 && students.length > 0 && (
         <>
@@ -2771,9 +2776,9 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
             {ASSESSMENTS.map((a) => (
               <button key={a.key} onClick={() => setEntry({ ...entry, assessment: a.key })} style={{
                 padding: "7px 14px", borderRadius: 20, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
-                border: `1px solid ${entry.assessment === a.key ? "#111111" : "#CFCFC8"}`,
-                background: entry.assessment === a.key ? "#111111" : "#fff",
-                color: entry.assessment === a.key ? "#fff" : "#5C5C55",
+                border: `1px solid ${entry.assessment === a.key ? "#0A2E1A" : "#C6D2CA"}`,
+                background: entry.assessment === a.key ? "#0A2E1A" : "#fff",
+                color: entry.assessment === a.key ? "#fff" : "#4A5A50",
               }}>{a.label}</button>
             ))}
           </div>
@@ -2786,25 +2791,25 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
             <button onClick={addMark} disabled={locked || !entry.studentId || !entry.subject || entry.score === ""} style={{ ...primaryBtn(), opacity: locked ? 0.45 : 1 }}>Add mark</button>
           </div>
 
-          {ranked.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No marks entered for {term} yet.</div>}
+          {ranked.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No marks entered for {term} yet.</div>}
 
           {ranked.length > 0 && (
             <div style={{ display: "grid", gap: 7 }}>
               {ranked.map((r) => (
-                <div key={r.student.id} style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5, padding: "11px 13px" }}>
+                <div key={r.student.id} style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5, padding: "11px 13px" }}>
                   {/* one line per pupil; tap to see the subject breakdown */}
                   <button onClick={() => setOpenPupil(openPupil === r.student.id ? null : r.student.id)}
                     style={{ width: "100%", background: "none", border: "none", padding: 0, textAlign: "left",
                              display: "flex", justifyContent: "space-between", alignItems: "baseline",
                              flexWrap: "wrap", gap: 8 }}>
-                    <span style={{ fontFamily: FONT.body, fontSize: 14, fontWeight: 600, color: "#111111" }}>
-                      <span style={{ fontFamily: FONT.mono, color: "#6A6A63", fontSize: 11.5, marginRight: 7 }}>#{r.position}</span>{r.student.name}
+                    <span style={{ fontFamily: FONT.body, fontSize: 14, fontWeight: 600, color: "#0A2E1A" }}>
+                      <span style={{ fontFamily: FONT.mono, color: "#5E6E64", fontSize: 11.5, marginRight: 7 }}>#{r.position}</span>{r.student.name}
                     </span>
                     <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontFamily: FONT.mono, fontSize: 12.5, color: gradeInk(r.average) }}>
                         avg {r.average} · {gradeOf(r.average)}
                       </span>
-                      <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63" }}>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64" }}>
                         {openPupil === r.student.id ? "▾" : "▸"}
                       </span>
                     </span>
@@ -2814,10 +2819,10 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
                       const e = normEntry(grid[r.student.id][sub]);
                       const fin = subjectFinal(e, weights);
                       return (
-                        <div key={sub} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12.5, fontFamily: FONT.body, color: "#111111" }}>
+                        <div key={sub} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12.5, fontFamily: FONT.body, color: "#0A2E1A" }}>
                           <span style={{ minWidth: 78, fontWeight: 500 }}>{sub}</span>
                           {ASSESSMENTS.map((a) => (
-                            <span key={a.key} style={{ fontFamily: FONT.mono, fontSize: 11, color: typeof e[a.key] === "number" ? "#111111" : "#C4C4BC" }}>
+                            <span key={a.key} style={{ fontFamily: FONT.mono, fontSize: 11, color: typeof e[a.key] === "number" ? "#0A2E1A" : "#B9C7BF" }}>
                               {a.short} {typeof e[a.key] === "number" ? e[a.key] : "–"}
                               {typeof e[a.key] === "number" && (
                                 <button onClick={() => removeComponent(r.student.id, sub, a.key)} title={`Remove ${a.label}`} style={{ background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 11, padding: "0 0 0 2px" }}>×</button>
@@ -2842,7 +2847,7 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
                 <button onClick={withdraw} style={{ ...primaryBtn(), background: "#8A6A00" }}>Withdraw &amp; edit</button>
               )}
               {role === "teacher" && (status === "draft" || status === "returned") && (
-                <button onClick={submit} style={{ ...primaryBtn(), background: "#1A1A1A" }}>Send to admin for approval</button>
+                <button onClick={submit} style={{ ...primaryBtn(), background: "#0E4A29" }}>Send to admin for approval</button>
               )}
               {role === "admin" && status === "submitted" && (
                 <>
@@ -2856,7 +2861,7 @@ function MarksEditor({ roster, saveRoster, classId, students, allowedSubjects, r
               {role === "admin" && status === "approved" && (
                 <button onClick={unpublish} style={{ ...primaryBtn(), background: "#C0261B" }}>Unpublish</button>
               )}
-              <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), background: "#111111" }}>
+              <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), background: "#0A2E1A" }}>
                 Print class marksheet
               </button>
             </div>
@@ -2895,12 +2900,12 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
         <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 14px 60px" }}>
           <div className="paper-panel" style={{ ...paperPanel(), padding: 22 }}>
             <SectionTitle>Your account isn't linked to a class yet</SectionTitle>
-            <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", lineHeight: 1.6, marginBottom: 14 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", lineHeight: 1.6, marginBottom: 14 }}>
               You signed in successfully{who?.name ? ` as ${who.name}` : ""}, but the portal doesn't yet know
               which class you teach — so there is nothing to show you.
             </div>
             <div style={{ padding: "12px 14px", background: "#FFF6D6", border: "1px solid #F0D98A",
-                          borderRadius: 4, fontFamily: FONT.body, fontSize: 13, color: "#111111", lineHeight: 1.6 }}>
+                          borderRadius: 4, fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", lineHeight: 1.6 }}>
               <strong>Ask the administrator to:</strong>
               <ol style={{ margin: "8px 0 0", paddingLeft: 18 }}>
                 <li>Open <strong>Teachers</strong> and add you, choosing your class and subjects.</li>
@@ -2908,7 +2913,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
                     and set <em>“Link to teacher record”</em> to your name.</li>
               </ol>
             </div>
-            <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginTop: 14 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginTop: 14 }}>
               Once that is done, sign out and back in and your class will appear.
             </div>
             <button onClick={onExit} style={{ ...primaryBtn(), marginTop: 16 }}>Sign out</button>
@@ -2958,7 +2963,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           <button onClick={() => setTab("memos")} style={{
             width: "100%", textAlign: "left", padding: "11px 13px", marginBottom: 12,
             background: "#FFF6D6", border: "1px solid #F0D98A", borderLeft: "4px solid #8A6A00",
-            borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#111111",
+            borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A",
           }}>
             <strong>{unreadMemos(roster, teacher.id).length} unread memo{unreadMemos(roster, teacher.id).length === 1 ? "" : "s"}</strong> from the office — tap to read
           </button>
@@ -3027,21 +3032,21 @@ function TeacherAttendance({ roster, saveRoster, classId, students }) {
         <SectionTitle>Mark attendance</SectionTitle>
         <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} style={darkInput()} />
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>Each tap saves right away — no separate save button.</div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>Each tap saves right away — no separate save button.</div>
 
-      {students.length === 0 && <div style={{ fontFamily: FONT.body, color: "#6A6A63", fontSize: 13 }}>No students in this class yet.</div>}
+      {students.length === 0 && <div style={{ fontFamily: FONT.body, color: "#5E6E64", fontSize: 13 }}>No students in this class yet.</div>}
       <div style={{ display: "grid", gap: 6 }}>
         {students.map((s) => (
-          <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 3 }}>
+          <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 3 }}>
             <div>
-              <div style={{ fontFamily: FONT.body, fontSize: 14, color: "#111111", fontWeight: 500 }}>{s.name}</div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63" }}>{s.id}</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 14, color: "#0A2E1A", fontWeight: 500 }}>{s.name}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64" }}>{s.id}</div>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {Object.entries(STATUS).map(([key, val]) => (
                 <button key={key} onClick={() => setMark(s.id, key)} title={val.label} style={{
                   width: 34, height: 34, borderRadius: "50%",
-                  border: `2px solid ${marks[s.id] === key ? val.ink : "#CFCFC8"}`,
+                  border: `2px solid ${marks[s.id] === key ? val.ink : "#C6D2CA"}`,
                   background: marks[s.id] === key ? val.ink : "transparent",
                   color: marks[s.id] === key ? "#fff" : val.ink,
                   fontFamily: FONT.mono, fontWeight: 700, fontSize: 13,
@@ -3057,8 +3062,8 @@ function TeacherAttendance({ roster, saveRoster, classId, students }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {history.map((h) => (
             <div key={h.d} style={{ textAlign: "center", minWidth: 62 }}>
-              <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#6A6A63" }}>{fmtDate(h.d)}</div>
-              <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#111111" }}>{h.total ? `${h.present}/${h.total}` : "—"}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#5E6E64" }}>{fmtDate(h.d)}</div>
+              <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#0A2E1A" }}>{h.total ? `${h.present}/${h.total}` : "—"}</div>
             </div>
           ))}
         </div>
@@ -3128,9 +3133,9 @@ function ParentView({ payload, onExit }) {
         <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade paper-panel">
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 16 }}>
             <div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63" }}>{student.id}</div>
-              <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600, color: "#111111" }}>{student.name}</div>
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55" }}>{payload.className}{student.parentName ? ` · Guardian: ${student.parentName}` : ""}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64" }}>{student.id}</div>
+              <div style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 600, color: "#0A2E1A" }}>{student.name}</div>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50" }}>{payload.className}{student.parentName ? ` · Guardian: ${student.parentName}` : ""}</div>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <StatCard label="Attendance" value={rate === null ? "—" : `${rate}%`} />
@@ -3140,14 +3145,14 @@ function ParentView({ payload, onExit }) {
 
           <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
             <button onClick={() => setShowWork(!showWork)}
-              style={{ ...primaryBtn(), background: showWork ? "#111111" : "#8A6A00" }}>
+              style={{ ...primaryBtn(), background: showWork ? "#0A2E1A" : "#8A6A00" }}>
               {showWork ? "Hide holiday work" : "Holiday work"}
             </button>
             <button onClick={() => setPrintDoc("invoice")} style={primaryBtn()}>Fee invoice</button>
-            <button onClick={() => setPrintDoc("statement")} style={{ ...primaryBtn(), background: "#111111" }}>Fee statement</button>
+            <button onClick={() => setPrintDoc("statement")} style={{ ...primaryBtn(), background: "#0A2E1A" }}>Fee statement</button>
             <button onClick={() => setPrintDoc("timetable")} style={{ ...primaryBtn(), background: "#0E7A3C" }}>Class timetable</button>
             {payload.examTimetable?.papers?.length > 0 && (
-              <button onClick={() => setPrintDoc("examtt")} style={{ ...primaryBtn(), background: "#111111" }}>Exam timetable</button>
+              <button onClick={() => setPrintDoc("examtt")} style={{ ...primaryBtn(), background: "#0A2E1A" }}>Exam timetable</button>
             )}
           </div>
 
@@ -3163,13 +3168,13 @@ function ParentView({ payload, onExit }) {
           </div>
           <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term" style={{ ...darkInput(), width: 120, marginBottom: 12 }} />
 
-          {!approved && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63", marginBottom: 18 }}>Results for this term haven't been published yet.</div>}
-          {approved && Object.keys(termMarks).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63", marginBottom: 18 }}>No results recorded for this term.</div>}
+          {!approved && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64", marginBottom: 18 }}>Results for this term haven't been published yet.</div>}
+          {approved && Object.keys(termMarks).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64", marginBottom: 18 }}>No results recorded for this term.</div>}
           {approved && Object.keys(termMarks).length > 0 && (
             <div style={{ marginBottom: 18 }}>
               {rank && (
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-                  <StatCard label="Position in class" value={`${rank.position} of ${rank.outOf}`} tone={rank.position <= 3 ? "#B8860B" : "#111111"} />
+                  <StatCard label="Position in class" value={`${rank.position} of ${rank.outOf}`} tone={rank.position <= 3 ? "#B8860B" : "#0A2E1A"} />
                   <StatCard label="Total marks" value={rank.total} />
                   <StatCard label="Performance level" value={avg === null ? "—" : `L${gradeLevel(avg)} ${gradeOf(avg)}`} tone={gradeInk(avg)} />
                 </div>
@@ -3178,7 +3183,7 @@ function ParentView({ payload, onExit }) {
                 <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 320 }}>
                   <thead>
                     <tr>{["Subject", "CAT 1", "CAT 2", "Exam", "Final", "Gr"].map((h, k) => (
-                      <th key={k} style={{ borderBottom: "1px solid #E3E3DD", padding: "6px 7px", textAlign: k === 0 ? "left" : "right", fontFamily: FONT.mono, fontSize: 9, textTransform: "uppercase", color: "#6A6A63" }}>{h}</th>
+                      <th key={k} style={{ borderBottom: "1px solid #DCE6E0", padding: "6px 7px", textAlign: k === 0 ? "left" : "right", fontFamily: FONT.mono, fontSize: 9, textTransform: "uppercase", color: "#5E6E64" }}>{h}</th>
                     ))}</tr>
                   </thead>
                   <tbody>
@@ -3187,14 +3192,14 @@ function ParentView({ payload, onExit }) {
                       const fin = subjectFinal(e, weights);
                       return (
                         <tr key={subject}>
-                          <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 7px", fontFamily: FONT.body, fontSize: 13, color: "#111111" }}>{subject}</td>
+                          <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 7px", fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A" }}>{subject}</td>
                           {ASSESSMENTS.map((a) => (
-                            <td key={a.key} style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12, color: typeof e[a.key] === "number" ? "#111111" : "#C4C4BC" }}>
+                            <td key={a.key} style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontSize: 12, color: typeof e[a.key] === "number" ? "#0A2E1A" : "#B9C7BF" }}>
                               {typeof e[a.key] === "number" ? e[a.key] : "–"}
                             </td>
                           ))}
-                          <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(fin) }}>{fin === null ? "—" : fin}</td>
-                          <td style={{ borderBottom: "1px solid #EDEDE7", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12, color: gradeInk(fin) }}>{gradeOf(fin)}</td>
+                          <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12.5, color: gradeInk(fin) }}>{fin === null ? "—" : fin}</td>
+                          <td style={{ borderBottom: "1px solid #E7EFE9", padding: "7px 7px", textAlign: "right", fontFamily: FONT.mono, fontWeight: 700, fontSize: 12, color: gradeInk(fin) }}>{gradeOf(fin)}</td>
                         </tr>
                       );
                     })}
@@ -3202,7 +3207,7 @@ function ParentView({ payload, onExit }) {
                 </table>
               </div>
               {avg !== null && (
-                <div style={{ padding: "10px 12px", borderRadius: 3, background: avg >= passMark ? "#E3F5E9" : "#FDE8E6", border: `1px solid ${avg >= passMark ? "#A9DEBC" : "#F3C0BB"}`, fontFamily: FONT.body, fontSize: 14, color: "#111111" }}>
+                <div style={{ padding: "10px 12px", borderRadius: 3, background: avg >= passMark ? "#E3F5E9" : "#FDE8E6", border: `1px solid ${avg >= passMark ? "#A9DEBC" : "#F3C0BB"}`, fontFamily: FONT.body, fontSize: 14, color: "#0A2E1A" }}>
                   Average <strong>{avg}/100</strong> — <strong style={{ color: gradeInk(avg) }}>Level {gradeLevel(avg)}: {gradeLabel(avg)}</strong>
                 </div>
               )}
@@ -3210,13 +3215,13 @@ function ParentView({ payload, onExit }) {
           )}
 
           <SectionTitle>Recent attendance</SectionTitle>
-          {log.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No attendance recorded yet.</div>}
+          {log.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No attendance recorded yet.</div>}
           <div style={{ display: "grid", gap: 5 }}>
             {log.map((r) => (
-              <div key={r.d} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 3 }}>
+              <div key={r.d} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 3 }}>
                 <Stamp status={r.status} size={26} />
-                <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>{fmtDate(r.d)}</div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63", marginLeft: "auto" }}>{STATUS[r.status]?.label}</div>
+                <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>{fmtDate(r.d)}</div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64", marginLeft: "auto" }}>{STATUS[r.status]?.label}</div>
               </div>
             ))}
           </div>
@@ -3248,12 +3253,12 @@ function Approvals({ roster, saveRoster }) {
   return (
     <div>
       <SectionTitle>Approvals</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
         Results a teacher has sent for approval. Nothing reaches students or parents until you approve it.
       </div>
 
       {pending.length === 0 && (
-        <div style={{ padding: "14px 15px", borderRadius: 5, background: "#F7F7F4", border: "1px solid #E3E3DD", fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>
+        <div style={{ padding: "14px 15px", borderRadius: 5, background: "#F4F8F5", border: "1px solid #DCE6E0", fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>
           Nothing waiting for approval right now.
         </div>
       )}
@@ -3263,23 +3268,23 @@ function Approvals({ roster, saveRoster }) {
           const studentsIn = roster.students.filter((s) => s.classId === classId);
           const ranked = classPositions(rec.grid || {}, studentsIn, roster.subjects, weights);
           return (
-            <div key={classId + tKey} style={{ background: "#F7F7F4", border: "1px solid #CFCFC8", borderLeft: "4px solid #1A1A1A", borderRadius: 5, padding: "12px 14px" }}>
-              <div style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 600, color: "#111111" }}>
+            <div key={classId + tKey} style={{ background: "#F4F8F5", border: "1px solid #C6D2CA", borderLeft: "4px solid #0E4A29", borderRadius: 5, padding: "12px 14px" }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 600, color: "#0A2E1A" }}>
                 {classNameOf(roster, classId)} — {tKey.replace(/_/g, " ")}
               </div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55", marginTop: 3 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50", marginTop: 3 }}>
                 Sent by {rec.submittedBy || "a teacher"}{rec.submittedAt ? " · " + fmtDate(rec.submittedAt) : ""} · {ranked.length} student{ranked.length === 1 ? "" : "s"} with results
               </div>
 
               {ranked.length > 0 && (
                 <div style={{ display: "grid", gap: 3, margin: "9px 0 11px" }}>
                   {ranked.slice(0, 5).map((r) => (
-                    <div key={r.student.id} style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT.body, fontSize: 12.5, color: "#111111" }}>
-                      <span><span style={{ fontFamily: FONT.mono, color: "#6A6A63", marginRight: 6 }}>#{r.position}</span>{r.student.name}</span>
+                    <div key={r.student.id} style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A" }}>
+                      <span><span style={{ fontFamily: FONT.mono, color: "#5E6E64", marginRight: 6 }}>#{r.position}</span>{r.student.name}</span>
                       <span style={{ fontFamily: FONT.mono, fontWeight: 700, color: gradeInk(r.average) }}>{r.average} {gradeOf(r.average)}</span>
                     </div>
                   ))}
-                  {ranked.length > 5 && <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63" }}>…and {ranked.length - 5} more</div>}
+                  {ranked.length > 5 && <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64" }}>…and {ranked.length - 5} more</div>}
                 </div>
               )}
 
@@ -3334,7 +3339,7 @@ function AdminBackup({ roster, saveRoster, syncState, onForceSave }) {
         padding: "10px 13px", borderRadius: 4, marginBottom: 14,
         background: isShared ? "#E3F5E9" : "#FDF3E0",
         border: `1px solid ${isShared ? "#A9DEBC" : "#FFE99A"}`,
-        fontFamily: FONT.body, fontSize: 12.5, color: "#111111",
+        fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A",
       }}>
         {isShared
           ? "Shared database is active — every teacher, parent and admin sees the same data."
@@ -3345,7 +3350,7 @@ function AdminBackup({ roster, saveRoster, syncState, onForceSave }) {
         padding: "12px 14px", borderRadius: 4, marginBottom: 18,
         background: syncState === "error" ? "#FDE8E6" : "#E3F5E9",
         border: `1px solid ${syncState === "error" ? "#F3C0BB" : "#A9DEBC"}`,
-        fontFamily: FONT.body, fontSize: 13, color: "#111111",
+        fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A",
       }}>
         {stateText}
         {syncState === "error" && (
@@ -3353,19 +3358,19 @@ function AdminBackup({ roster, saveRoster, syncState, onForceSave }) {
         )}
       </div>
 
-      <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50", marginBottom: 8 }}>
         Copy this somewhere safe. It contains every class, teacher, student, mark and payment.
       </div>
       <textarea readOnly value={json} onFocus={(e) => e.target.select()} style={{
         width: "100%", height: 120, fontFamily: FONT.mono, fontSize: 11, padding: 10,
-        border: "1px solid #CFCFC8", borderRadius: 3, background: "#F7F7F4", color: "#111111", resize: "vertical",
+        border: "1px solid #C6D2CA", borderRadius: 3, background: "#F4F8F5", color: "#0A2E1A", resize: "vertical",
       }} />
       <button onClick={copy} style={{ ...primaryBtn(), marginTop: 8, marginBottom: 26 }}>{copied ? "✓ Copied" : "Copy backup"}</button>
 
       <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#C0261B", marginBottom: 6 }}>Restore from a backup</div>
       <textarea value={restoreText} onChange={(e) => setRestoreText(e.target.value)} placeholder="Paste backup text here…" style={{
         width: "100%", height: 90, fontFamily: FONT.mono, fontSize: 11, padding: 10,
-        border: "1px solid #CFCFC8", borderRadius: 3, background: "#fff", color: "#111111", resize: "vertical",
+        border: "1px solid #C6D2CA", borderRadius: 3, background: "#fff", color: "#0A2E1A", resize: "vertical",
       }} />
       <button onClick={restore} disabled={!restoreText.trim()} style={{ ...primaryBtn(), background: "#C0261B", marginTop: 8, opacity: restoreText.trim() ? 1 : 0.5 }}>Restore this backup</button>
     </div>
@@ -3429,7 +3434,7 @@ function StaffAccounts({ roster, who }) {
   return (
     <div>
       <SectionTitle>Staff logins</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
         Real accounts with encrypted passwords. Passwords are never stored in readable form —
         if one is forgotten it can only be replaced, not looked up.
         <div style={{ marginTop: 6 }}>
@@ -3438,7 +3443,7 @@ function StaffAccounts({ roster, who }) {
         </div>
       </div>
 
-      {msg && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9", border: "1px solid #A9DEBC", fontFamily: FONT.mono, fontSize: 12.5, color: "#111111", marginBottom: 12 }}>{msg}</div>}
+      {msg && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9", border: "1px solid #A9DEBC", fontFamily: FONT.mono, fontSize: 12.5, color: "#0A2E1A", marginBottom: 12 }}>{msg}</div>}
       {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6", border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5, color: "#C0261B", marginBottom: 12 }}>{err}</div>}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
@@ -3448,8 +3453,8 @@ function StaffAccounts({ roster, who }) {
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
           style={{ ...darkInput(), minWidth: 110,
-                   borderColor: form.role === "admin" ? "#B8860B" : "#CFCFC8",
-                   color: form.role === "admin" ? "#B8860B" : "#111111", fontWeight: 600 }}>
+                   borderColor: form.role === "admin" ? "#B8860B" : "#C6D2CA",
+                   color: form.role === "admin" ? "#B8860B" : "#0A2E1A", fontWeight: 600 }}>
           <option value="teacher">Teacher</option>
           <option value="admin">Administrator</option>
         </select>
@@ -3463,25 +3468,25 @@ function StaffAccounts({ roster, who }) {
         <button onClick={save} style={primaryBtn()}>Save account</button>
       </div>
 
-      {rows === null && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Loading…</div>}
+      {rows === null && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Loading…</div>}
       <div style={{ display: "grid", gap: 6, marginBottom: 24 }}>
         {(rows || []).map((r) => (
-          <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4, opacity: r.active ? 1 : 0.5 }}>
+          <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4, opacity: r.active ? 1 : 0.5 }}>
             <span>
               <button onClick={() => setForm({ username: r.username, name: r.name, role: r.role,
                         password: "", teacherId: r.teacher_id || "", email: r.email || "", phone: r.phone || "" })}
                 style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111", textDecoration: "underline" }}>{r.name}</span>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A", textDecoration: "underline" }}>{r.name}</span>
               </button>
-              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63", marginLeft: 8 }}>{r.username}</span>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: r.role === "admin" ? "#B8860B" : "#5C5C55", marginTop: 2 }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64", marginLeft: 8 }}>{r.username}</span>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: r.role === "admin" ? "#B8860B" : "#4A5A50", marginTop: 2 }}>
                 {r.role === "admin" ? "ADMINISTRATOR" : "TEACHER"}{!r.active ? " · DISABLED" : ""}
                 {r.email ? " · " + r.email : " · no email (cannot self-reset)"}
                 {r.phone ? " · " + r.phone : ""}
               </div>
             </span>
             <span style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => resetPassword(r.username)} style={{ background: "none", border: "none", color: "#111111", fontFamily: FONT.mono, fontSize: 11.5 }}>new password</button>
+              <button onClick={() => resetPassword(r.username)} style={{ background: "none", border: "none", color: "#0A2E1A", fontFamily: FONT.mono, fontSize: 11.5 }}>new password</button>
               {r.username !== who?.username && (
                 <button onClick={() => deactivate(r.username)} style={{ background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 11.5 }}>disable</button>
               )}
@@ -3490,7 +3495,7 @@ function StaffAccounts({ roster, who }) {
         ))}
       </div>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>Change my own password</div>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>Change my own password</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input type="password" value={pw.old} onChange={(e) => setPw({ ...pw, old: e.target.value })} placeholder="Current password" style={{ ...darkInput(), flex: 1, minWidth: 140 }} />
         <input type="password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} placeholder="New password" style={{ ...darkInput(), flex: 1, minWidth: 140 }} />
@@ -3553,26 +3558,26 @@ function YearEnd({ roster, saveRoster }) {
         {[["promote", "Promote students"], ["archive", "Archive year"], ["audit", "Activity log"]].map(([v, label]) => (
           <button key={v} onClick={() => setView(v)} style={{
             padding: "6px 13px", borderRadius: 3, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
-            border: `1px solid ${view === v ? "#111111" : "#CFCFC8"}`, background: view === v ? "#111111" : "#fff", color: view === v ? "#fff" : "#5C5C55",
+            border: `1px solid ${view === v ? "#0A2E1A" : "#C6D2CA"}`, background: view === v ? "#0A2E1A" : "#fff", color: view === v ? "#fff" : "#4A5A50",
           }}>{label}</button>
         ))}
       </div>
 
       {view === "promote" && (
         <div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
             Choose where each class moves to at the end of the year. Leave blank to keep a class where it is.
           </div>
-          {roster.classes.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No classes yet.</div>}
+          {roster.classes.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No classes yet.</div>}
           <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
             {roster.classes.map((c) => {
               const count = roster.students.filter((s) => s.classId === c.id).length;
               return (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "9px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4 }}>
-                  <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", minWidth: 110 }}>
-                    {c.name} <span style={{ color: "#6A6A63", fontSize: 12 }}>({count})</span>
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "9px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4 }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", minWidth: 110 }}>
+                    {c.name} <span style={{ color: "#5E6E64", fontSize: 12 }}>({count})</span>
                   </span>
-                  <span style={{ fontFamily: FONT.mono, color: "#6A6A63" }}>→</span>
+                  <span style={{ fontFamily: FONT.mono, color: "#5E6E64" }}>→</span>
                   <select value={map[c.id] || ""} onChange={(e) => setMap({ ...map, [c.id]: e.target.value })} style={{ ...darkInput(), flex: 1, minWidth: 130 }}>
                     <option value="">stays in {c.name}</option>
                     {roster.classes.filter((x) => x.id !== c.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
@@ -3584,7 +3589,7 @@ function YearEnd({ roster, saveRoster }) {
           </div>
           <button onClick={promote} disabled={Object.values(map).filter(Boolean).length === 0} style={{ ...primaryBtn(), opacity: Object.values(map).filter(Boolean).length ? 1 : 0.5 }}>Promote students</button>
           {(roster.alumni || []).length > 0 && (
-            <div style={{ marginTop: 18, fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55" }}>
+            <div style={{ marginTop: 18, fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50" }}>
               {(roster.alumni || []).length} former student{(roster.alumni || []).length === 1 ? "" : "s"} on record.
             </div>
           )}
@@ -3593,20 +3598,20 @@ function YearEnd({ roster, saveRoster }) {
 
       {view === "archive" && (
         <div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
             Archiving stores a full copy of {year}, then clears marks, attendance, duty and fee payments so the new year starts clean. Students, staff and classes are kept. Take a Backup copy first as well.
           </div>
           <button onClick={archiveYear} style={{ ...primaryBtn(), background: "#C0261B", marginBottom: 18 }}>Archive {year} and start fresh</button>
 
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>Archived years</div>
-          {(roster.archives || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>None yet.</div>}
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>Archived years</div>
+          {(roster.archives || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>None yet.</div>}
           <div style={{ display: "grid", gap: 6 }}>
             {(roster.archives || []).slice().reverse().map((a) => (
-              <div key={a.year + a.savedAt} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 3, flexWrap: "wrap", gap: 8 }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>
-                  {a.year} <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63" }}>· saved {fmtDate(a.savedAt.slice(0, 10))}</span>
+              <div key={a.year + a.savedAt} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 3, flexWrap: "wrap", gap: 8 }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>
+                  {a.year} <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64" }}>· saved {fmtDate(a.savedAt.slice(0, 10))}</span>
                 </span>
-                <button onClick={() => restore(a)} style={{ background: "none", border: "none", color: "#111111", fontFamily: FONT.mono, fontSize: 11.5 }}>restore</button>
+                <button onClick={() => restore(a)} style={{ background: "none", border: "none", color: "#0A2E1A", fontFamily: FONT.mono, fontSize: 11.5 }}>restore</button>
               </div>
             ))}
           </div>
@@ -3615,18 +3620,18 @@ function YearEnd({ roster, saveRoster }) {
 
       {view === "audit" && (
         <div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
             Recent changes to results, fees and records — useful if a mark or payment is ever queried.
           </div>
-          {(roster.audit || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Nothing logged yet.</div>}
+          {(roster.audit || []).length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Nothing logged yet.</div>}
           <div style={{ display: "grid", gap: 4 }}>
             {(roster.audit || []).slice(0, 120).map((a, i) => (
-              <div key={i} style={{ display: "flex", gap: 10, padding: "7px 11px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 3, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63", minWidth: 128 }}>
+              <div key={i} style={{ display: "flex", gap: 10, padding: "7px 11px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 3, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64", minWidth: 128 }}>
                   {new Date(a.ts).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </span>
-                <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111", flex: 1 }}>{a.action}</span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55" }}>{a.actor}</span>
+                <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", flex: 1 }}>{a.action}</span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50" }}>{a.actor}</span>
               </div>
             ))}
           </div>
@@ -3687,7 +3692,7 @@ function TimetableAdmin({ roster, saveRoster }) {
         {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
 
-      {!classId && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Select a class to build its timetable.</div>}
+      {!classId && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Select a class to build its timetable.</div>}
 
       {classId && (
         <>
@@ -3725,7 +3730,7 @@ function TimetableAdmin({ roster, saveRoster }) {
           {clashMsg && (
             <div className="enter" style={{ padding: "10px 13px", borderRadius: 4, marginBottom: 14,
                   background: "#FDE8E6", border: "1px solid #F3C0BB", borderLeft: "4px solid #C0261B",
-                  fontFamily: FONT.body, fontSize: 12.5, color: "#111111", lineHeight: 1.55 }}>
+                  fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", lineHeight: 1.55 }}>
               <strong style={{ color: "#C0261B" }}>Clash.</strong> {clashMsg}
             </div>
           )}
@@ -3739,16 +3744,16 @@ function TimetableAdmin({ roster, saveRoster }) {
                 .map((p) => ({ p, l: tt[day]?.[p.id] }))
                 .filter((x) => x.l || !isLessonPeriod(x.p));
               return (
-                <div key={day} style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5, padding: "10px 12px" }}>
-                  <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#111111", marginBottom: 6 }}>{DAY_FULL[day]}</div>
-                  {lessons.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6A6A63" }}>No lessons set.</div>}
+                <div key={day} style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5, padding: "10px 12px" }}>
+                  <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#0A2E1A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
+                  {lessons.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5E6E64" }}>No lessons set.</div>}
                   <div style={{ display: "grid", gap: 4 }}>
                     {lessons.map(({ p, l }) => (
                       isLessonPeriod(p) ? (
-                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#111111" }}>
-                          <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63", minWidth: 92 }}>P{p.label} {p.time}</span>
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#0A2E1A" }}>
+                          <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64", minWidth: 92 }}>P{p.label} {p.time}</span>
                           <span style={{ fontWeight: 600 }}>{l.subject}</span>
-                          <span style={{ color: "#5C5C55", fontSize: 12 }}>{l.teacherId ? roster.teachers.find((t) => t.id === l.teacherId)?.name || "" : ""}</span>
+                          <span style={{ color: "#4A5A50", fontSize: 12 }}>{l.teacherId ? roster.teachers.find((t) => t.id === l.teacherId)?.name || "" : ""}</span>
                           <button onClick={() => removeLesson(day, p.id)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
                         </div>
                       ) : (
@@ -3769,7 +3774,7 @@ function TimetableAdmin({ roster, saveRoster }) {
           <button onClick={() => setPrinting(true)} style={{ ...primaryBtn(), marginBottom: 18 }}>Open printable timetable</button>
 
           <div>
-            <button onClick={() => setShowPeriods(!showPeriods)} style={{ ...backBtnStyle(), color: "#111111", fontSize: 12.5 }}>
+            <button onClick={() => setShowPeriods(!showPeriods)} style={{ ...backBtnStyle(), color: "#0A2E1A", fontSize: 12.5 }}>
               {showPeriods ? "▾" : "▸"} Edit period times
             </button>
             {showPeriods && (
@@ -3847,13 +3852,13 @@ function TimetableDoc({ roster, classId, onBack }) {
             return (
               <tr key={p.id}>
                 <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10.5, whiteSpace: "nowrap" }}>
-                  <strong>P{p.label}</strong>{p.time ? <div style={{ color: "#6A6A63" }}>{p.time}</div> : null}
+                  <strong>P{p.label}</strong>{p.time ? <div style={{ color: "#5E6E64" }}>{p.time}</div> : null}
                 </td>
                 {DAYS.map((d) => {
                   const l = tt[d]?.[p.id];
                   return (
                     <td key={d} style={{ ...docTd, fontSize: 11.5 }}>
-                      {l ? <><strong>{l.subject}</strong>{l.teacherId ? <div style={{ color: "#5C5C55", fontSize: 10 }}>{nameOf(l.teacherId)}</div> : null}</> : <span style={{ color: "#C4C4BC" }}>—</span>}
+                      {l ? <><strong>{l.subject}</strong>{l.teacherId ? <div style={{ color: "#4A5A50", fontSize: 10 }}>{nameOf(l.teacherId)}</div> : null}</> : <span style={{ color: "#B9C7BF" }}>—</span>}
                     </td>
                   );
                 })}
@@ -3889,22 +3894,22 @@ function DutyRoster({ roster, saveRoster }) {
   return (
     <div>
       <SectionTitle>Duty roster</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
         Assign the teacher on duty for each week (weeks run Monday to Friday).
       </div>
 
       <div style={{
         padding: "12px 14px", borderRadius: 5, marginBottom: 18,
-        background: onDutyNow.length ? "#E3F5E9" : "#F7F7F4",
-        border: `1px solid ${onDutyNow.length ? "#A9DEBC" : "#E3E3DD"}`,
+        background: onDutyNow.length ? "#E3F5E9" : "#F4F8F5",
+        border: `1px solid ${onDutyNow.length ? "#A9DEBC" : "#DCE6E0"}`,
       }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", letterSpacing: 1 }}>THIS WEEK · {weekLabel(thisWeek)}</div>
+        <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", letterSpacing: 1 }}>THIS WEEK · {weekLabel(thisWeek)}</div>
         {onDutyNow.length === 0
-          ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63", marginTop: 4 }}>Nobody assigned yet.</div>
+          ? <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64", marginTop: 4 }}>Nobody assigned yet.</div>
           : onDutyNow.map((d) => (
-              <div key={d.id} style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#111111", marginTop: 3 }}>
+              <div key={d.id} style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#0A2E1A", marginTop: 3 }}>
                 {roster.teachers.find((t) => t.id === d.teacherId)?.name || "—"}
-                {d.note && <span style={{ fontFamily: FONT.body, fontSize: 12.5, fontWeight: 400, color: "#5C5C55" }}> · {d.note}</span>}
+                {d.note && <span style={{ fontFamily: FONT.body, fontSize: 12.5, fontWeight: 400, color: "#4A5A50" }}> · {d.note}</span>}
               </div>
             ))}
       </div>
@@ -3921,7 +3926,7 @@ function DutyRoster({ roster, saveRoster }) {
         <button onClick={add} disabled={!entry.teacherId} style={primaryBtn()}>Add duty</button>
       </div>
 
-      {duty.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No duties assigned yet.</div>}
+      {duty.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No duties assigned yet.</div>}
       <div style={{ display: "grid", gap: 6 }}>
         {duty.map((d) => {
           const current = d.weekStart === thisWeek;
@@ -3929,18 +3934,18 @@ function DutyRoster({ roster, saveRoster }) {
           return (
             <div key={d.id} style={{
               display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
-              padding: "9px 12px", background: "#F7F7F4", borderRadius: 3,
-              border: `1px solid ${current ? "#0E7A3C" : "#E3E3DD"}`,
-              borderLeft: `4px solid ${current ? "#0E7A3C" : past ? "#CFCFC8" : "#8A6A00"}`,
+              padding: "9px 12px", background: "#F4F8F5", borderRadius: 3,
+              border: `1px solid ${current ? "#0E7A3C" : "#DCE6E0"}`,
+              borderLeft: `4px solid ${current ? "#0E7A3C" : past ? "#C6D2CA" : "#8A6A00"}`,
               opacity: past ? 0.75 : 1,
             }}>
               <span>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", fontWeight: 600 }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", fontWeight: 600 }}>
                   {roster.teachers.find((t) => t.id === d.teacherId)?.name || "—"}
                 </span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63", marginLeft: 8 }}>{weekLabel(d.weekStart)}</span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64", marginLeft: 8 }}>{weekLabel(d.weekStart)}</span>
                 {current && <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#0E7A3C", marginLeft: 8 }}>THIS WEEK</span>}
-                {d.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginTop: 2 }}>{d.note}</div>}
+                {d.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginTop: 2 }}>{d.note}</div>}
               </span>
               <button onClick={() => remove(d.id)} style={{ background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 11.5 }}>remove</button>
             </div>
@@ -3991,24 +3996,24 @@ function MyTimetable({ roster, teacher }) {
       <SectionTitle>My timetable</SectionTitle>
 
       {myDuty.length > 0 && (
-        <div style={{ padding: "11px 13px", borderRadius: 5, marginBottom: 16, background: myDuty[0].weekStart === thisWeek ? "#E3F5E9" : "#F7F7F4", border: `1px solid ${myDuty[0].weekStart === thisWeek ? "#A9DEBC" : "#E3E3DD"}` }}>
-          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", letterSpacing: 1 }}>YOUR DUTY WEEKS</div>
+        <div style={{ padding: "11px 13px", borderRadius: 5, marginBottom: 16, background: myDuty[0].weekStart === thisWeek ? "#E3F5E9" : "#F4F8F5", border: `1px solid ${myDuty[0].weekStart === thisWeek ? "#A9DEBC" : "#DCE6E0"}` }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", letterSpacing: 1 }}>YOUR DUTY WEEKS</div>
           {myDuty.slice(0, 3).map((d) => (
-            <div key={d.id} style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", marginTop: 3 }}>
+            <div key={d.id} style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", marginTop: 3 }}>
               {weekLabel(d.weekStart)}
               {d.weekStart === thisWeek && <strong style={{ color: "#0E7A3C" }}> — THIS WEEK</strong>}
-              {d.note && <span style={{ color: "#5C5C55", fontSize: 12 }}> · {d.note}</span>}
+              {d.note && <span style={{ color: "#4A5A50", fontSize: 12 }}> · {d.note}</span>}
             </div>
           ))}
         </div>
       )}
 
-      {!hasAny && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No lessons assigned to you yet — ask admin to build the class timetable.</div>}
+      {!hasAny && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No lessons assigned to you yet — ask admin to build the class timetable.</div>}
 
       <div style={{ display: "grid", gap: 10 }}>
         {DAYS.filter((d) => rows[d].length > 0).map((day) => (
-          <div key={day} style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5, padding: "10px 12px" }}>
-            <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#111111", marginBottom: 6 }}>{DAY_FULL[day]}</div>
+          <div key={day} style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5, padding: "10px 12px" }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#0A2E1A", marginBottom: 6 }}>{DAY_FULL[day]}</div>
             <div style={{ display: "grid", gap: 4 }}>
               {withBreaks(day).map((r, i) => r.isBreak ? (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12,
@@ -4018,10 +4023,10 @@ function MyTimetable({ roster, teacher }) {
                   <span style={{ fontWeight: 600 }}>{r.p.label}</span>
                 </div>
               ) : (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#111111" }}>
-                  <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63", minWidth: 92 }}>P{r.p.label} {r.p.time}</span>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontFamily: FONT.body, color: "#0A2E1A" }}>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64", minWidth: 92 }}>P{r.p.label} {r.p.time}</span>
                   <span style={{ fontWeight: 600 }}>{r.subject}</span>
-                  <span style={{ color: "#5C5C55", fontSize: 12, marginLeft: "auto" }}>{r.cls}</span>
+                  <span style={{ color: "#4A5A50", fontSize: 12, marginLeft: "auto" }}>{r.cls}</span>
                 </div>
               ))}
             </div>
@@ -4057,14 +4062,14 @@ function TeacherAddStudent({ roster, saveRoster, classId, actorName }) {
   return (
     <div>
       <SectionTitle>Register a pupil</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
         New pupils are added straight into <strong>{classNameOf(roster, classId)}</strong>.
         An admission number and parent PIN are generated automatically.
       </div>
 
       {msg && (
         <div style={{ padding: "10px 12px", borderRadius: 4, background: "#E3F5E9", border: "1px solid #A9DEBC",
-                      fontFamily: FONT.mono, fontSize: 12.5, color: "#111111", marginBottom: 12 }}>{msg}</div>
+                      fontFamily: FONT.mono, fontSize: 12.5, color: "#0A2E1A", marginBottom: 12 }}>{msg}</div>
       )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
@@ -4079,17 +4084,17 @@ function TeacherAddStudent({ roster, saveRoster, classId, actorName }) {
         <button onClick={add} disabled={!form.name.trim()} style={primaryBtn()}>Register pupil</button>
       </div>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         Pupils in this class ({mine.length})
       </div>
-      {mine.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>None yet.</div>}
+      {mine.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>None yet.</div>}
       <div style={{ display: "grid", gap: 5 }}>
         {mine.map((s) => (
           <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                                    padding: "8px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD",
+                                    padding: "8px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0",
                                     borderRadius: 3, flexWrap: "wrap", gap: 6 }}>
-            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>{s.name}</span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55" }}>
+            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>{s.name}</span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50" }}>
               {s.id} · PIN {s.pin || "—"}
             </span>
           </div>
@@ -4126,12 +4131,12 @@ function DisciplineReport({ roster, saveRoster, classId, actorName, role = "teac
   };
 
   const nameOf = (id) => roster.students.find((s) => s.id === id)?.name || "—";
-  const TONE = { submitted: "#1A1A1A", reviewed: "#0E7A3C", dismissed: "#6A6A63" };
+  const TONE = { submitted: "#0E4A29", reviewed: "#0E7A3C", dismissed: "#5E6E64" };
 
   return (
     <div>
       <SectionTitle>{role === "admin" ? "Disciplinary reports" : "Report a discipline case"}</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
         {role === "admin"
           ? "Cases raised by teachers. Review each one and record the action taken."
           : "Reports go to the administrator for review. Keep the description factual."}
@@ -4161,36 +4166,36 @@ function DisciplineReport({ roster, saveRoster, classId, actorName, role = "teac
               {DISCIPLINE_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
             <button onClick={submit} disabled={!form.studentId || !form.category || !form.detail.trim()}
-              style={{ ...primaryBtn(), background: "#1A1A1A" }}>Send to admin</button>
+              style={{ ...primaryBtn(), background: "#0E4A29" }}>Send to admin</button>
           </div>
         </>
       )}
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         {role === "admin" ? `Cases (${list.length})` : `My reports (${list.length})`}
       </div>
-      {list.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Nothing recorded.</div>}
+      {list.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Nothing recorded.</div>}
 
       <div style={{ display: "grid", gap: 8 }}>
         {list.map((d) => (
-          <div key={d.id} style={{ padding: "11px 13px", background: "#F7F7F4", borderRadius: 4,
-                border: "1px solid #E3E3DD", borderLeft: `4px solid ${TONE[d.status] || "#E3E3DD"}` }}>
+          <div key={d.id} style={{ padding: "11px 13px", background: "#F4F8F5", borderRadius: 4,
+                border: "1px solid #DCE6E0", borderLeft: `4px solid ${TONE[d.status] || "#DCE6E0"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>
-                {nameOf(d.studentId)} <span style={{ color: "#6A6A63", fontWeight: 400, fontSize: 12 }}>· {d.category}</span>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>
+                {nameOf(d.studentId)} <span style={{ color: "#5E6E64", fontWeight: 400, fontSize: 12 }}>· {d.category}</span>
               </span>
-              <span style={{ fontFamily: FONT.mono, fontSize: 10, color: TONE[d.status] || "#5C5C55" }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10, color: TONE[d.status] || "#4A5A50" }}>
                 {d.status.toUpperCase()}
               </span>
             </div>
-            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginTop: 5 }}>{d.detail}</div>
-            <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", marginTop: 5 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginTop: 5 }}>{d.detail}</div>
+            <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", marginTop: 5 }}>
               {classNameOf(roster, d.classId)} · by {d.byTeacher} · {fmtDate(d.ts.slice(0, 10))}
               {d.action ? ` · action: ${d.action}` : ""}
             </div>
             {d.adminNote && (
               <div style={{ marginTop: 6, padding: "7px 10px", background: "#E3F5E9", border: "1px solid #A9DEBC",
-                            borderRadius: 3, fontFamily: FONT.body, fontSize: 12, color: "#111111" }}>
+                            borderRadius: 3, fontFamily: FONT.body, fontSize: 12, color: "#0A2E1A" }}>
                 <strong>Admin:</strong> {d.adminNote}
               </div>
             )}
@@ -4207,7 +4212,7 @@ function DisciplineReport({ roster, saveRoster, classId, actorName, role = "teac
                   const note = window.prompt("Reason for dismissing (optional):", "") || "";
                   saveRoster({ ...roster, discipline: roster.discipline.map((x) =>
                     x.id === d.id ? { ...x, status: "dismissed", adminNote: note } : x) }, "Case dismissed");
-                }} style={{ ...primaryBtn(), background: "#6A6A63" }}>Dismiss</button>
+                }} style={{ ...primaryBtn(), background: "#5E6E64" }}>Dismiss</button>
               </div>
             )}
           </div>
@@ -4289,8 +4294,8 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
           background: late ? "#FDE8E6" : "#E3F5E9",
           border: `1px solid ${late ? "#F3C0BB" : "#A9DEBC"}`,
         }}>
-          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", letterSpacing: 1 }}>TIME NOW</div>
-          <div style={{ fontFamily: FONT.display, fontSize: 26, fontWeight: 700, color: "#111111" }}>{fmtHM(h, m)}</div>
+          <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", letterSpacing: 1 }}>TIME NOW</div>
+          <div style={{ fontFamily: FONT.display, fontSize: 26, fontWeight: 700, color: "#0A2E1A" }}>{fmtHM(h, m)}</div>
           <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: late ? "#C0261B" : "#0E7A3C", marginTop: 4 }}>
             {late
               ? "After 08:00 — you will be marked LATE and admin must approve."
@@ -4306,10 +4311,10 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
           background: mine.status === "late" ? "#FDE8E6" : "#E3F5E9",
           border: `1px solid ${mine.status === "late" ? "#F3C0BB" : "#A9DEBC"}`,
         }}>
-          <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#111111" }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#0A2E1A" }}>
             Signed in at {mine.time} — {mine.status === "late" ? "LATE" : "on time"}
           </div>
-          {mine.note && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginTop: 4 }}>Reason: {mine.note}</div>}
+          {mine.note && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginTop: 4 }}>Reason: {mine.note}</div>}
           <div style={{ fontFamily: FONT.mono, fontSize: 11, marginTop: 6,
                         color: mine.approved === true ? "#0E7A3C" : mine.approved === false ? "#C0261B" : "#8A6A00" }}>
             {mine.approved === true ? "APPROVED BY ADMIN"
@@ -4325,10 +4330,10 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
             background: mine.outStatus === "early" ? "#FDE8E6" : "#E3F5E9",
             border: `1px solid ${mine.outStatus === "early" ? "#F3C0BB" : "#A9DEBC"}`,
           }}>
-            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#111111" }}>
+            <div style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#0A2E1A" }}>
               Signed out at {mine.outTime} — {mine.outStatus === "early" ? "LEFT EARLY" : "full day"}
             </div>
-            {mine.outNote && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginTop: 4 }}>Reason: {mine.outNote}</div>}
+            {mine.outNote && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginTop: 4 }}>Reason: {mine.outNote}</div>}
             {mine.outStatus === "early" && (
               <div style={{ fontFamily: FONT.mono, fontSize: 11, marginTop: 6,
                             color: mine.outApproved === true ? "#0E7A3C" : mine.outApproved === false ? "#C0261B" : "#8A6A00" }}>
@@ -4344,8 +4349,8 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
             background: isEarlyDeparture() ? "#FFF6D6" : "#E3F5E9",
             border: `1px solid ${isEarlyDeparture() ? "#F0D98A" : "#A9DEBC"}`,
           }}>
-            <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", letterSpacing: 1 }}>END OF DAY</div>
-            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111", margin: "5px 0 9px", lineHeight: 1.5 }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", letterSpacing: 1 }}>END OF DAY</div>
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", margin: "5px 0 9px", lineHeight: 1.5 }}>
               {isEarlyDeparture()
                 ? `The school day ends at ${fmtHM(DEPARTURE_TIME.hour, DEPARTURE_TIME.minute)}. Leaving now is early — give a genuine reason and the administrator must approve it.`
                 : `It is after ${fmtHM(DEPARTURE_TIME.hour, DEPARTURE_TIME.minute)}. You may sign out for the day.`}
@@ -4374,14 +4379,14 @@ function StaffCheckIn({ roster, saveRoster, teacherId, teacherName }) {
         </>
       )}
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>Last 7 days</div>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>Last 7 days</div>
       <div style={{ display: "grid", gap: 5 }}>
         {history.map(({ d, rec }) => (
           <div key={d} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                                 padding: "8px 12px", background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 3 }}>
-            <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#111111" }}>{fmtDate(d)}</span>
+                                 padding: "8px 12px", background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 3 }}>
+            <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A" }}>{fmtDate(d)}</span>
             <span style={{ fontFamily: FONT.mono, fontSize: 11,
-                           color: !rec ? "#6A6A63" : (rec.status === "late" || rec.outStatus === "early") ? "#C0261B" : "#0E7A3C" }}>
+                           color: !rec ? "#5E6E64" : (rec.status === "late" || rec.outStatus === "early") ? "#C0261B" : "#0E7A3C" }}>
               {rec
                 ? `in ${rec.time}${rec.status === "late" ? " (late)" : ""} · ${rec.outTime ? `out ${rec.outTime}${rec.outStatus === "early" ? " (early)" : ""}` : "not signed out"}`
                 : "not signed in"}
@@ -4425,49 +4430,49 @@ function CheckInApprovals({ roster, saveRoster }) {
         <SectionTitle>Arrival sign-ins</SectionTitle>
         <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} style={darkInput()} />
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
         Staff sign in on arrival and out at the end of the day. Arriving after <strong>08:00</strong> is recorded
         as late, and leaving before <strong>16:00</strong> is recorded as an early departure — both need your approval.
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px,1fr))", gap: 10, marginBottom: 16 }}>
-        <StatCard label="Awaiting you" value={pending} tone={pending ? "#1A1A1A" : "#111111"} />
+        <StatCard label="Awaiting you" value={pending} tone={pending ? "#0E4A29" : "#0A2E1A"} />
         <StatCard label="Late today" value={lateCount} tone={lateCount ? "#C0261B" : "#0E7A3C"} />
         <StatCard label="Left early" value={earlyCount} tone={earlyCount ? "#C0261B" : "#0E7A3C"} />
         <StatCard label="Not signed in" value={absent} tone={absent ? "#8A6A00" : "#0E7A3C"} />
       </div>
 
-      {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No teachers on file.</div>}
+      {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No teachers on file.</div>}
       <div style={{ display: "grid", gap: 6 }}>
         {rows.map(({ t, rec }) => (
-          <div key={t.id} style={{ padding: "10px 12px", background: "#F7F7F4", borderRadius: 4,
-                border: "1px solid #E3E3DD",
-                borderLeft: `4px solid ${!rec ? "#CFCFC8" : rec.status === "late" ? "#C0261B" : "#0E7A3C"}` }}>
+          <div key={t.id} style={{ padding: "10px 12px", background: "#F4F8F5", borderRadius: 4,
+                border: "1px solid #DCE6E0",
+                borderLeft: `4px solid ${!rec ? "#C6D2CA" : rec.status === "late" ? "#C0261B" : "#0E7A3C"}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>
-                {t.name} <span style={{ color: "#6A6A63", fontWeight: 400, fontSize: 12 }}>· {classNameOf(roster, t.classId)}</span>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>
+                {t.name} <span style={{ color: "#5E6E64", fontWeight: 400, fontSize: 12 }}>· {classNameOf(roster, t.classId)}</span>
               </span>
               <span style={{ fontFamily: FONT.mono, fontSize: 12,
-                             color: !rec ? "#6A6A63" : rec.status === "late" ? "#C0261B" : "#0E7A3C" }}>
+                             color: !rec ? "#5E6E64" : rec.status === "late" ? "#C0261B" : "#0E7A3C" }}>
                 {rec ? `${rec.time} · ${rec.status.toUpperCase()}` : "NOT SIGNED IN"}
               </span>
             </div>
             {rec && (
-              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55", marginTop: 4 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50", marginTop: 4 }}>
                 {rec.outTime
                   ? `out ${rec.outTime}${rec.outStatus === "early" ? " · LEFT EARLY" : " · full day"}`
                   : "still on duty — not signed out"}
               </div>
             )}
-            {rec?.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginTop: 4 }}>Arrival reason: {rec.note}</div>}
-            {rec?.outNote && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginTop: 3 }}>Departure reason: {rec.outNote}</div>}
+            {rec?.note && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginTop: 4 }}>Arrival reason: {rec.note}</div>}
+            {rec?.outNote && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginTop: 3 }}>Departure reason: {rec.outNote}</div>}
 
             {rec && (
               <div style={{ marginTop: 8, display: "grid", gap: 7 }}>
                 {/* arrival decision */}
                 {rec.approved === null ? (
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", minWidth: 58 }}>ARRIVAL</span>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", minWidth: 58 }}>ARRIVAL</span>
                     <button onClick={() => decide(t.id, true, "in")} style={{ ...primaryBtn(), background: "#0E7A3C" }}>Approve</button>
                     <button onClick={() => decide(t.id, false, "in")} style={{ ...primaryBtn(), background: "#C0261B" }}>Not approved</button>
                   </div>
@@ -4481,7 +4486,7 @@ function CheckInApprovals({ roster, saveRoster }) {
                 {rec.outStatus === "early" && (
                   rec.outApproved === null ? (
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", minWidth: 58 }}>DEPARTURE</span>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", minWidth: 58 }}>DEPARTURE</span>
                       <button onClick={() => decide(t.id, true, "out")} style={{ ...primaryBtn(), background: "#0E7A3C" }}>Approve</button>
                       <button onClick={() => decide(t.id, false, "out")} style={{ ...primaryBtn(), background: "#C0261B" }}>Not approved</button>
                     </div>
@@ -4544,7 +4549,7 @@ function SystemHealth({ roster }) {
   return (
     <div>
       <SectionTitle>System health</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
         Checks for the quiet problems that cause trouble later — a login with no teacher record,
         a pupil in a deleted class, staff who cannot recover a password.
       </div>
@@ -4552,7 +4557,7 @@ function SystemHealth({ roster }) {
       {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6", border: "1px solid #F3C0BB",
                             fontFamily: FONT.body, fontSize: 12.5, color: "#C0261B", marginBottom: 12 }}>{err}</div>}
       {msg && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9", border: "1px solid #A9DEBC",
-                            fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginBottom: 12 }}>{msg}</div>}
+                            fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginBottom: 12 }}>{msg}</div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 16 }}>
         <StatCard label="Problems" value={rows ? problems.length : "…"} tone={problems.length ? "#C0261B" : "#0E7A3C"} />
@@ -4562,30 +4567,30 @@ function SystemHealth({ roster }) {
 
       {rows && rows.length === 0 && (
         <div style={{ padding: "13px 15px", borderRadius: 5, background: "#E3F5E9", border: "1px solid #A9DEBC",
-                      fontFamily: FONT.body, fontSize: 13.5, color: "#111111", marginBottom: 18 }}>
+                      fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", marginBottom: 18 }}>
           Everything checks out — nothing needs attention.
         </div>
       )}
 
       <div style={{ display: "grid", gap: 7, marginBottom: 22 }}>
         {(rows || []).filter((r) => r.severity !== "ok").map((r, i) => (
-          <div key={i} style={{ padding: "10px 12px", background: "#F7F7F4", borderRadius: 4,
-                border: "1px solid #E3E3DD", borderLeft: `4px solid ${TONE[r.severity]}` }}>
+          <div key={i} style={{ padding: "10px 12px", background: "#F4F8F5", borderRadius: 4,
+                border: "1px solid #DCE6E0", borderLeft: `4px solid ${TONE[r.severity]}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#111111", fontWeight: 600 }}>{r.detail}</span>
+              <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", fontWeight: 600 }}>{r.detail}</span>
               <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: TONE[r.severity] }}>{r.severity.toUpperCase()}</span>
             </div>
-            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 4 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 4 }}>
               {r.area} — {r.fix}
             </div>
           </div>
         ))}
       </div>
 
-      <button onClick={load} style={{ ...backBtnStyle(), color: "#111111", marginBottom: 22 }}>↻ run checks again</button>
+      <button onClick={load} style={{ ...backBtnStyle(), color: "#0A2E1A", marginBottom: 22 }}>↻ run checks again</button>
 
       <SectionTitle>Snapshots</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
         The database takes these on its own — hourly while the portal is in use, plus one kept for each
         day and each month. Nothing to remember.
       </div>
@@ -4593,23 +4598,23 @@ function SystemHealth({ roster }) {
         Take a snapshot now
       </button>
 
-      {snaps === null && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Loading…</div>}
-      {snaps && snaps.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>None yet — the first save will create one.</div>}
+      {snaps === null && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Loading…</div>}
+      {snaps && snaps.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>None yet — the first save will create one.</div>}
 
       <div style={{ display: "grid", gap: 5 }}>
         {(snaps || []).map((b) => (
           <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                gap: 10, flexWrap: "wrap", padding: "9px 12px", background: "#F7F7F4",
-                border: "1px solid #E3E3DD", borderRadius: 3,
-                borderLeft: `4px solid ${b.kind === "monthly" ? "#111111" : b.kind === "daily" ? "#0E7A3C" : "#CFCFC8"}` }}>
+                gap: 10, flexWrap: "wrap", padding: "9px 12px", background: "#F4F8F5",
+                border: "1px solid #DCE6E0", borderRadius: 3,
+                borderLeft: `4px solid ${b.kind === "monthly" ? "#0A2E1A" : b.kind === "daily" ? "#0E7A3C" : "#C6D2CA"}` }}>
             <span>
-              <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#111111" }}>
+              <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A" }}>
                 {new Date(b.taken_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
               </span>
-              <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", marginLeft: 8 }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", marginLeft: 8 }}>
                 {b.kind} · {b.size_kb}KB
               </span>
-              {b.reason && <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6A6A63", marginTop: 2 }}>{b.reason}</div>}
+              {b.reason && <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5E6E64", marginTop: 2 }}>{b.reason}</div>}
             </span>
             <button onClick={() => restore(b)} disabled={busy}
               style={{ background: "none", border: "none", color: "#C0261B", fontFamily: FONT.mono, fontSize: 11.5 }}>
@@ -4699,7 +4704,7 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
   return (
     <div>
       <SectionTitle>Exam timetable</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
         A paper is sat by every class at the level at the same time, so each class needs its own
         invigilator in its own room.
       </div>
@@ -4709,9 +4714,9 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
           {Object.entries(CBC_LEVELS).map(([k, v]) => (
             <button key={k} onClick={() => setLevel(k)} style={{
               padding: "7px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5, fontWeight: 600,
-              border: `1px solid ${level === k ? "#111111" : "#CFCFC8"}`,
-              background: level === k ? "#111111" : "#fff",
-              color: level === k ? "#fff" : "#5C5C55",
+              border: `1px solid ${level === k ? "#0A2E1A" : "#C6D2CA"}`,
+              background: level === k ? "#0A2E1A" : "#fff",
+              color: level === k ? "#fff" : "#4A5A50",
             }}>
               Grades {v.grades[0]}–{v.grades[v.grades.length - 1]}
             </button>
@@ -4719,10 +4724,10 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
         </div>
       )}
 
-      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63", marginBottom: 4 }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64", marginBottom: 4 }}>
         {CBC_LEVELS[level].label.toUpperCase()}
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginBottom: 12 }}>
         {levelClasses.length === 0
           ? "No classes at this level yet."
           : `${levelClasses.length} class${levelClasses.length === 1 ? "" : "es"} sitting: ${levelClasses.map((c) => c.name).join(", ")} — ${levelClasses.length} invigilator${levelClasses.length === 1 ? "" : "s"} needed per paper.`}
@@ -4735,7 +4740,7 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
             placeholder="Title, e.g. End of Term 1 Assessment"
             style={{ ...darkInput(), width: "100%", marginBottom: 12 }} />
 
-          <div style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5, padding: 12, marginBottom: 16 }}>
+          <div style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5, padding: 12, marginBottom: 16 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
               <input type="date" value={entry.date} onChange={(e) => setEntry({ ...entry, date: e.target.value })}
                 style={{ ...darkInput(), minWidth: 140 }} />
@@ -4760,7 +4765,7 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
               <button onClick={() => addBreak("break")} style={{ ...primaryBtn(), background: "#8A6A00" }}>Add break</button>
               <button onClick={() => addBreak("lunch")} style={{ ...primaryBtn(), background: "#0E7A3C" }}>Add lunch</button>
             </div>
-            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 8 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 8 }}>
               Invigilators are chosen per class once a paper is added. Breaks need none.
             </div>
           </div>
@@ -4768,13 +4773,13 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
       )}
 
       {papers.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No papers set for this level yet.</div>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No papers set for this level yet.</div>
       )}
 
       <div style={{ display: "grid", gap: 10 }}>
         {Object.keys(byDay).sort().map((date) => (
-          <div key={date} style={{ border: "1px solid #E3E3DD", borderRadius: 5, overflow: "hidden" }}>
-            <div style={{ background: "#111111", color: "#fff", padding: "8px 12px",
+          <div key={date} style={{ border: "1px solid #DCE6E0", borderRadius: 5, overflow: "hidden" }}>
+            <div style={{ background: "#0A2E1A", color: "#fff", padding: "8px 12px",
                           fontFamily: FONT.display, fontSize: 13.5, fontWeight: 600 }}>
               {new Date(date + "T00:00:00").toLocaleDateString(undefined,
                 { weekday: "long", day: "numeric", month: "long" })}
@@ -4801,13 +4806,13 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
                 const clash = clashesFor(p);
                 const assigned = levelClasses.filter((c) => p.invigilators?.[c.id]).length;
                 return (
-                  <div key={p.id} style={{ padding: "10px 12px", background: "#F7F7F4",
-                        border: "1px solid #E3E3DD", borderRadius: 4 }}>
+                  <div key={p.id} style={{ padding: "10px 12px", background: "#F4F8F5",
+                        border: "1px solid #DCE6E0", borderRadius: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#111111", fontWeight: 600 }}>
+                      <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: "#0A2E1A", fontWeight: 600 }}>
                         {p.start}–{p.end}
                       </span>
-                      <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", fontWeight: 600, flex: 1 }}>
+                      <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", fontWeight: 600, flex: 1 }}>
                         {p.subject}
                       </span>
                       <span style={{ fontFamily: FONT.mono, fontSize: 10,
@@ -4819,26 +4824,26 @@ function ExamTimetable({ roster, saveRoster, readOnly = false, onlyLevel = null 
                                 color: "#C0261B", fontFamily: FONT.mono, fontSize: 11 }}>remove</button>
                       )}
                     </div>
-                    {p.note && <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5C5C55", marginTop: 3 }}>{p.note}</div>}
+                    {p.note && <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#4A5A50", marginTop: 3 }}>{p.note}</div>}
 
                     {/* one invigilator per class */}
-                    <div style={{ display: "grid", gap: 5, marginTop: 8, paddingTop: 8, borderTop: "1px dashed #CFCFC8" }}>
+                    <div style={{ display: "grid", gap: 5, marginTop: 8, paddingTop: 8, borderTop: "1px dashed #C6D2CA" }}>
                       {levelClasses.map((c) => {
                         const tid = p.invigilators?.[c.id] || "";
                         const isClash = tid && clash.has(tid);
                         return (
                           <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-                            <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111", minWidth: 66, fontWeight: 600 }}>
+                            <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", minWidth: 66, fontWeight: 600 }}>
                               {c.name}
                             </span>
                             {readOnly ? (
-                              <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: tid ? "#111111" : "#C0261B" }}>
+                              <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: tid ? "#0A2E1A" : "#C0261B" }}>
                                 {tid ? teacherName(tid) : "not assigned"}
                               </span>
                             ) : (
                               <select value={tid} onChange={(e) => setInvigilator(p.id, c.id, e.target.value)}
                                 style={{ ...darkInput(), flex: 1, minWidth: 130, padding: "4px 8px", fontSize: 12,
-                                         borderColor: isClash ? "#C0261B" : (tid ? "#0E7A3C" : "#CFCFC8") }}>
+                                         borderColor: isClash ? "#C0261B" : (tid ? "#0E7A3C" : "#C6D2CA") }}>
                                 <option value="">choose invigilator…</option>
                                 {roster.teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
@@ -4893,7 +4898,7 @@ function ExamTimetableDoc({ roster, level, onBack }) {
             <th style={{ ...docTh, fontSize: 8.5 }}>Learning area</th>
             {classes.map((c) => (
               <th key={c.id} style={{ ...docTh, fontSize: 8.5, textAlign: "center" }}>
-                {c.name}<div style={{ fontWeight: 400, color: "#6A6A63" }}>invigilator</div>
+                {c.name}<div style={{ fontWeight: 400, color: "#5E6E64" }}>invigilator</div>
               </th>
             ))}
           </tr>
@@ -4901,7 +4906,7 @@ function ExamTimetableDoc({ roster, level, onBack }) {
         <tbody>
           {papers.map((p, i) => {
             const firstOfDay = i === 0 || papers[i - 1].date !== p.date;
-            const top = firstOfDay && i > 0 ? "2px solid #C4C4BC" : undefined;
+            const top = firstOfDay && i > 0 ? "2px solid #B9C7BF" : undefined;
             const kind = p.kind || "paper";
 
             // breaks span every class, so they print as one band
@@ -4936,11 +4941,11 @@ function ExamTimetableDoc({ roster, level, onBack }) {
                 </td>
                 <td style={{ ...docTd, fontWeight: 600, fontSize: 11, borderTop: top }}>
                   {p.subject}
-                  {p.note && <div style={{ fontWeight: 400, fontSize: 9.5, color: "#5C5C55" }}>{p.note}</div>}
+                  {p.note && <div style={{ fontWeight: 400, fontSize: 9.5, color: "#4A5A50" }}>{p.note}</div>}
                 </td>
                 {classes.map((c) => (
                   <td key={c.id} style={{ ...docTd, fontSize: 10, textAlign: "center", borderTop: top,
-                        color: p.invigilators?.[c.id] ? "#111111" : "#C0261B" }}>
+                        color: p.invigilators?.[c.id] ? "#0A2E1A" : "#C0261B" }}>
                     {p.invigilators?.[c.id] ? teacherName(p.invigilators[c.id]) : "—"}
                   </td>
                 ))}
@@ -4950,7 +4955,7 @@ function ExamTimetableDoc({ roster, level, onBack }) {
         </tbody>
       </table>
 
-      <div style={{ borderTop: "1px solid #E3E3DD", paddingTop: 10, fontSize: 10.5, color: "#5C5C55", fontFamily: FONT.mono, lineHeight: 1.5 }}>
+      <div style={{ borderTop: "1px solid #DCE6E0", paddingTop: 10, fontSize: 10.5, color: "#4A5A50", fontFamily: FONT.mono, lineHeight: 1.5 }}>
         Each class sits its paper in its own room with the invigilator named above.
         Pupils should be seated ten minutes before each paper begins.
         No mobile phones or unauthorised material in the examination room.
@@ -5018,12 +5023,12 @@ function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
 
       {isAdmin ? (
         <>
-          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
             Every teacher sees the memo when they next sign in, and confirms they have read it —
             so you can tell who has seen a notice rather than assuming.
           </div>
 
-          <div style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5, padding: 12, marginBottom: 18 }}>
+          <div style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5, padding: 12, marginBottom: 18 }}>
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="Subject, e.g. Staff meeting on Friday"
               style={{ ...darkInput(), width: "100%", marginBottom: 8 }} />
@@ -5034,9 +5039,9 @@ function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
               {Object.entries(MEMO_PRIORITY).map(([k, v]) => (
                 <button key={k} onClick={() => setForm({ ...form, priority: k })} style={{
                   padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12, fontWeight: 600,
-                  border: `1px solid ${form.priority === k ? v.ink : "#CFCFC8"}`,
+                  border: `1px solid ${form.priority === k ? v.ink : "#C6D2CA"}`,
                   background: form.priority === k ? v.bg : "#fff",
-                  color: form.priority === k ? v.ink : "#5C5C55",
+                  color: form.priority === k ? v.ink : "#4A5A50",
                 }}>{v.label}</button>
               ))}
               <button onClick={post} disabled={!form.title.trim() || !form.body.trim()}
@@ -5048,13 +5053,13 @@ function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
           </div>
         </>
       ) : (
-        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
           Notices from the head teacher's office. Tap <strong>I have read this</strong> so the office knows it reached you.
         </div>
       )}
 
       {memos.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>
           {isAdmin ? "No memos posted yet." : "No memos at the moment."}
         </div>
       )}
@@ -5067,12 +5072,12 @@ function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
           const open = expanded[m.id];
           return (
             <div key={m.id} style={{
-              background: iHaveRead === false ? "#fff" : "#F7F7F4",
-              border: `1px solid ${iHaveRead === false ? tone.edge : "#E3E3DD"}`,
+              background: iHaveRead === false ? "#fff" : "#F4F8F5",
+              border: `1px solid ${iHaveRead === false ? tone.edge : "#DCE6E0"}`,
               borderLeft: `4px solid ${tone.ink}`, borderRadius: 5, padding: "12px 14px",
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#111111" }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#0A2E1A" }}>
                   {m.title}
                 </span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, color: tone.ink,
@@ -5082,18 +5087,18 @@ function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
                 </span>
               </div>
 
-              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", marginTop: 3 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", marginTop: 3 }}>
                 {m.by} · {new Date(m.ts).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
                 {" · "}{new Date(m.ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
               </div>
 
-              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#111111", marginTop: 8,
+              <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", marginTop: 8,
                             lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
                 {m.body}
               </div>
 
               {isAdmin ? (
-                <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #CFCFC8" }}>
+                <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px dashed #C6D2CA" }}>
                   <button onClick={() => setExpanded({ ...expanded, [m.id]: !open })}
                     style={{ background: "none", border: "none", padding: 0, textAlign: "left",
                              fontFamily: FONT.mono, fontSize: 11,
@@ -5114,7 +5119,7 @@ function MemoBoard({ roster, saveRoster, who, teacherId = null }) {
                         );
                       })}
                       {activeTeachers.length === 0 && (
-                        <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6A6A63" }}>No teachers on file.</div>
+                        <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5E6E64" }}>No teachers on file.</div>
                       )}
                     </div>
                   )}
@@ -5206,12 +5211,12 @@ function GeoGate({ action, label, children, onBlocked }) {
   if (state === "checking") {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "16px 14px",
-            background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5 }}>
+            background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5 }}>
         <svg className="spin" width="17" height="17" viewBox="0 0 24 24" fill="none"
              stroke="#8A6A00" strokeWidth="2.4" strokeLinecap="round">
           <path d="M21 12a9 9 0 1 1-6.2-8.6" />
         </svg>
-        <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55" }}>
+        <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50" }}>
           Checking that you are at school…
         </span>
       </div>
@@ -5221,17 +5226,17 @@ function GeoGate({ action, label, children, onBlocked }) {
   return (
     <div className="enter" style={{ padding: "14px 15px", borderRadius: 5,
           background: "#FDE8E6", border: "1px solid #F3C0BB", borderLeft: "4px solid #C0261B" }}>
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#111111" }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#0A2E1A" }}>
         {state === "outside" ? "You are not at school" : "Location could not be confirmed"}
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginTop: 5, lineHeight: 1.55 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginTop: 5, lineHeight: 1.55 }}>
         {state === "outside"
           ? <>{label} may only be done on the school grounds. You appear to be{" "}
               <strong>{info?.distance}m</strong> away; the boundary is {info?.radius}m.</>
           : msg}
       </div>
       <button onClick={check} style={{ ...primaryBtn(), marginTop: 11 }}>Check again</button>
-      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6A6A63", marginTop: 9, lineHeight: 1.5 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5E6E64", marginTop: 9, lineHeight: 1.5 }}>
         If you are at school and this keeps failing, move outside or near a window — walls and
         metal roofing weaken the signal. The administrator can record it for you instead.
       </div>
@@ -5286,13 +5291,13 @@ function GeofenceSettings({ who }) {
   return (
     <div>
       <SectionTitle>School boundary</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14, lineHeight: 1.6 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14, lineHeight: 1.6 }}>
         Some actions can be limited to the school grounds. Every check is recorded whether it passes
         or fails, so you can see who tried from where.
       </div>
 
       <div style={{ padding: "11px 13px", background: "#FFF6D6", border: "1px solid #F0D98A",
-            borderRadius: 4, fontFamily: FONT.body, fontSize: 12, color: "#111111",
+            borderRadius: 4, fontFamily: FONT.body, fontSize: 12, color: "#0A2E1A",
             marginBottom: 16, lineHeight: 1.55 }}>
         <strong>What this can and cannot do.</strong> A phone's reported position can be faked by
         someone determined. Treat this as a deterrent against convenience, not a lock — the record
@@ -5302,14 +5307,14 @@ function GeofenceSettings({ who }) {
       {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6",
             border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5, color: "#C0261B", marginBottom: 12 }}>{err}</div>}
       {msg && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9",
-            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginBottom: 12 }}>{msg}</div>}
+            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginBottom: 12 }}>{msg}</div>}
 
       <button onClick={() => save({ ...fence, enabled: !fence.enabled })} disabled={busy}
-        style={{ ...primaryBtn(), background: fence.enabled ? "#0E7A3C" : "#6A6A63", marginBottom: 16 }}>
+        style={{ ...primaryBtn(), background: fence.enabled ? "#0E7A3C" : "#5E6E64", marginBottom: 16 }}>
         {fence.enabled ? "✓ Boundary is on" : "Boundary is off — turn it on"}
       </button>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         Where the school is
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
@@ -5322,15 +5327,15 @@ function GeofenceSettings({ who }) {
         <button onClick={() => save(fence)} disabled={busy} style={primaryBtn()}>Save</button>
       </div>
       <button onClick={useMyPosition} disabled={busy}
-        style={{ ...primaryBtn(), background: "#111111", marginBottom: 16 }}>
+        style={{ ...primaryBtn(), background: "#0A2E1A", marginBottom: 16 }}>
         {busy ? "Reading…" : "Use where I am standing now"}
       </button>
-      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6A6A63", marginBottom: 18 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5E6E64", marginBottom: 18 }}>
         Stand in the middle of the compound and tap the button. That is more accurate than typing
         coordinates from a map.
       </div>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 6 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 6 }}>
         How far the boundary reaches
       </div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
@@ -5338,16 +5343,16 @@ function GeofenceSettings({ who }) {
           onChange={(e) => setFence({ ...fence, radius_m: +e.target.value })}
           onMouseUp={() => save(fence)} onTouchEnd={() => save(fence)}
           style={{ flex: 1, minWidth: 170, accentColor: "#FFC400" }} />
-        <span style={{ fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: "#111111", minWidth: 62 }}>
+        <span style={{ fontFamily: FONT.mono, fontSize: 14, fontWeight: 700, color: "#0A2E1A", minWidth: 62 }}>
           {fence.radius_m || 300} m
         </span>
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6A6A63", marginTop: -12, marginBottom: 20 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5E6E64", marginTop: -12, marginBottom: 20 }}>
         Allow generously. A phone under an iron roof can be 50–100m out, and a boundary set too
         tightly will lock out honest staff.
       </div>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         What the boundary applies to
       </div>
       <div style={{ display: "grid", gap: 6, marginBottom: 22 }}>
@@ -5357,36 +5362,36 @@ function GeofenceSettings({ who }) {
             <button key={k} onClick={() => toggle(k)} disabled={busy} className="lift"
               style={{ display: "flex", alignItems: "center", gap: 11, textAlign: "left",
                 padding: "10px 12px", borderRadius: 4, cursor: "pointer",
-                background: on ? "#E3F5E9" : "#F7F7F4",
-                border: `1px solid ${on ? "#0E7A3C" : "#E3E3DD"}` }}>
+                background: on ? "#E3F5E9" : "#F4F8F5",
+                border: `1px solid ${on ? "#0E7A3C" : "#DCE6E0"}` }}>
               <span style={{ width: 17, height: 17, borderRadius: 3, flex: "0 0 17px",
-                border: `1.5px solid ${on ? "#0E7A3C" : "#C4C4BC"}`,
+                border: `1.5px solid ${on ? "#0E7A3C" : "#B9C7BF"}`,
                 background: on ? "#0E7A3C" : "transparent", color: "#fff",
                 fontSize: 12, lineHeight: "15px", textAlign: "center" }}>{on ? "✓" : ""}</span>
               <span>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", fontWeight: 600 }}>{label}</span>
-                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 2 }}>{why}</div>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", fontWeight: 600 }}>{label}</span>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 2 }}>{why}</div>
               </span>
             </button>
           );
         })}
       </div>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         Recent location checks
       </div>
       {log === null && <div className="skeleton" style={{ height: 60 }} />}
       {log && log.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Nothing recorded yet.</div>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Nothing recorded yet.</div>
       )}
       <div style={{ display: "grid", gap: 4 }}>
         {(log || []).slice(0, 40).map((r, i) => (
           <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap",
-                padding: "7px 11px", borderRadius: 3, background: "#F7F7F4",
-                border: "1px solid #E3E3DD",
+                padding: "7px 11px", borderRadius: 3, background: "#F4F8F5",
+                border: "1px solid #DCE6E0",
                 borderLeft: `3px solid ${r.inside ? "#0E7A3C" : "#C0261B"}` }}>
-            <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111" }}>
-              {r.staff_name} <span style={{ color: "#6A6A63" }}>· {r.action}</span>
+            <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A" }}>
+              {r.staff_name} <span style={{ color: "#5E6E64" }}>· {r.action}</span>
             </span>
             <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: r.inside ? "#0E7A3C" : "#C0261B" }}>
               {r.distance_m === null ? "no fix" : `${Math.round(r.distance_m)}m`}
@@ -5422,12 +5427,12 @@ function FeeStatement({ roster, student, term, onBack }) {
       <DocInfo roster={roster} student={student} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, margin: "6px 0 18px" }}>
-        {[["TOTAL FEE DUE", `${cur}${money(due)}`, "#111111"],
+        {[["TOTAL FEE DUE", `${cur}${money(due)}`, "#0A2E1A"],
           ["PAID TO DATE", `${cur}${money(paid)}`, "#0E7A3C"],
           ["BALANCE", `${cur}${money(balance)}`, balance > 0 ? "#C0261B" : "#0E7A3C"]].map(([l, v, ink]) => (
-          <div key={l} style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "10px 11px",
-                background: "#F7F7F4", textAlign: "center" }}>
-            <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#6A6A63", letterSpacing: 1 }}>{l}</div>
+          <div key={l} style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "10px 11px",
+                background: "#F4F8F5", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#5E6E64", letterSpacing: 1 }}>{l}</div>
             <div style={{ fontSize: 16, fontWeight: "bold", marginTop: 3, color: ink }}>{v}</div>
           </div>
         ))}
@@ -5435,23 +5440,23 @@ function FeeStatement({ roster, student, term, onBack }) {
 
       {/* a bar reads faster than three figures */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ height: 9, background: "#EDEDE7", borderRadius: 5, overflow: "hidden", border: "1px solid #E3E3DD" }}>
+        <div style={{ height: 9, background: "#E7EFE9", borderRadius: 5, overflow: "hidden", border: "1px solid #DCE6E0" }}>
           <div style={{ height: "100%", width: `${share}%`,
                 background: share >= 100 ? "#0E7A3C" : share >= 50 ? "#8A6A00" : "#C0261B" }} />
         </div>
-        <div style={{ fontSize: 10.5, color: "#5C5C55", marginTop: 4, fontFamily: FONT.mono }}>
+        <div style={{ fontSize: 10.5, color: "#4A5A50", marginTop: 4, fontFamily: FONT.mono }}>
           {share}% of the term's fee has been paid
         </div>
       </div>
 
       <div style={{ fontWeight: "bold", marginBottom: 7 }}>Payments received</div>
       {rows.length === 0 ? (
-        <div style={{ padding: "16px 14px", border: "1px dashed #C4C4BC", borderRadius: 4,
-              background: "#F7F7F4", marginBottom: 18 }}>
+        <div style={{ padding: "16px 14px", border: "1px dashed #B9C7BF", borderRadius: 4,
+              background: "#F4F8F5", marginBottom: 18 }}>
           <div style={{ fontSize: 13, fontWeight: "bold", color: "#C0261B" }}>
             No payment has been received for {term}.
           </div>
-          <div style={{ fontSize: 11.5, color: "#5C5C55", marginTop: 5, lineHeight: 1.55 }}>
+          <div style={{ fontSize: 11.5, color: "#4A5A50", marginTop: 5, lineHeight: 1.55 }}>
             The full amount of {cur}{money(due)} is outstanding. This statement is issued so the
             position is clear; it is not a receipt. A receipt is given for each payment made.
           </div>
@@ -5486,10 +5491,10 @@ function FeeStatement({ roster, student, term, onBack }) {
               </tr>
             ))}
             <tr>
-              <td colSpan={3} style={{ ...docTd, borderTop: "2px solid #111111", fontWeight: "bold" }}>Total received</td>
-              <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "right",
+              <td colSpan={3} style={{ ...docTd, borderTop: "2px solid #0A2E1A", fontWeight: "bold" }}>Total received</td>
+              <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "right",
                     fontFamily: FONT.mono, fontWeight: 700 }}>{cur}{money(paid)}</td>
-              <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "right",
+              <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "right",
                     fontFamily: FONT.mono, fontWeight: 700,
                     color: balance > 0 ? "#C0261B" : "#0E7A3C" }}>{cur}{money(balance)}</td>
             </tr>
@@ -5497,7 +5502,7 @@ function FeeStatement({ roster, student, term, onBack }) {
         </table>
       )}
 
-      <div style={{ fontSize: 10.5, color: "#5C5C55", lineHeight: 1.55, marginBottom: 26 }}>
+      <div style={{ fontSize: 10.5, color: "#4A5A50", lineHeight: 1.55, marginBottom: 26 }}>
         {balance > 0
           ? `An amount of ${cur}${money(balance)} remains outstanding. Please settle it at the school office, or speak to the head teacher if payment in instalments would help.`
           : "The fee for this term has been paid in full. Thank you."}
@@ -5581,7 +5586,7 @@ function FeeCollect({ roster, saveRoster, who, onReceipt }) {
             placeholder="Type the pupil's name or admission number"
             style={{ ...darkInput(), width: "100%", marginBottom: 9 }} />
           {q.trim() && matches.length === 0 && (
-            <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No pupil matches that.</div>
+            <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No pupil matches that.</div>
           )}
           <div style={{ display: "grid", gap: 5 }}>
             {matches.map((s) => {
@@ -5590,10 +5595,10 @@ function FeeCollect({ roster, saveRoster, who, onReceipt }) {
                 <button key={s.id} onClick={() => { setStudentId(s.id); setErr(""); }} className="lift enter"
                   style={{ display: "flex", justifyContent: "space-between", gap: 9, textAlign: "left",
                     padding: "10px 12px", borderRadius: 4, cursor: "pointer",
-                    background: "#F7F7F4", border: "1px solid #E3E3DD" }}>
+                    background: "#F4F8F5", border: "1px solid #DCE6E0" }}>
                   <span>
-                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>{s.name}</span>
-                    <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63" }}>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>{s.name}</span>
+                    <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64" }}>
                       {s.id} · {classNameOf(roster, s.classId)}
                     </div>
                   </span>
@@ -5609,7 +5614,7 @@ function FeeCollect({ roster, saveRoster, who, onReceipt }) {
       ) : (
         <div className="enter">
           {/* what this pupil owes, before any figure is typed */}
-          <div style={{ background: "#111111", color: "#fff", borderRadius: 5, padding: "13px 15px", marginBottom: 14 }}>
+          <div style={{ background: "#0A2E1A", color: "#fff", borderRadius: 5, padding: "13px 15px", marginBottom: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
               <span>
                 <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700 }}>{student.name}</span>
@@ -5642,9 +5647,9 @@ function FeeCollect({ roster, saveRoster, who, onReceipt }) {
               <button key={k} onClick={() => { setMethod(k); setErr(""); }}
                 style={{ padding: "7px 16px", borderRadius: 18, fontFamily: FONT.body, fontSize: 13, fontWeight: 600,
                   cursor: "pointer",
-                  border: `1px solid ${method === k ? "#111111" : "#CFCFC8"}`,
-                  background: method === k ? "#111111" : "#fff",
-                  color: method === k ? "#fff" : "#5C5C55" }}>{l}</button>
+                  border: `1px solid ${method === k ? "#0A2E1A" : "#C6D2CA"}`,
+                  background: method === k ? "#0A2E1A" : "#fff",
+                  color: method === k ? "#fff" : "#4A5A50" }}>{l}</button>
             ))}
           </div>
 
@@ -5655,7 +5660,7 @@ function FeeCollect({ roster, saveRoster, who, onReceipt }) {
               style={{ ...darkInput(), flex: 1, minWidth: 130, fontFamily: FONT.mono, fontSize: 16 }} />
             {balance > 0 && (
               <button onClick={() => setAmount(String(balance))}
-                style={{ ...backBtnStyle(), color: "#111111", whiteSpace: "nowrap" }}>
+                style={{ ...backBtnStyle(), color: "#0A2E1A", whiteSpace: "nowrap" }}>
                 pay the balance
               </button>
             )}
@@ -5684,7 +5689,7 @@ function FeeCollect({ roster, saveRoster, who, onReceipt }) {
           </button>
 
           {method === "mpesa" && (
-            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 9, lineHeight: 1.5 }}>
+            <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 9, lineHeight: 1.5 }}>
               Each M-Pesa code can only be recorded once. If it has been used before the payment is
               refused and nothing is written, so the same SMS cannot be counted twice.
             </div>
@@ -5713,10 +5718,10 @@ function History({ roster }) {
     return (
       <div>
         <SectionTitle>History</SectionTitle>
-        <div style={{ padding: "14px 15px", background: "#F7F7F4", border: "1px solid #E3E3DD",
-              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#111111", lineHeight: 1.6 }}>
+        <div style={{ padding: "14px 15px", background: "#F4F8F5", border: "1px solid #DCE6E0",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", lineHeight: 1.6 }}>
           No year has been archived yet.
-          <div style={{ marginTop: 7, color: "#5C5C55" }}>
+          <div style={{ marginTop: 7, color: "#4A5A50" }}>
             At the close of a school year, use <strong>End of year → Archive year</strong>. A full copy is
             kept and appears here, so past results and attendance stay readable even after the live
             roster is cleared for the new year.
@@ -5735,7 +5740,7 @@ function History({ roster }) {
   return (
     <div>
       <SectionTitle>History</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14, lineHeight: 1.6 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14, lineHeight: 1.6 }}>
         Closed years, kept whole. Looking at one does not touch the current year.
       </div>
 
@@ -5745,16 +5750,16 @@ function History({ roster }) {
           <button key={i} onClick={() => { setYearIdx(i === yearIdx ? null : i); setClassId(""); setTerm(""); }}
             style={{ padding: "8px 15px", borderRadius: 18, fontFamily: FONT.body, fontSize: 13.5,
               fontWeight: 700, cursor: "pointer",
-              border: `1px solid ${yearIdx === i ? "#111111" : "#CFCFC8"}`,
-              background: yearIdx === i ? "#111111" : "#fff",
-              color: yearIdx === i ? "#fff" : "#5C5C55" }}>
+              border: `1px solid ${yearIdx === i ? "#0A2E1A" : "#C6D2CA"}`,
+              background: yearIdx === i ? "#0A2E1A" : "#fff",
+              color: yearIdx === i ? "#fff" : "#4A5A50" }}>
             {a.year}
           </button>
         ))}
       </div>
 
       {yearIdx === null && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Choose a year to look at.</div>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Choose a year to look at.</div>
       )}
 
       {snap && (
@@ -5768,7 +5773,7 @@ function History({ roster }) {
               .toLocaleDateString(undefined, { day: "numeric", month: "short" })} />
           </div>
 
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
             Results by class
           </div>
           <select value={classId} onChange={(e) => { setClassId(e.target.value); setTerm(""); }}
@@ -5784,7 +5789,7 @@ function History({ roster }) {
           {classId && (
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
               {termsFor(classId).length === 0 && (
-                <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>
+                <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>
                   No results were recorded for this class.
                 </div>
               )}
@@ -5792,9 +5797,9 @@ function History({ roster }) {
                 <button key={t} onClick={() => setTerm(t === term ? "" : t)}
                   style={{ padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5,
                     cursor: "pointer",
-                    border: `1px solid ${term === t ? "#0E7A3C" : "#CFCFC8"}`,
+                    border: `1px solid ${term === t ? "#0E7A3C" : "#C6D2CA"}`,
                     background: term === t ? "#E3F5E9" : "#fff",
-                    color: term === t ? "#0B5C2D" : "#5C5C55", fontWeight: 600 }}>
+                    color: term === t ? "#0B5C2D" : "#4A5A50", fontWeight: 600 }}>
                   {t.replace(/_/g, " ")}
                 </button>
               ))}
@@ -5804,7 +5809,7 @@ function History({ roster }) {
           {classId && term && <HistoryMarks snap={snap} classId={classId} term={term} />}
 
           {/* fee position as it stood at the close of that year */}
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111",
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A",
                 margin: "22px 0 8px" }}>
             Fee position at the close of {archives[yearIdx].year}
           </div>
@@ -5850,7 +5855,7 @@ function HistoryMarks({ snap, classId, term }) {
     .map((r, i) => ({ ...r, position: i + 1 }));
 
   if (ranked.length === 0) {
-    return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>
+    return <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>
       No marks were entered for this term.
     </div>;
   }
@@ -5858,11 +5863,11 @@ function HistoryMarks({ snap, classId, term }) {
   return (
     <div style={{ display: "grid", gap: 5 }} className="enter">
       {ranked.map((r) => (
-        <div key={r.st.id} style={{ padding: "9px 12px", background: "#F7F7F4",
-              border: "1px solid #E3E3DD", borderRadius: 4 }}>
+        <div key={r.st.id} style={{ padding: "9px 12px", background: "#F4F8F5",
+              border: "1px solid #DCE6E0", borderRadius: 4 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", fontWeight: 600 }}>
-              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63", marginRight: 7 }}>
+            <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", fontWeight: 600 }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64", marginRight: 7 }}>
                 #{r.position}
               </span>{r.st.name}
             </span>
@@ -5870,7 +5875,7 @@ function HistoryMarks({ snap, classId, term }) {
               avg {r.avg} · {gradeOf(r.avg)}
             </span>
           </div>
-          <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", marginTop: 4 }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", marginTop: 4 }}>
             {r.marks.map((m) => `${m.sub} ${m.final}`).join(" · ")}
           </div>
         </div>
@@ -5929,21 +5934,21 @@ function FeeRoll({ roster, filter, classId, onBack }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9, marginBottom: 16 }}>
-        {[["PUPILS", rows.length, "#111111"],
-          ["EXPECTED", `${cur}${money(t.due)}`, "#111111"],
+        {[["PUPILS", rows.length, "#0A2E1A"],
+          ["EXPECTED", `${cur}${money(t.due)}`, "#0A2E1A"],
           ["COLLECTED", `${cur}${money(t.paid)}`, "#0E7A3C"],
           ["OUTSTANDING", `${cur}${money(t.bal)}`, t.bal > 0 ? "#C0261B" : "#0E7A3C"]].map(([l, v, ink]) => (
-          <div key={l} style={{ border: "1px solid #E3E3DD", borderRadius: 4,
-                padding: "8px 9px", background: "#F7F7F4", textAlign: "center" }}>
-            <div style={{ fontFamily: FONT.mono, fontSize: 7.5, color: "#6A6A63", letterSpacing: 1 }}>{l}</div>
+          <div key={l} style={{ border: "1px solid #DCE6E0", borderRadius: 4,
+                padding: "8px 9px", background: "#F4F8F5", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 7.5, color: "#5E6E64", letterSpacing: 1 }}>{l}</div>
             <div style={{ fontSize: 13.5, fontWeight: "bold", marginTop: 2, color: ink }}>{v}</div>
           </div>
         ))}
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ padding: "18px 14px", border: "1px dashed #C4C4BC", borderRadius: 4,
-              background: "#F7F7F4", textAlign: "center", fontSize: 13, color: "#5C5C55" }}>
+        <div style={{ padding: "18px 14px", border: "1px dashed #B9C7BF", borderRadius: 4,
+              background: "#F4F8F5", textAlign: "center", fontSize: 13, color: "#4A5A50" }}>
           {filter === "owing" || filter === "none"
             ? "No pupil is in arrears. Every fee has been settled."
             : "No pupils to list."}
@@ -5966,7 +5971,7 @@ function FeeRoll({ roster, filter, classId, onBack }) {
           <tbody>
             {rows.map((r, i) => (
               <tr key={r.s.id}>
-                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 9.5, color: "#6A6A63" }}>{i + 1}</td>
+                <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 9.5, color: "#5E6E64" }}>{i + 1}</td>
                 <td style={{ ...docTd, fontSize: 11.5, fontWeight: 600 }}>{r.s.name}</td>
                 <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 10 }}>{r.s.id}</td>
                 {!classId && <td style={{ ...docTd, fontSize: 10.5 }}>{classNameOf(roster, r.s.classId)}</td>}
@@ -5990,23 +5995,23 @@ function FeeRoll({ roster, filter, classId, onBack }) {
               </tr>
             ))}
             <tr>
-              <td colSpan={classId ? 3 : 4} style={{ ...docTd, borderTop: "2px solid #111111", fontWeight: "bold" }}>
+              <td colSpan={classId ? 3 : 4} style={{ ...docTd, borderTop: "2px solid #0A2E1A", fontWeight: "bold" }}>
                 Totals — {rows.length} pupil{rows.length === 1 ? "" : "s"}
               </td>
-              <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "right",
+              <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "right",
                     fontFamily: FONT.mono, fontWeight: 700 }}>{money(t.due)}</td>
-              <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "right",
+              <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "right",
                     fontFamily: FONT.mono, fontWeight: 700, color: "#0E7A3C" }}>{money(t.paid)}</td>
-              <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "right",
+              <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "right",
                     fontFamily: FONT.mono, fontWeight: 700,
                     color: t.bal > 0 ? "#C0261B" : "#0E7A3C" }}>{money(t.bal)}</td>
-              <td colSpan={2} style={{ ...docTd, borderTop: "2px solid #111111" }}></td>
+              <td colSpan={2} style={{ ...docTd, borderTop: "2px solid #0A2E1A" }}></td>
             </tr>
           </tbody>
         </table>
       )}
 
-      <div style={{ fontSize: 10, color: "#5C5C55", lineHeight: 1.5, marginBottom: 20 }}>
+      <div style={{ fontSize: 10, color: "#4A5A50", lineHeight: 1.5, marginBottom: 20 }}>
         <strong>PAID</strong> — settled in full &nbsp;·&nbsp; <strong>PART</strong> — some paid, balance
         outstanding &nbsp;·&nbsp; <strong>NIL</strong> — nothing received.
         <div style={{ marginTop: 5 }}>
@@ -6048,7 +6053,7 @@ function FeeRollPicker({ roster, onPrint }) {
   return (
     <div>
       <SectionTitle>Printable fee list</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14, lineHeight: 1.6 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14, lineHeight: 1.6 }}>
         A sheet for the desk: every pupil with what they owe, what they have paid, and a column to
         sign as each settles.
       </div>
@@ -6071,14 +6076,14 @@ function FeeRollPicker({ roster, onPrint }) {
             <button key={k} onClick={() => setFilter(k)} className="lift"
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
                 gap: 10, textAlign: "left", padding: "11px 13px", borderRadius: 4, cursor: "pointer",
-                background: on ? "#E3F5E9" : "#F7F7F4",
-                border: `1px solid ${on ? "#0E7A3C" : "#E3E3DD"}` }}>
+                background: on ? "#E3F5E9" : "#F4F8F5",
+                border: `1px solid ${on ? "#0E7A3C" : "#DCE6E0"}` }}>
               <span>
-                <span style={{ fontFamily: FONT.body, fontSize: 14, fontWeight: 700, color: "#111111" }}>{label}</span>
-                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 2 }}>{why}</div>
+                <span style={{ fontFamily: FONT.body, fontSize: 14, fontWeight: 700, color: "#0A2E1A" }}>{label}</span>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 2 }}>{why}</div>
               </span>
               <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700,
-                    color: n === 0 ? "#6A6A63" : on ? "#0B5C2D" : "#111111" }}>{n}</span>
+                    color: n === 0 ? "#5E6E64" : on ? "#0B5C2D" : "#0A2E1A" }}>{n}</span>
             </button>
           );
         })}
@@ -6115,10 +6120,10 @@ function ClashReport({ roster, periods }) {
   return (
     <div style={{ padding: "12px 14px", borderRadius: 5, marginBottom: 16,
           background: "#FDE8E6", border: "1px solid #F3C0BB", borderLeft: "4px solid #C0261B" }}>
-      <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 700, color: "#111111" }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 700, color: "#0A2E1A" }}>
         {clashes.length} clash{clashes.length === 1 ? "" : "es"} in the timetable
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", margin: "4px 0 9px" }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", margin: "4px 0 9px" }}>
         These teachers are timetabled in two places at once. Remove one of each pair.
       </div>
       <div style={{ display: "grid", gap: 5 }}>
@@ -6127,7 +6132,7 @@ function ClashReport({ roster, periods }) {
           return (
             <div key={i} style={{ padding: "8px 11px", background: "#fff", borderRadius: 3,
                   border: "1px solid #F3C0BB" }}>
-              <div style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#111111" }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#0A2E1A" }}>
                 {who} — {DAY_FULL[c.day] || c.day}, {periodLabel(c.periodId)}
               </div>
               <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#C0261B", marginTop: 3 }}>
@@ -6147,17 +6152,17 @@ const LEAVE_KINDS = {
   annual:        { label: "Annual leave",        ink: "#0E7A3C", note: "Planned time off" },
   sick:          { label: "Sick leave",          ink: "#C0261B", note: "Illness or medical appointment" },
   emergency:     { label: "Emergency",           ink: "#8A6A00", note: "Something urgent and unforeseen" },
-  compassionate: { label: "Compassionate",       ink: "#1A1A1A", note: "Bereavement or family crisis" },
-  maternity:     { label: "Maternity",           ink: "#3B6E8F", note: "" },
-  paternity:     { label: "Paternity",           ink: "#3B6E8F", note: "" },
-  study:         { label: "Study leave",         ink: "#111111", note: "Course or examinations" },
-  unpaid:        { label: "Unpaid leave",        ink: "#6A6A63", note: "" },
+  compassionate: { label: "Compassionate",       ink: "#0E4A29", note: "Bereavement or family crisis" },
+  maternity:     { label: "Maternity",           ink: "#0A2E1A", note: "" },
+  paternity:     { label: "Paternity",           ink: "#0A2E1A", note: "" },
+  study:         { label: "Study leave",         ink: "#0A2E1A", note: "Course or examinations" },
+  unpaid:        { label: "Unpaid leave",        ink: "#5E6E64", note: "" },
 };
 const LEAVE_TONE = {
   pending:   { bg: "#FFF6D6", edge: "#F0D98A", ink: "#8A6A00", label: "Awaiting decision" },
   approved:  { bg: "#E3F5E9", edge: "#A9DEBC", ink: "#0E7A3C", label: "Approved" },
   declined:  { bg: "#FDE8E6", edge: "#F3C0BB", ink: "#C0261B", label: "Declined" },
-  cancelled: { bg: "#F7F7F4", edge: "#E3E3DD", ink: "#6A6A63", label: "Withdrawn" },
+  cancelled: { bg: "#F4F8F5", edge: "#DCE6E0", ink: "#5E6E64", label: "Withdrawn" },
 };
 
 // A member of staff applying for, and tracking, their own leave.
@@ -6203,7 +6208,7 @@ function MyLeave({ who, roster }) {
   return (
     <div>
       <SectionTitle>Leave</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
         Apply here and the head teacher decides. You will see the answer on this screen, and can
         print the form for your own records.
       </div>
@@ -6211,39 +6216,39 @@ function MyLeave({ who, roster }) {
       {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6",
             border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5, color: "#C0261B", marginBottom: 12 }}>{err}</div>}
       {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9",
-            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginBottom: 12 }}>{msg}</div>}
+            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginBottom: 12 }}>{msg}</div>}
 
-      <div style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5, padding: 13, marginBottom: 20 }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.3, color: "#6A6A63",
+      <div style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5, padding: 13, marginBottom: 20 }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.3, color: "#5E6E64",
               textTransform: "uppercase", marginBottom: 7 }}>Kind of leave</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
           {Object.entries(LEAVE_KINDS).map(([k, v]) => (
             <button key={k} onClick={() => { setForm({ ...form, kind: k }); setErr(""); }}
               style={{ padding: "6px 12px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12, fontWeight: 600,
                 cursor: "pointer",
-                border: `1px solid ${form.kind === k ? v.ink : "#CFCFC8"}`,
+                border: `1px solid ${form.kind === k ? v.ink : "#C6D2CA"}`,
                 background: form.kind === k ? v.ink : "#fff",
-                color: form.kind === k ? "#fff" : "#5C5C55" }}>{v.label}</button>
+                color: form.kind === k ? "#fff" : "#4A5A50" }}>{v.label}</button>
           ))}
         </div>
         {LEAVE_KINDS[form.kind].note && (
-          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6A6A63", marginTop: -6, marginBottom: 10 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5E6E64", marginTop: -6, marginBottom: 10 }}>
             {LEAVE_KINDS[form.kind].note}
           </div>
         )}
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 9 }}>
-          <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55" }}>From</span>
+          <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50" }}>From</span>
           <input type="date" value={form.starts}
             onChange={(e) => setForm({ ...form, starts: e.target.value,
               ends: e.target.value > form.ends ? e.target.value : form.ends })}
             style={{ ...darkInput(), minWidth: 140 }} />
-          <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55" }}>to</span>
+          <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50" }}>to</span>
           <input type="date" value={form.ends} min={form.starts}
             onChange={(e) => setForm({ ...form, ends: e.target.value })}
             style={{ ...darkInput(), minWidth: 140 }} />
           <span style={{ fontFamily: FONT.mono, fontSize: 12, fontWeight: 700,
-                color: days > 0 ? "#111111" : "#C0261B" }}>
+                color: days > 0 ? "#0A2E1A" : "#C0261B" }}>
             {days > 0 ? `${days} day${days === 1 ? "" : "s"}` : "check dates"}
           </span>
         </div>
@@ -6262,12 +6267,12 @@ function MyLeave({ who, roster }) {
         </button>
       </div>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         Your applications
       </div>
       {rows === null && <div className="skeleton" style={{ height: 56 }} />}
       {rows && rows.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>You have not applied for any leave.</div>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>You have not applied for any leave.</div>
       )}
       <div style={{ display: "grid", gap: 6 }}>
         {(rows || []).map((r) => {
@@ -6277,17 +6282,17 @@ function MyLeave({ who, roster }) {
             <div key={r.id} style={{ padding: "11px 13px", borderRadius: 4, background: tone.bg,
                   border: `1px solid ${tone.edge}`, borderLeft: `4px solid ${tone.ink}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 700, color: "#111111" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 700, color: "#0A2E1A" }}>
                   {kind.label} · {r.days} day{r.days === 1 ? "" : "s"}
                 </span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 9.5, fontWeight: 700, color: tone.ink }}>
                   {tone.label.toUpperCase()}
                 </span>
               </div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", marginTop: 3 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", marginTop: 3 }}>
                 {fmtDate(r.starts_on)} — {fmtDate(r.ends_on)}
               </div>
-              {r.reason && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#111111", marginTop: 5 }}>{r.reason}</div>}
+              {r.reason && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#0A2E1A", marginTop: 5 }}>{r.reason}</div>}
               {r.decision_note && (
                 <div style={{ fontFamily: FONT.body, fontSize: 12, color: tone.ink, marginTop: 5, fontStyle: "italic" }}>
                   {r.decided_by}: {r.decision_note}
@@ -6349,13 +6354,13 @@ function LeaveApprovals({ roster }) {
       <SectionTitle>Leave applications</SectionTitle>
 
       {away.length > 0 && (
-        <div style={{ padding: "11px 13px", borderRadius: 4, background: "#F2F2EE",
-              border: "1px solid #CFCFC8", borderLeft: "4px solid #3B6E8F", marginBottom: 14 }}>
-          <div style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 700, color: "#111111" }}>
+        <div style={{ padding: "11px 13px", borderRadius: 4, background: "#EFF5F1",
+              border: "1px solid #C6D2CA", borderLeft: "4px solid #3B6E8F", marginBottom: 14 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 700, color: "#0A2E1A" }}>
             Away today
           </div>
           {away.map((r) => (
-            <div key={r.id} style={{ fontFamily: FONT.body, fontSize: 12, color: "#111111", marginTop: 3 }}>
+            <div key={r.id} style={{ fontFamily: FONT.body, fontSize: 12, color: "#0A2E1A", marginTop: 3 }}>
               {r.staff_name} — {(LEAVE_KINDS[r.kind] || {}).label || r.kind}, back {fmtDate(
                 new Date(new Date(r.ends_on).getTime() + 86400000).toISOString().slice(0, 10))}
               {r.cover_by ? ` · covered by ${r.cover_by}` : " · no cover arranged"}
@@ -6369,7 +6374,7 @@ function LeaveApprovals({ roster }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 14 }}>
         <StatCard label="Waiting" value={pending.length} tone={pending.length ? "#8A6A00" : "#0E7A3C"} />
-        <StatCard label="Away today" value={away.length} tone={away.length ? "#3B6E8F" : "#0E7A3C"} />
+        <StatCard label="Away today" value={away.length} tone={away.length ? "#0A2E1A" : "#0E7A3C"} />
         <StatCard label="Decided" value={decided.length} />
       </div>
 
@@ -6382,29 +6387,29 @@ function LeaveApprovals({ roster }) {
       {rows === null && <div className="skeleton" style={{ height: 70 }} />}
       {rows && pending.length === 0 && (
         <div style={{ padding: "12px 14px", background: "#E3F5E9", border: "1px solid #A9DEBC",
-              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#111111", marginBottom: 16 }}>
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", marginBottom: 16 }}>
           Nothing waiting for a decision.
         </div>
       )}
 
       <div style={{ display: "grid", gap: 8, marginBottom: 22 }}>
         {pending.map((r) => {
-          const kind = LEAVE_KINDS[r.kind] || { label: r.kind, ink: "#6A6A63" };
+          const kind = LEAVE_KINDS[r.kind] || { label: r.kind, ink: "#5E6E64" };
           return (
             <div key={r.id} className="enter" style={{ padding: "12px 14px", borderRadius: 5,
                   background: "#FFF6D6", border: "1px solid #F0D98A", borderLeft: `4px solid ${kind.ink}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#111111" }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#0A2E1A" }}>
                   {r.staff_name}
                 </span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 10, fontWeight: 700, color: kind.ink }}>
                   {kind.label.toUpperCase()}
                 </span>
               </div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55", marginTop: 3 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50", marginTop: 3 }}>
                 {fmtDate(r.starts_on)} — {fmtDate(r.ends_on)} · {r.days} day{r.days === 1 ? "" : "s"}
               </div>
-              {r.reason && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginTop: 6 }}>{r.reason}</div>}
+              {r.reason && <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginTop: 6 }}>{r.reason}</div>}
               <div style={{ fontFamily: FONT.body, fontSize: 11.5, marginTop: 5,
                     color: r.cover_by ? "#0E7A3C" : "#C0261B" }}>
                 {r.cover_by ? `Cover: ${r.cover_by}` : "No cover arranged — ask before approving"}
@@ -6418,7 +6423,7 @@ function LeaveApprovals({ roster }) {
                   style={{ ...primaryBtn(), background: "#0E7A3C" }}>Approve</button>
                 <button onClick={() => decide(r.id, "declined")} disabled={busy === r.id}
                   style={{ ...primaryBtn(), background: "#C0261B" }}>Decline</button>
-                <button onClick={() => setPrinting(r)} style={{ ...backBtnStyle(), color: "#111111" }}>
+                <button onClick={() => setPrinting(r)} style={{ ...backBtnStyle(), color: "#0A2E1A" }}>
                   print form
                 </button>
               </div>
@@ -6429,7 +6434,7 @@ function LeaveApprovals({ roster }) {
 
       {decided.length > 0 && (
         <>
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
             Decided
           </div>
           <div style={{ display: "grid", gap: 5 }}>
@@ -6437,10 +6442,10 @@ function LeaveApprovals({ roster }) {
               const tone = LEAVE_TONE[r.status] || LEAVE_TONE.cancelled;
               return (
                 <div key={r.id} style={{ display: "flex", justifyContent: "space-between", gap: 9,
-                      flexWrap: "wrap", padding: "8px 12px", borderRadius: 3, background: "#F7F7F4",
-                      border: "1px solid #E3E3DD", borderLeft: `3px solid ${tone.ink}` }}>
-                  <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111" }}>
-                    {r.staff_name} <span style={{ color: "#6A6A63" }}>
+                      flexWrap: "wrap", padding: "8px 12px", borderRadius: 3, background: "#F4F8F5",
+                      border: "1px solid #DCE6E0", borderLeft: `3px solid ${tone.ink}` }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A" }}>
+                    {r.staff_name} <span style={{ color: "#5E6E64" }}>
                       · {(LEAVE_KINDS[r.kind] || {}).label || r.kind}</span>
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -6448,7 +6453,7 @@ function LeaveApprovals({ roster }) {
                       {fmtDate(r.starts_on)}–{fmtDate(r.ends_on)} · {tone.label}
                     </span>
                     <button onClick={() => setPrinting(r)} style={{ background: "none", border: "none",
-                          color: "#111111", fontFamily: FONT.mono, fontSize: 10, cursor: "pointer",
+                          color: "#0A2E1A", fontFamily: FONT.mono, fontSize: 10, cursor: "pointer",
                           textDecoration: "underline" }}>print</button>
                   </span>
                 </div>
@@ -6492,7 +6497,7 @@ function SpendRecord({ roster, who, onVoucher }) {
   return (
     <div>
       <SectionTitle>Record spending</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14, lineHeight: 1.6 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14, lineHeight: 1.6 }}>
         Every payment out gets a voucher number. Record it when it happens, not from memory at
         month end.
       </div>
@@ -6500,20 +6505,20 @@ function SpendRecord({ roster, who, onVoucher }) {
       {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6",
             border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5, color: "#C0261B", marginBottom: 12 }}>{err}</div>}
       {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9",
-            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 13, color: "#111111",
+            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A",
             marginBottom: 12, fontWeight: 600 }}>{msg}</div>}
 
-      <div style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5, padding: 13 }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.3, color: "#6A6A63",
+      <div style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5, padding: 13 }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.3, color: "#5E6E64",
               textTransform: "uppercase", marginBottom: 7 }}>What kind of spending</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 13 }}>
           {cats.map((c) => (
             <button key={c.key} onClick={() => { setF({ ...f, category: c.key }); setErr(""); }}
               style={{ padding: "6px 12px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12,
                 fontWeight: 600, cursor: "pointer",
-                border: `1px solid ${f.category === c.key ? "#111111" : "#CFCFC8"}`,
-                background: f.category === c.key ? "#111111" : "#fff",
-                color: f.category === c.key ? "#fff" : "#5C5C55" }}>{c.label}</button>
+                border: `1px solid ${f.category === c.key ? "#0A2E1A" : "#C6D2CA"}`,
+                background: f.category === c.key ? "#0A2E1A" : "#fff",
+                color: f.category === c.key ? "#fff" : "#4A5A50" }}>{c.label}</button>
           ))}
         </div>
 
@@ -6539,9 +6544,9 @@ function SpendRecord({ roster, who, onVoucher }) {
             <button key={k} onClick={() => setF({ ...f, method: k })}
               style={{ padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12,
                 fontWeight: 600, cursor: "pointer",
-                border: `1px solid ${f.method === k ? "#111111" : "#CFCFC8"}`,
-                background: f.method === k ? "#111111" : "#fff",
-                color: f.method === k ? "#fff" : "#5C5C55" }}>{l}</button>
+                border: `1px solid ${f.method === k ? "#0A2E1A" : "#C6D2CA"}`,
+                background: f.method === k ? "#0A2E1A" : "#fff",
+                color: f.method === k ? "#fff" : "#4A5A50" }}>{l}</button>
           ))}
         </div>
 
@@ -6558,7 +6563,7 @@ function SpendRecord({ roster, who, onVoucher }) {
           {busy ? "Recording…" : "Record this payment"}
         </button>
 
-        <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 9, lineHeight: 1.5 }}>
+        <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 9, lineHeight: 1.5 }}>
           Keep the receipt or invoice. The voucher number written on it is what ties the paper to
           this record.
         </div>
@@ -6604,7 +6609,7 @@ function SpendReport({ roster, refreshKey }) {
   }
 
   const RANGES = [["month","This month"],["term","This term"],["year","This year"],["all","Everything"]];
-  const PALETTE = ["#0E7A3C","#8A6A00","#3B6E8F","#C0261B","#1A1A1A","#0B5C2D","#8A6A2C","#111111"];
+  const PALETTE = ["#0E7A3C","#8A6A00","#0A2E1A","#C0261B","#0E4A29","#0B5C2D","#8A6A2C","#0A2E1A"];
 
   return (
     <div>
@@ -6614,9 +6619,9 @@ function SpendReport({ roster, refreshKey }) {
           <button key={k} onClick={() => setRange(k)}
             style={{ padding: "6px 13px", borderRadius: 16, fontFamily: FONT.body, fontSize: 12.5,
               fontWeight: 600, cursor: "pointer",
-              border: `1px solid ${range === k ? "#111111" : "#CFCFC8"}`,
-              background: range === k ? "#111111" : "#fff",
-              color: range === k ? "#fff" : "#5C5C55" }}>{l}</button>
+              border: `1px solid ${range === k ? "#0A2E1A" : "#C6D2CA"}`,
+              background: range === k ? "#0A2E1A" : "#fff",
+              color: range === k ? "#fff" : "#4A5A50" }}>{l}</button>
         ))}
       </div>
 
@@ -6633,8 +6638,8 @@ function SpendReport({ roster, refreshKey }) {
 
       {sum === null && <div className="skeleton" style={{ height: 90 }} />}
       {sum && sum.length === 0 && (
-        <div style={{ padding: "13px 15px", background: "#F7F7F4", border: "1px solid #E3E3DD",
-              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#5C5C55" }}>
+        <div style={{ padding: "13px 15px", background: "#F4F8F5", border: "1px solid #DCE6E0",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#4A5A50" }}>
           No spending recorded for this period.
         </div>
       )}
@@ -6646,20 +6651,20 @@ function SpendReport({ roster, refreshKey }) {
               const share = total ? Math.round((Number(r.total) / total) * 100) : 0;
               const ink = PALETTE[i % PALETTE.length];
               return (
-                <div key={r.category} style={{ padding: "10px 12px", background: "#F7F7F4",
-                      border: "1px solid #E3E3DD", borderRadius: 4, borderLeft: `4px solid ${ink}` }}>
+                <div key={r.category} style={{ padding: "10px 12px", background: "#F4F8F5",
+                      border: "1px solid #DCE6E0", borderRadius: 4, borderLeft: `4px solid ${ink}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>
                       {r.label}
                     </span>
                     <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: ink }}>
                       {cur}{money(Number(r.total))}
                     </span>
                   </div>
-                  <div style={{ height: 6, background: "#EDEDE7", borderRadius: 3, marginTop: 7, overflow: "hidden" }}>
+                  <div style={{ height: 6, background: "#E7EFE9", borderRadius: 3, marginTop: 7, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${share}%`, background: ink }} />
                   </div>
-                  <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", marginTop: 4 }}>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", marginTop: 4 }}>
                     {share}% of spending · {r.items} voucher{r.items === 1 ? "" : "s"}
                   </div>
                 </div>
@@ -6674,22 +6679,22 @@ function SpendReport({ roster, refreshKey }) {
 
       {rows && rows.length > 0 && (
         <>
-          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
             Every voucher
           </div>
           <div style={{ display: "grid", gap: 5 }}>
             {rows.map((r) => (
-              <div key={r.id} style={{ padding: "9px 12px", background: "#F7F7F4",
-                    border: "1px solid #E3E3DD", borderRadius: 4 }}>
+              <div key={r.id} style={{ padding: "9px 12px", background: "#F4F8F5",
+                    border: "1px solid #DCE6E0", borderRadius: 4 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#111111" }}>
+                  <span style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#0A2E1A" }}>
                     {r.description}
                   </span>
                   <span style={{ fontFamily: FONT.mono, fontSize: 12.5, fontWeight: 700, color: "#C0261B" }}>
                     {cur}{money(Number(r.amount))}
                   </span>
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", marginTop: 3 }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", marginTop: 3 }}>
                   {r.voucher_no} · {fmtDate(r.spent_on)} · {r.method}
                   {r.paid_to ? ` · to ${r.paid_to}` : ""}
                   {r.reference ? ` · ${r.reference}` : ""}
@@ -6722,9 +6727,9 @@ function SpendReportDoc({ roster, sum, rows, from, to, collected, onBack }) {
         {[["FEES COLLECTED", collected, "#0E7A3C"],
           ["TOTAL SPENT", total, "#C0261B"],
           ["BALANCE", collected - total, collected - total >= 0 ? "#0E7A3C" : "#C0261B"]].map(([l, v, ink]) => (
-          <div key={l} style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "10px 11px",
-                background: "#F7F7F4", textAlign: "center" }}>
-            <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#6A6A63", letterSpacing: 1 }}>{l}</div>
+          <div key={l} style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "10px 11px",
+                background: "#F4F8F5", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#5E6E64", letterSpacing: 1 }}>{l}</div>
             <div style={{ fontSize: 15, fontWeight: "bold", marginTop: 3, color: ink }}>{cur}{money(v)}</div>
           </div>
         ))}
@@ -6748,18 +6753,18 @@ function SpendReportDoc({ roster, sum, rows, from, to, collected, onBack }) {
               <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 11.5 }}>
                 {money(Number(r.total))}
               </td>
-              <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55" }}>
+              <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50" }}>
                 {total ? Math.round((Number(r.total) / total) * 100) : 0}%
               </td>
             </tr>
           ))}
           <tr>
-            <td style={{ ...docTd, borderTop: "2px solid #111111", fontWeight: "bold" }}>Total spent</td>
-            <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "center",
+            <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", fontWeight: "bold" }}>Total spent</td>
+            <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "center",
                   fontFamily: FONT.mono }}>{rows.length}</td>
-            <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "right",
+            <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "right",
                   fontFamily: FONT.mono, fontWeight: 700 }}>{money(total)}</td>
-            <td style={{ ...docTd, borderTop: "2px solid #111111" }}></td>
+            <td style={{ ...docTd, borderTop: "2px solid #0A2E1A" }}></td>
           </tr>
         </tbody>
       </table>
@@ -6783,7 +6788,7 @@ function SpendReportDoc({ roster, sum, rows, from, to, collected, onBack }) {
               <td style={{ ...docTd, fontSize: 9.5 }}>{fmtDate(r.spent_on)}</td>
               <td style={{ ...docTd, fontSize: 10.5 }}>
                 {r.description}
-                {r.reference && <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#5C5C55" }}>{r.reference}</div>}
+                {r.reference && <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#4A5A50" }}>{r.reference}</div>}
               </td>
               <td style={{ ...docTd, fontSize: 10 }}>{r.paid_to || "—"}</td>
               <td style={{ ...docTd, fontSize: 9.5, textTransform: "capitalize" }}>{r.method}</td>
@@ -6795,7 +6800,7 @@ function SpendReportDoc({ roster, sum, rows, from, to, collected, onBack }) {
         </tbody>
       </table>
 
-      <div style={{ fontSize: 10, color: "#5C5C55", lineHeight: 1.55, marginBottom: 24 }}>
+      <div style={{ fontSize: 10, color: "#4A5A50", lineHeight: 1.55, marginBottom: 24 }}>
         Prepared from the school's own records. Each voucher number corresponds to a receipt or
         invoice held in the office. Fees collected covers the current roll; balances brought forward
         from earlier years are not included.
@@ -6840,7 +6845,7 @@ function LeaveFormDoc({ roster, application, onBack }) {
       {/* the decision, stated plainly at the top where it will be looked for */}
       <div style={{ border: `2px solid ${tone.ink}`, borderRadius: 4, padding: "11px 14px",
             background: tone.bg, marginBottom: 20, textAlign: "center" }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 8.5, letterSpacing: 1.6, color: "#5C5C55" }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 8.5, letterSpacing: 1.6, color: "#4A5A50" }}>
           STATUS OF THIS APPLICATION
         </div>
         <div style={{ fontSize: 17, fontWeight: "bold", color: tone.ink, marginTop: 3,
@@ -6848,7 +6853,7 @@ function LeaveFormDoc({ roster, application, onBack }) {
           {tone.label}
         </div>
         {r.decided_by && (
-          <div style={{ fontSize: 10.5, color: "#5C5C55", marginTop: 3 }}>
+          <div style={{ fontSize: 10.5, color: "#4A5A50", marginTop: 3 }}>
             by {r.decided_by}{r.decided_at ? ` on ${fmtDate(String(r.decided_at).slice(0, 10))}` : ""}
           </div>
         )}
@@ -6866,16 +6871,16 @@ function LeaveFormDoc({ roster, application, onBack }) {
             ["Cover arranged with", r.cover_by || "— none recorded —"],
           ].map(([k, v]) => (
             <tr key={k}>
-              <td style={{ ...docTd, width: "42%", background: "#F7F7F4", fontWeight: 600, fontSize: 11 }}>{k}</td>
+              <td style={{ ...docTd, width: "42%", background: "#F4F8F5", fontWeight: 600, fontSize: 11 }}>{k}</td>
               <td style={{ ...docTd, fontSize: 11.5,
-                    color: v && String(v).startsWith("—") ? "#C0261B" : "#111111" }}>{v}</td>
+                    color: v && String(v).startsWith("—") ? "#C0261B" : "#0A2E1A" }}>{v}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
       <div style={{ fontWeight: "bold", marginBottom: 6, fontSize: 12 }}>Reason given</div>
-      <div style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "11px 13px",
+      <div style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "11px 13px",
             background: "#FFFFFF", minHeight: 52, fontSize: 11.5, lineHeight: 1.6, marginBottom: 18 }}>
         {r.reason || "— no reason recorded —"}
       </div>
@@ -6883,15 +6888,15 @@ function LeaveFormDoc({ roster, application, onBack }) {
       {r.decision_note && (
         <>
           <div style={{ fontWeight: "bold", marginBottom: 6, fontSize: 12 }}>Note from the head teacher</div>
-          <div style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "11px 13px",
+          <div style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "11px 13px",
                 background: "#FFFFFF", fontSize: 11.5, lineHeight: 1.6, marginBottom: 18 }}>
             {r.decision_note}
           </div>
         </>
       )}
 
-      <div style={{ fontSize: 10, color: "#5C5C55", lineHeight: 1.55, marginBottom: 26,
-            borderTop: "1px solid #E3E3DD", paddingTop: 10 }}>
+      <div style={{ fontSize: 10, color: "#4A5A50", lineHeight: 1.55, marginBottom: 26,
+            borderTop: "1px solid #DCE6E0", paddingTop: 10 }}>
         This form records an application made through the school portal and the decision taken on it.
         {r.status === "approved" && " The applicant is authorised to be absent for the days shown above."}
         {r.status === "pending" && " No decision has yet been taken. The applicant should not be absent until it has."}
@@ -6931,13 +6936,13 @@ function LeaveRegisterDoc({ roster, rows, from, to, onBack }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(92px,1fr))",
                 gap: 8, marginBottom: 18 }}>
             {Object.entries(byKind).sort((a, b) => b[1] - a[1]).map(([k, d]) => (
-              <div key={k} style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "8px 9px",
-                    background: "#F7F7F4", textAlign: "center" }}>
-                <div style={{ fontFamily: FONT.mono, fontSize: 7.5, color: "#6A6A63", letterSpacing: 0.8 }}>
+              <div key={k} style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "8px 9px",
+                    background: "#F4F8F5", textAlign: "center" }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 7.5, color: "#5E6E64", letterSpacing: 0.8 }}>
                   {((LEAVE_KINDS[k] || {}).label || k).toUpperCase()}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: "bold", marginTop: 2,
-                      color: (LEAVE_KINDS[k] || {}).ink || "#111111" }}>{d}</div>
+                      color: (LEAVE_KINDS[k] || {}).ink || "#0A2E1A" }}>{d}</div>
               </div>
             ))}
           </div>
@@ -6945,8 +6950,8 @@ function LeaveRegisterDoc({ roster, rows, from, to, onBack }) {
       )}
 
       {rows.length === 0 ? (
-        <div style={{ padding: "18px 14px", border: "1px dashed #C4C4BC", borderRadius: 4,
-              background: "#F7F7F4", textAlign: "center", fontSize: 12.5, color: "#5C5C55" }}>
+        <div style={{ padding: "18px 14px", border: "1px dashed #B9C7BF", borderRadius: 4,
+              background: "#F4F8F5", textAlign: "center", fontSize: 12.5, color: "#4A5A50" }}>
           No leave was applied for in this period.
         </div>
       ) : (
@@ -6968,13 +6973,13 @@ function LeaveRegisterDoc({ roster, rows, from, to, onBack }) {
               const tone = LEAVE_TONE[r.status] || LEAVE_TONE.pending;
               return (
                 <tr key={r.id}>
-                  <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 9, color: "#6A6A63" }}>{i + 1}</td>
+                  <td style={{ ...docTd, fontFamily: FONT.mono, fontSize: 9, color: "#5E6E64" }}>{i + 1}</td>
                   <td style={{ ...docTd, fontSize: 11, fontWeight: 600 }}>{r.staff_name}</td>
                   <td style={{ ...docTd, fontSize: 10 }}>{(LEAVE_KINDS[r.kind] || {}).label || r.kind}</td>
                   <td style={{ ...docTd, fontSize: 9.5 }}>{fmtDate(r.starts_on)}</td>
                   <td style={{ ...docTd, fontSize: 9.5 }}>{fmtDate(r.ends_on)}</td>
                   <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontSize: 10.5 }}>{r.days}</td>
-                  <td style={{ ...docTd, fontSize: 9.5, color: r.cover_by ? "#111111" : "#C0261B" }}>
+                  <td style={{ ...docTd, fontSize: 9.5, color: r.cover_by ? "#0A2E1A" : "#C0261B" }}>
                     {r.cover_by || "none"}
                   </td>
                   <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontSize: 8,
@@ -6985,18 +6990,18 @@ function LeaveRegisterDoc({ roster, rows, from, to, onBack }) {
               );
             })}
             <tr>
-              <td colSpan={5} style={{ ...docTd, borderTop: "2px solid #111111", fontWeight: "bold", fontSize: 11 }}>
+              <td colSpan={5} style={{ ...docTd, borderTop: "2px solid #0A2E1A", fontWeight: "bold", fontSize: 11 }}>
                 Total days approved
               </td>
-              <td style={{ ...docTd, borderTop: "2px solid #111111", textAlign: "center",
+              <td style={{ ...docTd, borderTop: "2px solid #0A2E1A", textAlign: "center",
                     fontFamily: FONT.mono, fontWeight: 700 }}>{total}</td>
-              <td colSpan={2} style={{ ...docTd, borderTop: "2px solid #111111" }}></td>
+              <td colSpan={2} style={{ ...docTd, borderTop: "2px solid #0A2E1A" }}></td>
             </tr>
           </tbody>
         </table>
       )}
 
-      <div style={{ fontSize: 10, color: "#5C5C55", lineHeight: 1.55, marginBottom: 24 }}>
+      <div style={{ fontSize: 10, color: "#4A5A50", lineHeight: 1.55, marginBottom: 24 }}>
         A record of leave applied for and decided through the school portal. Where no cover is shown,
         none was recorded at the time of application.
       </div>
@@ -7018,7 +7023,7 @@ function PendingAlerts({ alerts, total, onGo }) {
       <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "11px 13px",
             marginBottom: 20, borderRadius: 4, background: "#E3F5E9", border: "1px solid #A9DEBC" }}>
         <span style={{ color: "#0E7A3C", fontSize: 15 }}>&#10003;</span>
-        <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#111111" }}>
+        <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A" }}>
           Nothing is waiting for your approval.
         </span>
       </div>
@@ -7028,12 +7033,12 @@ function PendingAlerts({ alerts, total, onGo }) {
   return (
     <div className="enter" style={{ marginBottom: 22 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9, flexWrap: "wrap" }}>
-        <span style={{ background: "#C0261B", color: "#fff", borderRadius: 11,
+        <span className="alert-dot" style={{ background: "#FFC400", color: "#0A2E1A", borderRadius: 11,
               minWidth: 22, height: 22, display: "grid", placeItems: "center",
               fontFamily: FONT.mono, fontSize: 11.5, fontWeight: 700, padding: "0 6px" }}>
           {total}
         </span>
-        <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#111111" }}>
+        <span style={{ fontFamily: FONT.display, fontSize: 17, fontWeight: 700, color: "#0A2E1A" }}>
           Waiting for you
         </span>
       </div>
@@ -7042,7 +7047,7 @@ function PendingAlerts({ alerts, total, onGo }) {
           <button key={a.key} onClick={() => onGo(a.key)} className="lift"
             style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left",
               width: "100%", padding: "11px 13px", borderRadius: 4, cursor: "pointer",
-              background: "#F7F7F4", border: "1px solid #E3E3DD",
+              background: "#F4F8F5", border: "1px solid #DCE6E0",
               borderLeft: `4px solid ${a.tone}` }}>
             <span style={{ background: a.tone, color: "#fff", borderRadius: 10,
                   minWidth: 21, height: 21, display: "grid", placeItems: "center",
@@ -7050,10 +7055,10 @@ function PendingAlerts({ alerts, total, onGo }) {
               {a.n}
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>
                 {a.n === 1 ? a.one : a.many}
               </span>
-              <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 2 }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 2 }}>
                 {a.why}
               </div>
             </span>
@@ -7090,7 +7095,7 @@ function HolidayWork({ roster, teacher, classId }) {
   return (
     <div>
       <SectionTitle>Holiday work</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14, lineHeight: 1.6 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14, lineHeight: 1.6 }}>
         Set work for the holidays. Families read it on the phone or print it, and send the answers
         back — typed, or as a photograph of the exercise book.
       </div>
@@ -7101,7 +7106,7 @@ function HolidayWork({ roster, teacher, classId }) {
       <button onClick={() => setEditing({})} style={{ ...primaryBtn(), marginBottom: 8 }}>
         Set new work
       </button>
-      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6A6A63",
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5E6E64",
             marginBottom: 18, lineHeight: 1.55 }}>
         You can attach PDFs, Word documents or pictures from this computer while writing the work,
         or with <strong>Attach files</strong> on anything already set.
@@ -7109,7 +7114,7 @@ function HolidayWork({ roster, teacher, classId }) {
 
       {rows === null && <div className="skeleton" style={{ height: 70 }} />}
       {rows && rows.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>
           No holiday work set for this class yet.
         </div>
       )}
@@ -7119,42 +7124,42 @@ function HolidayWork({ roster, teacher, classId }) {
           const total = roster.students.filter((s) => s.classId === w.class_id).length;
           const overdue = w.due_on && w.due_on < todayISO();
           return (
-            <div key={w.id} style={{ padding: "12px 14px", borderRadius: 5, background: "#F7F7F4",
-                  border: "1px solid #E3E3DD",
-                  borderLeft: `4px solid ${w.published ? "#0E7A3C" : "#6A6A63"}` }}>
+            <div key={w.id} style={{ padding: "12px 14px", borderRadius: 5, background: "#F4F8F5",
+                  border: "1px solid #DCE6E0",
+                  borderLeft: `4px solid ${w.published ? "#0E7A3C" : "#5E6E64"}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#111111" }}>
+                <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#0A2E1A" }}>
                   {w.title}
                 </span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: w.published ? "#0E7A3C" : "#6A6A63" }}>
+                <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: w.published ? "#0E7A3C" : "#5E6E64" }}>
                   {w.published ? "SENT TO FAMILIES" : "NOT SENT"}
                 </span>
               </div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", marginTop: 3 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", marginTop: 3 }}>
                 {w.subject} · set {fmtDate(w.set_on)}
-                {w.due_on && <span style={{ color: overdue ? "#C0261B" : "#5C5C55" }}> · due {fmtDate(w.due_on)}</span>}
+                {w.due_on && <span style={{ color: overdue ? "#C0261B" : "#4A5A50" }}> · due {fmtDate(w.due_on)}</span>}
               </div>
 
               {/* how many have answered — the thing a teacher looks for */}
               <div style={{ marginTop: 9 }}>
-                <div style={{ height: 6, background: "#EDEDE7", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: 6, background: "#E7EFE9", borderRadius: 3, overflow: "hidden" }}>
                   <div style={{ height: "100%", background: "#0E7A3C",
                         width: `${total ? Math.round((w.submitted / total) * 100) : 0}%` }} />
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5C5C55", marginTop: 4 }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#4A5A50", marginTop: 4 }}>
                   {w.submitted} of {total} answered · {w.marked} marked
                 </div>
               </div>
 
               <div style={{ display: "flex", gap: 8, marginTop: 11, flexWrap: "wrap" }}>
                 <button onClick={() => setMarking(w)} style={{ ...primaryBtn(), padding: "6px 13px", fontSize: 12,
-                      background: w.submitted > w.marked ? "#8A6A00" : "#111111" }}>
+                      background: w.submitted > w.marked ? "#8A6A00" : "#0A2E1A" }}>
                   {w.submitted > w.marked ? `Mark ${w.submitted - w.marked} waiting` : "See answers"}
                 </button>
-                <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#111111" }}>print worksheet</button>
-                <button onClick={() => setEditing(w)} style={{ ...backBtnStyle(), color: "#111111" }}>edit</button>
+                <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#0A2E1A" }}>print worksheet</button>
+                <button onClick={() => setEditing(w)} style={{ ...backBtnStyle(), color: "#0A2E1A" }}>edit</button>
                 <button onClick={() => setFilesFor(filesFor === w.id ? null : w.id)}
-                  style={{ ...primaryBtn(), padding: "6px 13px", fontSize: 12, background: "#1A1A1A" }}>
+                  style={{ ...primaryBtn(), padding: "6px 13px", fontSize: 12, background: "#0E4A29" }}>
                   {filesFor === w.id ? "Hide files" : "Attach files"}
                 </button>
               </div>
@@ -7210,7 +7215,7 @@ function WorkEditor({ roster, teacher, classId, work, onDone }) {
 
   return (
     <div>
-      <button onClick={onDone} style={{ ...backBtnStyle(), color: "#111111", marginBottom: 12 }}>← back</button>
+      <button onClick={onDone} style={{ ...backBtnStyle(), color: "#0A2E1A", marginBottom: 12 }}>← back</button>
       <SectionTitle>{isNew ? "Set new work" : "Edit work"}</SectionTitle>
 
       {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6",
@@ -7224,7 +7229,7 @@ function WorkEditor({ roster, teacher, classId, work, onDone }) {
         <input type="date" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value })}
           style={{ ...darkInput(), minWidth: 140 }} />
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6A6A63", marginTop: -4, marginBottom: 11 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5E6E64", marginTop: -4, marginBottom: 11 }}>
         The date is when the work should be handed in.
       </div>
 
@@ -7244,17 +7249,17 @@ function WorkEditor({ roster, teacher, classId, work, onDone }) {
       <button onClick={() => setF({ ...f, published: !f.published })}
         style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
           padding: "10px 12px", borderRadius: 4, cursor: "pointer", marginBottom: 13,
-          background: f.published ? "#E3F5E9" : "#F7F7F4",
-          border: `1px solid ${f.published ? "#0E7A3C" : "#E3E3DD"}` }}>
+          background: f.published ? "#E3F5E9" : "#F4F8F5",
+          border: `1px solid ${f.published ? "#0E7A3C" : "#DCE6E0"}` }}>
         <span style={{ width: 17, height: 17, borderRadius: 3, flex: "0 0 17px",
-          border: `1.5px solid ${f.published ? "#0E7A3C" : "#C4C4BC"}`,
+          border: `1.5px solid ${f.published ? "#0E7A3C" : "#B9C7BF"}`,
           background: f.published ? "#0E7A3C" : "transparent", color: "#fff",
           fontSize: 12, lineHeight: "15px", textAlign: "center" }}>{f.published ? "✓" : ""}</span>
         <span>
-          <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>
+          <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>
             Send this to families
           </span>
-          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 2 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 2 }}>
             {f.published ? "Parents can see it as soon as you save" : "Kept as a draft — nobody sees it yet"}
           </div>
         </span>
@@ -7279,7 +7284,7 @@ function WorkEditor({ roster, teacher, classId, work, onDone }) {
       {justSaved && (
         <div className="enter" style={{ marginTop: 12, padding: "10px 13px", borderRadius: 4,
               background: "#E3F5E9", border: "1px solid #A9DEBC",
-              fontFamily: FONT.body, fontSize: 12.5, color: "#111111", lineHeight: 1.55 }}>
+              fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", lineHeight: 1.55 }}>
           Saved{f.published ? " and sent to families" : " as a draft"}.
           Attach any files below, or tap <strong>Done</strong>.
         </div>
@@ -7291,10 +7296,10 @@ function WorkEditor({ roster, teacher, classId, work, onDone }) {
       {savedId ? (
         <WorkFiles assignmentId={savedId} />
       ) : (
-        <div style={{ marginTop: 14, paddingTop: 13, borderTop: "1px dashed #CFCFC8" }}>
+        <div style={{ marginTop: 14, paddingTop: 13, borderTop: "1px dashed #C6D2CA" }}>
           <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2,
-                color: "#6A6A63", marginBottom: 6 }}>FILES FOR THE PUPILS</div>
-          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6A6A63", lineHeight: 1.55 }}>
+                color: "#5E6E64", marginBottom: 6 }}>FILES FOR THE PUPILS</div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5E6E64", lineHeight: 1.55 }}>
             Save the work first, then attach PDFs, Word documents or pictures from this computer —
             the button appears here.
           </div>
@@ -7336,9 +7341,9 @@ function MarkSubmissions({ roster, work, onBack }) {
 
   return (
     <div>
-      <button onClick={onBack} style={{ ...backBtnStyle(), color: "#111111", marginBottom: 12 }}>← back</button>
+      <button onClick={onBack} style={{ ...backBtnStyle(), color: "#0A2E1A", marginBottom: 12 }}>← back</button>
       <SectionTitle>{work.title}</SectionTitle>
-      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", marginBottom: 14 }}>
         {work.subject} · {classNameOf(roster, work.class_id)}
         {work.due_on ? ` · due ${fmtDate(work.due_on)}` : ""}
       </div>
@@ -7354,7 +7359,7 @@ function MarkSubmissions({ roster, work, onBack }) {
 
       {rows === null && <div className="skeleton" style={{ height: 70 }} />}
       {rows && rows.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63", marginBottom: 16 }}>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64", marginBottom: 16 }}>
           Nobody has sent answers yet.
         </div>
       )}
@@ -7364,13 +7369,13 @@ function MarkSubmissions({ roster, work, onBack }) {
           const m = marks[r.id] || { score: r.score ?? "", outOf: r.out_of ?? 10, comment: r.comment ?? "" };
           const isOpen = open === r.id;
           return (
-            <div key={r.id} style={{ borderRadius: 5, border: "1px solid #E3E3DD", overflow: "hidden",
+            <div key={r.id} style={{ borderRadius: 5, border: "1px solid #DCE6E0", overflow: "hidden",
                   borderLeft: `4px solid ${r.marked ? "#0E7A3C" : "#8A6A00"}` }}>
               <button onClick={() => { setOpen(isOpen ? null : r.id); setMarks({ ...marks, [r.id]: m }); }}
                 style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 9,
                   flexWrap: "wrap", padding: "11px 13px", border: "none", textAlign: "left",
-                  background: "#F7F7F4", cursor: "pointer" }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>
+                  background: "#F4F8F5", cursor: "pointer" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>
                   {r.student_name || r.student_id}
                 </span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 11,
@@ -7381,22 +7386,22 @@ function MarkSubmissions({ roster, work, onBack }) {
 
               {isOpen && (
                 <div style={{ padding: "12px 13px", background: "#FFFFFF" }}>
-                  <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#6A6A63",
+                  <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#5E6E64",
                         letterSpacing: 1, marginBottom: 6 }}>
                     SENT {new Date(r.submitted_at).toLocaleString(undefined,
                       { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </div>
 
                   {r.answer_text && (
-                    <div style={{ background: "#fff", border: "1px solid #E3E3DD", borderRadius: 4,
-                          padding: "10px 12px", fontFamily: FONT.body, fontSize: 13, color: "#111111",
+                    <div style={{ background: "#fff", border: "1px solid #DCE6E0", borderRadius: 4,
+                          padding: "10px 12px", fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A",
                           whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 10 }}>
                       {r.answer_text}
                     </div>
                   )}
                   {r.photo && (
                     <img src={r.photo} alt="the pupil's work"
-                      style={{ width: "100%", borderRadius: 4, border: "1px solid #E3E3DD", marginBottom: 10 }} />
+                      style={{ width: "100%", borderRadius: 4, border: "1px solid #DCE6E0", marginBottom: 10 }} />
                   )}
 
                   <SubmissionFiles submissionId={r.id} />
@@ -7405,7 +7410,7 @@ function MarkSubmissions({ roster, work, onBack }) {
                     <input type="number" inputMode="numeric" value={m.score}
                       onChange={(e) => setMarks({ ...marks, [r.id]: { ...m, score: e.target.value } })}
                       placeholder="score" style={{ ...darkInput(), width: 82, fontFamily: FONT.mono }} />
-                    <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#5C5C55" }}>out of</span>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#4A5A50" }}>out of</span>
                     <input type="number" inputMode="numeric" value={m.outOf}
                       onChange={(e) => setMarks({ ...marks, [r.id]: { ...m, outOf: e.target.value } })}
                       style={{ ...darkInput(), width: 82, fontFamily: FONT.mono }} />
@@ -7427,7 +7432,7 @@ function MarkSubmissions({ roster, work, onBack }) {
 
       {missing.length > 0 && (
         <>
-          <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#111111", marginBottom: 7 }}>
+          <div style={{ fontFamily: FONT.display, fontSize: 14.5, fontWeight: 600, color: "#0A2E1A", marginBottom: 7 }}>
             Still to send ({missing.length})
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -7437,7 +7442,7 @@ function MarkSubmissions({ roster, work, onBack }) {
                     padding: "4px 11px" }}>{s.name}</span>
             ))}
           </div>
-          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6A6A63", marginTop: 8, lineHeight: 1.5 }}>
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5E6E64", marginTop: 8, lineHeight: 1.5 }}>
             Some families have no smartphone. Send these pupils home with a printed sheet, and accept
             the exercise book when school returns.
           </div>
@@ -7466,10 +7471,10 @@ function WorksheetDoc({ roster, work, onBack }) {
 
       {/* the pupil writes their own name — one sheet photocopies for the class */}
       <div style={{ display: "flex", gap: 22, marginBottom: 16, fontSize: 12, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 170, borderBottom: "1px solid #111111", paddingBottom: 2 }}>
+        <div style={{ flex: 1, minWidth: 170, borderBottom: "1px solid #0A2E1A", paddingBottom: 2 }}>
           Name: 
         </div>
-        <div style={{ width: 120, borderBottom: "1px solid #111111", paddingBottom: 2 }}>
+        <div style={{ width: 120, borderBottom: "1px solid #0A2E1A", paddingBottom: 2 }}>
           Adm No: 
         </div>
       </div>
@@ -7477,7 +7482,7 @@ function WorksheetDoc({ roster, work, onBack }) {
       <div style={{ fontSize: 15, fontWeight: "bold", marginBottom: 8 }}>{work.title}</div>
 
       {work.instructions && (
-        <div style={{ border: "1px solid #E3E3DD", background: "#F7F7F4", borderRadius: 4,
+        <div style={{ border: "1px solid #DCE6E0", background: "#F4F8F5", borderRadius: 4,
               padding: "9px 12px", fontSize: 11.5, marginBottom: 16, lineHeight: 1.55 }}>
           {work.instructions}
         </div>
@@ -7495,15 +7500,15 @@ function WorksheetDoc({ roster, work, onBack }) {
                 {line}
               </div>
               {isQuestion && (
-                <div style={{ borderBottom: "1px dotted #C4C4BC", height: 26, marginTop: 2 }} />
+                <div style={{ borderBottom: "1px dotted #B9C7BF", height: 26, marginTop: 2 }} />
               )}
             </div>
           );
         })}
       </div>
 
-      <div style={{ borderTop: "1px solid #E3E3DD", paddingTop: 10, fontSize: 10,
-            color: "#5C5C55", lineHeight: 1.55, marginBottom: 20 }}>
+      <div style={{ borderTop: "1px solid #DCE6E0", paddingTop: 10, fontSize: 10,
+            color: "#4A5A50", lineHeight: 1.55, marginBottom: 20 }}>
         Work set by {work.set_by} on {fmtDate(work.set_on)}.
         Answers may be sent through the school portal — typed, or as a photograph of this sheet —
         or handed in when school returns.
@@ -7581,8 +7586,8 @@ function FamilyWork({ roster, payload, adm, pin }) {
 
       {rows === null && <div className="skeleton" style={{ height: 70 }} />}
       {rows && rows.length === 0 && (
-        <div style={{ padding: "13px 15px", background: "#F7F7F4", border: "1px solid #E3E3DD",
-              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#5C5C55" }}>
+        <div style={{ padding: "13px 15px", background: "#F4F8F5", border: "1px solid #DCE6E0",
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13, color: "#4A5A50" }}>
           No holiday work has been set.
         </div>
       )}
@@ -7590,7 +7595,7 @@ function FamilyWork({ roster, payload, adm, pin }) {
       {waiting.length > 0 && (
         <div style={{ padding: "10px 13px", borderRadius: 4, background: "#FFF6D6",
               border: "1px solid #F0D98A", fontFamily: FONT.body, fontSize: 12.5,
-              color: "#111111", marginBottom: 14 }}>
+              color: "#0A2E1A", marginBottom: 14 }}>
           <strong>{waiting.length} piece{waiting.length === 1 ? "" : "s"} of work</strong> still to send.
         </div>
       )}
@@ -7598,19 +7603,19 @@ function FamilyWork({ roster, payload, adm, pin }) {
       {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#FDE8E6",
             border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5, color: "#C0261B", marginBottom: 12 }}>{err}</div>}
       {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9",
-            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginBottom: 12 }}>{msg}</div>}
+            border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginBottom: 12 }}>{msg}</div>}
 
       <div style={{ display: "grid", gap: 8 }}>
         {(rows || []).map((w) => {
           const isOpen = open === w.id;
           const overdue = w.due_on && w.due_on < todayISO() && !w.submitted_at;
-          const edge = w.marked ? "#0E7A3C" : w.submitted_at ? "#3B6E8F" : overdue ? "#C0261B" : "#8A6A00";
+          const edge = w.marked ? "#0E7A3C" : w.submitted_at ? "#0A2E1A" : overdue ? "#C0261B" : "#8A6A00";
           return (
-            <div key={w.id} style={{ borderRadius: 5, border: "1px solid #E3E3DD",
+            <div key={w.id} style={{ borderRadius: 5, border: "1px solid #DCE6E0",
                   overflow: "hidden", borderLeft: `4px solid ${edge}` }}>
-              <div style={{ padding: "12px 14px", background: "#F7F7F4" }}>
+              <div style={{ padding: "12px 14px", background: "#F4F8F5" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#111111" }}>
+                  <span style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 700, color: "#0A2E1A" }}>
                     {w.title}
                   </span>
                   <span style={{ fontFamily: FONT.mono, fontSize: 9.5, fontWeight: 700, color: edge }}>
@@ -7618,13 +7623,13 @@ function FamilyWork({ roster, payload, adm, pin }) {
                       : w.submitted_at ? "SENT" : overdue ? "OVERDUE" : "TO DO"}
                   </span>
                 </div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55", marginTop: 3 }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50", marginTop: 3 }}>
                   {w.subject} · set by {w.set_by}
-                  {w.due_on && <span style={{ color: overdue ? "#C0261B" : "#5C5C55" }}> · hand in by {fmtDate(w.due_on)}</span>}
+                  {w.due_on && <span style={{ color: overdue ? "#C0261B" : "#4A5A50" }}> · hand in by {fmtDate(w.due_on)}</span>}
                 </div>
 
                 {w.instructions && (
-                  <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111",
+                  <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A",
                         marginTop: 8, lineHeight: 1.55 }}>{w.instructions}</div>
                 )}
 
@@ -7632,7 +7637,7 @@ function FamilyWork({ roster, payload, adm, pin }) {
                 {w.marked && w.comment && (
                   <div style={{ marginTop: 9, padding: "9px 11px", borderRadius: 4,
                         background: "#E3F5E9", border: "1px solid #A9DEBC",
-                        fontFamily: FONT.body, fontSize: 12.5, color: "#111111", lineHeight: 1.55 }}>
+                        fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", lineHeight: 1.55 }}>
                     <strong>{w.marked_by}:</strong> {w.comment}
                   </div>
                 )}
@@ -7642,7 +7647,7 @@ function FamilyWork({ roster, payload, adm, pin }) {
                     style={{ ...primaryBtn(), padding: "7px 14px", fontSize: 12.5 }}>
                     {isOpen ? "Close" : w.submitted_at ? "See the work" : "Do the work"}
                   </button>
-                  <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#111111" }}>
+                  <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#0A2E1A" }}>
                     print it
                   </button>
                 </div>
@@ -7650,9 +7655,9 @@ function FamilyWork({ roster, payload, adm, pin }) {
 
               {isOpen && (
                 <div style={{ padding: "13px 14px", background: "#FFFFFF" }}>
-                  <div style={{ fontFamily: FONT.mono, fontSize: 13, color: "#111111",
+                  <div style={{ fontFamily: FONT.mono, fontSize: 13, color: "#0A2E1A",
                         whiteSpace: "pre-wrap", lineHeight: 1.75, background: "#fff",
-                        border: "1px solid #E3E3DD", borderRadius: 4, padding: "12px 13px",
+                        border: "1px solid #DCE6E0", borderRadius: 4, padding: "12px 13px",
                         marginBottom: 14 }}>
                     {w.body}
                   </div>
@@ -7668,7 +7673,7 @@ function FamilyWork({ roster, payload, adm, pin }) {
                   <FamilyWorkFiles assignmentId={w.id} adm={adm} pin={pin} />
 
                   <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2,
-                        color: "#6A6A63", marginBottom: 7 }}>SEND YOUR ANSWERS</div>
+                        color: "#5E6E64", marginBottom: 7 }}>SEND YOUR ANSWERS</div>
 
                   <textarea value={answers[w.id] || ""}
                     onChange={(e) => { setAnswers({ ...answers, [w.id]: e.target.value }); setErr(""); }}
@@ -7676,7 +7681,7 @@ function FamilyWork({ roster, payload, adm, pin }) {
                     style={{ ...darkInput(), width: "100%", height: 110, resize: "vertical",
                              marginBottom: 9, lineHeight: 1.6 }} />
 
-                  <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginBottom: 8 }}>
+                  <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginBottom: 8 }}>
                     Or photograph the page from the exercise book — that is usually easier.
                   </div>
 
@@ -7684,15 +7689,15 @@ function FamilyWork({ roster, payload, adm, pin }) {
                     accept="image/*" capture="environment" style={{ display: "none" }}
                     onChange={(e) => { pick(w.id, e.target.files?.[0]); e.target.value = ""; }} />
                   <button onClick={() => fileRefs.current[w.id]?.click()} disabled={busy === w.id}
-                    style={{ ...primaryBtn(), background: "#111111", marginBottom: 10 }}>
+                    style={{ ...primaryBtn(), background: "#0A2E1A", marginBottom: 10 }}>
                     {busy === w.id ? "Working…" : photos[w.id] ? "Take another photograph" : "Take a photograph"}
                   </button>
 
                   {photos[w.id] && (
                     <div style={{ marginBottom: 11 }}>
                       <img src={photos[w.id]} alt="the work"
-                        style={{ width: "100%", borderRadius: 4, border: "1px solid #E3E3DD" }} />
-                      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#5C5C55", marginTop: 5 }}>
+                        style={{ width: "100%", borderRadius: 4, border: "1px solid #DCE6E0" }} />
+                      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#4A5A50", marginTop: 5 }}>
                         Check the writing can be read before sending.
                       </div>
                     </div>
@@ -7747,16 +7752,16 @@ function AdminHolidayWork({ roster }) {
     return (
       <div>
         <SectionTitle>Holiday work</SectionTitle>
-        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
           Choose a class to see what was set and how many pupils answered.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 9 }}>
           {roster.classes.map((c) => (
             <button key={c.id} onClick={() => setClassId(c.id)} className="lift"
               style={{ textAlign: "left", padding: "13px 14px", borderRadius: 6, cursor: "pointer",
-                background: "#fff", border: "1px solid #E3E3DD", borderLeft: "4px solid #111111" }}>
-              <div style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 700, color: "#111111" }}>{c.name}</div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", marginTop: 3 }}>
+                background: "#fff", border: "1px solid #DCE6E0", borderLeft: "4px solid #0A2E1A" }}>
+              <div style={{ fontFamily: FONT.display, fontSize: 15.5, fontWeight: 700, color: "#0A2E1A" }}>{c.name}</div>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", marginTop: 3 }}>
                 {roster.students.filter((s) => s.classId === c.id).length} pupils
               </div>
             </button>
@@ -7767,7 +7772,7 @@ function AdminHolidayWork({ roster }) {
   }
   return (
     <div>
-      <button onClick={() => setClassId("")} style={{ ...backBtnStyle(), color: "#111111", marginBottom: 12 }}>
+      <button onClick={() => setClassId("")} style={{ ...backBtnStyle(), color: "#0A2E1A", marginBottom: 12 }}>
         ← all classes
       </button>
       <HolidayWork roster={roster} teacher={null} classId={classId} />
@@ -7800,23 +7805,23 @@ const fileIcon = (name = "", mime = "") => {
 function FileList({ files, onDownload, onRemove, busyId, empty = "No files." }) {
   if (!files) return <div className="skeleton" style={{ height: 42 }} />;
   if (files.length === 0) {
-    return <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6A6A63" }}>{empty}</div>;
+    return <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5E6E64" }}>{empty}</div>;
   }
   return (
     <div style={{ display: "grid", gap: 5 }}>
       {files.map((f) => (
         <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10,
-              padding: "9px 11px", borderRadius: 4, background: "#fff", border: "1px solid #E3E3DD" }}>
+              padding: "9px 11px", borderRadius: 4, background: "#fff", border: "1px solid #DCE6E0" }}>
           <span style={{ fontFamily: FONT.mono, fontSize: 8.5, fontWeight: 700, color: "#fff",
-                background: "#111111", borderRadius: 3, padding: "3px 5px", flex: "0 0 auto" }}>
+                background: "#0A2E1A", borderRadius: 3, padding: "3px 5px", flex: "0 0 auto" }}>
             {fileIcon(f.filename, f.mime || "")}
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111",
+            <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {f.filename}
             </div>
-            <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#6A6A63" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#5E6E64" }}>
               {actualSize(f.bytes)}{f.uploaded_by ? ` · ${f.uploaded_by}` : ""}
             </div>
           </span>
@@ -7876,8 +7881,8 @@ function WorkFiles({ assignmentId }) {
   };
 
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #CFCFC8" }}>
-      <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2, color: "#6A6A63",
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #C6D2CA" }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2, color: "#5E6E64",
             marginBottom: 7 }}>FILES FOR THE PUPILS</div>
 
       {err && <div style={{ padding: "8px 11px", borderRadius: 4, background: "#FDE8E6",
@@ -7891,10 +7896,10 @@ function WorkFiles({ assignmentId }) {
         accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png"
         onChange={(e) => { pick(e.target.files); e.target.value = ""; }} />
       <button onClick={() => ref.current?.click()} disabled={busy === "upload"}
-        style={{ ...primaryBtn(), background: "#111111", marginTop: 9, fontSize: 12.5, padding: "7px 14px" }}>
+        style={{ ...primaryBtn(), background: "#0A2E1A", marginTop: 9, fontSize: 12.5, padding: "7px 14px" }}>
         {busy === "upload" ? "Uploading…" : "Attach a file"}
       </button>
-      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6A6A63", marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5E6E64", marginTop: 6, lineHeight: 1.5 }}>
         PDF, Word, Excel, PowerPoint or a picture. Up to 4 MB each, five per piece of work.
         Keep them small — families pay for every megabyte they download.
       </div>
@@ -7926,12 +7931,12 @@ function FamilyWorkFiles({ assignmentId, adm, pin }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2,
-            color: "#6A6A63", marginBottom: 7 }}>FROM THE TEACHER</div>
+            color: "#5E6E64", marginBottom: 7 }}>FROM THE TEACHER</div>
       {err && <div style={{ padding: "8px 11px", borderRadius: 4, background: "#FDE8E6",
             border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12,
             color: "#C0261B", marginBottom: 8 }}>{err}</div>}
       <FileList files={files} onDownload={grab} busyId={busy} />
-      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6A6A63", marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5E6E64", marginTop: 6, lineHeight: 1.5 }}>
         Downloading uses your data. If you are on a weak connection, wait until you have
         a better signal.
       </div>
@@ -7970,7 +7975,7 @@ function FamilyUploadBack({ assignmentId, adm, pin, onSent }) {
         accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
         onChange={(e) => { send(e.target.files); e.target.value = ""; }} />
       <button onClick={() => ref.current?.click()} disabled={busy}
-        style={{ ...primaryBtn(), background: "#1A1A1A", width: "100%",
+        style={{ ...primaryBtn(), background: "#0E4A29", width: "100%",
                  opacity: busy ? 0.5 : 1, marginBottom: 8 }}>
         {busy ? "Sending the file…" : "Send a file instead"}
       </button>
@@ -7980,11 +7985,11 @@ function FamilyUploadBack({ assignmentId, adm, pin, onSent }) {
       {sent && (
         <div className="enter" style={{ padding: "8px 11px", borderRadius: 4, background: "#E3F5E9",
               border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12,
-              color: "#111111", marginBottom: 8 }}>
+              color: "#0A2E1A", marginBottom: 8 }}>
           Sent to the teacher: {sent.join(", ")}
         </div>
       )}
-      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6A6A63", lineHeight: 1.5 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5E6E64", lineHeight: 1.5 }}>
         A typed document, a scan, or a photograph from a computer. Up to 4 MB each.
       </div>
     </div>
@@ -8013,7 +8018,7 @@ function SubmissionFiles({ submissionId }) {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2,
-            color: "#6A6A63", marginBottom: 6 }}>FILES SENT BY THE PUPIL</div>
+            color: "#5E6E64", marginBottom: 6 }}>FILES SENT BY THE PUPIL</div>
       {err && <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#C0261B", marginBottom: 7 }}>{err}</div>}
       <FileList files={files} onDownload={grab} busyId={busy} />
     </div>
@@ -8032,8 +8037,8 @@ function StoragePanel() {
   const tight = share > 70;
 
   return (
-    <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid #E3E3DD" }}>
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+    <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid #DCE6E0" }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         Room used
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 10, marginBottom: 12 }}>
@@ -8042,12 +8047,12 @@ function StoragePanel() {
         <StatCard label="Whole database" value={prettyBytes(Number(u.db_bytes))}
           tone={tight ? "#C0261B" : "#0E7A3C"} />
       </div>
-      <div style={{ height: 8, background: "#EDEDE7", borderRadius: 4, overflow: "hidden",
-            border: "1px solid #E3E3DD" }}>
+      <div style={{ height: 8, background: "#E7EFE9", borderRadius: 4, overflow: "hidden",
+            border: "1px solid #DCE6E0" }}>
         <div style={{ height: "100%", width: `${share}%`,
               background: tight ? "#C0261B" : share > 40 ? "#8A6A00" : "#0E7A3C" }} />
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: tight ? "#C0261B" : "#5C5C55",
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: tight ? "#C0261B" : "#4A5A50",
             marginTop: 6, lineHeight: 1.55 }}>
         {share}% of the 500 MB free allowance.
         {tight
@@ -8096,7 +8101,7 @@ function ChangeMyPassword({ who, forced = false, onDone }) {
       {forced ? (
         <div style={{ padding: "12px 14px", borderRadius: 5, background: "#FFF6D6",
               border: "1px solid #F0D98A", borderLeft: "4px solid #8A6A00",
-              fontFamily: FONT.body, fontSize: 13, color: "#111111", marginBottom: 16, lineHeight: 1.6 }}>
+              fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", marginBottom: 16, lineHeight: 1.6 }}>
           <strong>The administrator gave you a temporary password.</strong>
           <div style={{ marginTop: 5 }}>
             Choose your own now. Until you do, someone else knows how to sign in as you — and
@@ -8104,7 +8109,7 @@ function ChangeMyPassword({ who, forced = false, onDone }) {
           </div>
         </div>
       ) : (
-        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55",
+        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50",
               marginBottom: 14, lineHeight: 1.6 }}>
           Change it whenever you like, and straight away if you have said it aloud, written it
           down, or let anyone use your account.
@@ -8116,9 +8121,9 @@ function ChangeMyPassword({ who, forced = false, onDone }) {
             color: "#C0261B", marginBottom: 12, lineHeight: 1.5 }}>{err}</div>}
       {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E3F5E9",
             border: "1px solid #A9DEBC", fontFamily: FONT.body, fontSize: 12.5,
-            color: "#111111", marginBottom: 12, lineHeight: 1.5 }}>{msg}</div>}
+            color: "#0A2E1A", marginBottom: 12, lineHeight: 1.5 }}>{msg}</div>}
 
-      <div style={{ background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 5,
+      <div style={{ background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 5,
             padding: 14, maxWidth: 460 }}>
         <input type="password" value={cur} onChange={(e) => { setCur(e.target.value); setErr(""); }}
           placeholder={forced ? "The temporary password" : "Your current password"}
@@ -8128,7 +8133,7 @@ function ChangeMyPassword({ who, forced = false, onDone }) {
         <input type="password" value={next} onChange={(e) => { setNext(e.target.value); setErr(""); }}
           placeholder="Your new password" autoComplete="new-password"
           style={{ ...darkInput(), width: "100%", marginBottom: 5,
-                   borderColor: next && problem ? "#C0261B" : next ? "#0E7A3C" : "#CFCFC8" }} />
+                   borderColor: next && problem ? "#C0261B" : next ? "#0E7A3C" : "#C6D2CA" }} />
         {next && (
           <div style={{ fontFamily: FONT.body, fontSize: 11.5, marginBottom: 9,
                 color: problem ? "#C0261B" : "#0E7A3C", lineHeight: 1.5 }}>
@@ -8139,7 +8144,7 @@ function ChangeMyPassword({ who, forced = false, onDone }) {
         <input type="password" value={again} onChange={(e) => setAgain(e.target.value)}
           placeholder="Type it once more" autoComplete="new-password"
           style={{ ...darkInput(), width: "100%", marginBottom: 5,
-                   borderColor: mismatch ? "#C0261B" : again ? "#0E7A3C" : "#CFCFC8" }} />
+                   borderColor: mismatch ? "#C0261B" : again ? "#0E7A3C" : "#C6D2CA" }} />
         {mismatch && (
           <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#C0261B", marginBottom: 9 }}>
             The two do not match.
@@ -8151,7 +8156,7 @@ function ChangeMyPassword({ who, forced = false, onDone }) {
           {busy ? "Changing…" : "Change my password"}
         </button>
 
-        <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6A6A63", marginTop: 10, lineHeight: 1.55 }}>
+        <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5E6E64", marginTop: 10, lineHeight: 1.55 }}>
           A phrase you will remember beats a short word you will forget — <em>sabuli rains 26</em> is
           both easier to recall and harder to guess than <em>Teach01</em>.
         </div>
@@ -8198,10 +8203,10 @@ function SecurityPanel({ who }) {
             border: "1px solid #F3C0BB", fontFamily: FONT.body, fontSize: 12.5,
             color: "#C0261B", marginBottom: 12 }}>{err}</div>}
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 4 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 4 }}>
         Signed in now
       </div>
-      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#5C5C55", marginBottom: 10, lineHeight: 1.55 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#4A5A50", marginBottom: 10, lineHeight: 1.55 }}>
         A session lasts 14 days unless it is ended here. If a phone is lost, sign that account out
         and change its password.
       </div>
@@ -8211,18 +8216,18 @@ function SecurityPanel({ who }) {
         {(sessions || []).map((r, i) => (
           <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 9,
                 flexWrap: "wrap", alignItems: "center", padding: "9px 12px", borderRadius: 4,
-                background: r.is_me ? "#E3F5E9" : "#F7F7F4",
-                border: `1px solid ${r.is_me ? "#A9DEBC" : "#E3E3DD"}` }}>
+                background: r.is_me ? "#E3F5E9" : "#F4F8F5",
+                border: `1px solid ${r.is_me ? "#A9DEBC" : "#DCE6E0"}` }}>
             <span>
-              <span style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#111111" }}>
+              <span style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#0A2E1A" }}>
                 {r.name}
               </span>
-              <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63", marginLeft: 8 }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64", marginLeft: 8 }}>
                 {r.username} · {r.role}{r.is_me ? " · this device" : ""}
               </span>
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55" }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50" }}>
                 last used {ago(r.last_seen)}
               </span>
               {!r.is_me && (
@@ -8236,34 +8241,34 @@ function SecurityPanel({ who }) {
           </div>
         ))}
         {sessions && sessions.length === 0 && (
-          <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Nobody is signed in.</div>
+          <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Nobody is signed in.</div>
         )}
       </div>
 
-      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#111111", marginBottom: 8 }}>
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#0A2E1A", marginBottom: 8 }}>
         Recent security events
       </div>
       {events === null && <div className="skeleton" style={{ height: 50 }} />}
       {events && events.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>Nothing recorded.</div>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>Nothing recorded.</div>
       )}
       <div style={{ display: "grid", gap: 4 }}>
         {(events || []).slice(0, 40).map((e, i) => {
           const bad = /refused|blocked/.test(e.action);
           return (
-            <div key={i} style={{ padding: "7px 11px", borderRadius: 3, background: "#F7F7F4",
-                  border: "1px solid #E3E3DD", borderLeft: `3px solid ${bad ? "#C0261B" : "#0E7A3C"}` }}>
+            <div key={i} style={{ padding: "7px 11px", borderRadius: 3, background: "#F4F8F5",
+                  border: "1px solid #DCE6E0", borderLeft: `3px solid ${bad ? "#C0261B" : "#0E7A3C"}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#111111" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A" }}>
                   <strong>{e.who || "—"}</strong> · {e.action}
                 </span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63" }}>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64" }}>
                   {new Date(e.at).toLocaleString(undefined,
                     { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </span>
               </div>
               {e.detail && (
-                <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#5C5C55", marginTop: 2 }}>
+                <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#4A5A50", marginTop: 2 }}>
                   {e.detail}
                 </div>
               )}
@@ -8353,7 +8358,7 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
           {tab === "statements" && (
             <div>
               <SectionTitle>Fee statements</SectionTitle>
-              <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+              <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
                 Every pupil has a statement, whether they have paid or not — it is how a family
                 learns what is owed.
               </div>
@@ -8396,11 +8401,11 @@ function StudentPicker({ roster, onPick, label }) {
           if (q.trim() && pupils.length === 0) return null;
           const isOpen = q.trim() ? true : !!open[c.id];
           return (
-            <div key={c.id} style={{ border: "1px solid #E3E3DD", borderRadius: 5, overflow: "hidden" }}>
+            <div key={c.id} style={{ border: "1px solid #DCE6E0", borderRadius: 5, overflow: "hidden" }}>
               <button onClick={() => setOpen({ ...open, [c.id]: !open[c.id] })}
                 style={{ width: "100%", display: "flex", justifyContent: "space-between",
                   padding: "10px 13px", border: "none", textAlign: "left",
-                  background: isOpen ? "#111111" : "#F7F7F4", color: isOpen ? "#fff" : "#111111",
+                  background: isOpen ? "#0A2E1A" : "#F4F8F5", color: isOpen ? "#fff" : "#0A2E1A",
                   fontFamily: FONT.display, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
                 <span>{c.name}</span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 11 }}>{pupils.length} {isOpen ? "▾" : "▸"}</span>
@@ -8413,8 +8418,8 @@ function StudentPicker({ roster, onPick, label }) {
                       <button key={s.id} onClick={() => onPick(s)} className="lift"
                         style={{ display: "flex", justifyContent: "space-between", gap: 9, textAlign: "left",
                           padding: "9px 11px", borderRadius: 4, cursor: "pointer",
-                          background: "#F7F7F4", border: "1px solid #E3E3DD" }}>
-                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>{s.name}</span>
+                          background: "#F4F8F5", border: "1px solid #DCE6E0" }}>
+                        <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>{s.name}</span>
                         <span style={{ fontFamily: FONT.mono, fontSize: 11,
                               color: bal > 0 ? "#C0261B" : "#0E7A3C" }}>
                           {bal > 0 ? `owes ${money(bal)}` : "cleared"} →
@@ -8423,7 +8428,7 @@ function StudentPicker({ roster, onPick, label }) {
                     );
                   })}
                   {pupils.length === 0 && (
-                    <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6A6A63", padding: 4 }}>
+                    <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5E6E64", padding: 4 }}>
                       No pupils in this class.
                     </div>
                   )}
@@ -8450,7 +8455,7 @@ function Arrears({ roster, onStatement }) {
       <SectionTitle>Who owes what</SectionTitle>
       {rows.length === 0 && (
         <div style={{ padding: "13px 15px", background: "#E3F5E9", border: "1px solid #A9DEBC",
-              borderRadius: 5, fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>
+              borderRadius: 5, fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>
           Every pupil has paid in full.
         </div>
       )}
@@ -8460,21 +8465,21 @@ function Arrears({ roster, onStatement }) {
           return (
             <button key={s.id} onClick={() => onStatement(s)} className="lift"
               style={{ textAlign: "left", padding: "10px 12px", borderRadius: 4, cursor: "pointer",
-                background: "#F7F7F4", border: "1px solid #E3E3DD",
+                background: "#F4F8F5", border: "1px solid #DCE6E0",
                 borderLeft: `4px solid ${paid === 0 ? "#C0261B" : "#8A6A00"}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#111111" }}>
-                  {s.name} <span style={{ color: "#6A6A63", fontWeight: 400, fontSize: 12 }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 13.5, fontWeight: 600, color: "#0A2E1A" }}>
+                  {s.name} <span style={{ color: "#5E6E64", fontWeight: 400, fontSize: 12 }}>
                     · {classNameOf(roster, s.classId)}</span>
                 </span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 13, fontWeight: 700, color: "#C0261B" }}>
                   {cur}{money(bal)}
                 </span>
               </div>
-              <div style={{ height: 5, background: "#EDEDE7", borderRadius: 3, marginTop: 7, overflow: "hidden" }}>
+              <div style={{ height: 5, background: "#E7EFE9", borderRadius: 3, marginTop: 7, overflow: "hidden" }}>
                 <div style={{ height: "100%", width: `${share}%`, background: share ? "#8A6A00" : "transparent" }} />
               </div>
-              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#6A6A63", marginTop: 4 }}>
+              <div style={{ fontFamily: FONT.mono, fontSize: 10, color: "#5E6E64", marginTop: 4 }}>
                 {paid === 0 ? "nothing paid" : `${share}% paid · ${cur}${money(paid)} of ${cur}${money(due)}`}
               </div>
             </button>
@@ -8497,18 +8502,18 @@ function DayBook({ roster, onReceipt }) {
   return (
     <div>
       <SectionTitle>Day book</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
         Every payment taken, most recent first. Tap one to reprint its receipt.
       </div>
       {all.length === 0 && (
-        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No payments recorded yet.</div>
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No payments recorded yet.</div>
       )}
       <div style={{ display: "grid", gap: 11 }}>
         {Object.keys(byDay).sort().reverse().map((date) => {
           const dayTotal = byDay[date].reduce((a, r) => a + (r.p.amount || 0), 0);
           return (
-            <div key={date} style={{ border: "1px solid #E3E3DD", borderRadius: 5, overflow: "hidden" }}>
-              <div style={{ background: "#111111", color: "#fff", padding: "8px 12px",
+            <div key={date} style={{ border: "1px solid #DCE6E0", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ background: "#0A2E1A", color: "#fff", padding: "8px 12px",
                     display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                 <span style={{ fontFamily: FONT.display, fontSize: 13.5, fontWeight: 600 }}>{fmtDate(date)}</span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 12, color: "#FFC400" }}>
@@ -8520,9 +8525,9 @@ function DayBook({ roster, onReceipt }) {
                   <button key={i} onClick={() => onReceipt({ student: r.s, payment: r.p })} className="lift"
                     style={{ display: "flex", justifyContent: "space-between", gap: 9, flexWrap: "wrap",
                       textAlign: "left", padding: "8px 11px", borderRadius: 3, cursor: "pointer",
-                      background: "#F7F7F4", border: "1px solid #E3E3DD" }}>
-                    <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#111111" }}>{r.s.name}</span>
-                    <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55" }}>
+                      background: "#F4F8F5", border: "1px solid #DCE6E0" }}>
+                    <span style={{ fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A" }}>{r.s.name}</span>
+                    <span style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50" }}>
                       {r.p.receiptNo || "—"} · {r.p.method || "cash"}
                       {r.p.mpesaCode ? ` · ${r.p.mpesaCode}` : ""} ·{" "}
                       <strong style={{ color: "#0E7A3C" }}>{cur}{money(r.p.amount)}</strong>
@@ -8626,7 +8631,7 @@ function PhotoManager({ roster, classId, actorLabel }) {
   return (
     <div>
       <SectionTitle>Pupil photos</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
         Take a photo with the camera or choose one from the phone. Each is cropped square and
         shrunk automatically, so it stays small and prints sharply on the ID card.
       </div>
@@ -8646,11 +8651,11 @@ function PhotoManager({ roster, classId, actorLabel }) {
         </select>
       )}
 
-      <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#4A5A50", marginBottom: 12 }}>
         {have === null ? "checking…" : `${withPhoto} of ${pool.length} have a photo`}
       </div>
 
-      {pool.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No pupils here yet.</div>}
+      {pool.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No pupils here yet.</div>}
 
       <div style={{ display: "grid", gap: 8 }}>
         {pool.map((s) => {
@@ -8658,20 +8663,20 @@ function PhotoManager({ roster, classId, actorLabel }) {
           const hasIt = have?.has(s.id);
           return (
             <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
-                  background: "#F7F7F4", border: "1px solid #E3E3DD", borderRadius: 4 }}>
+                  background: "#F4F8F5", border: "1px solid #DCE6E0", borderRadius: 4 }}>
               <div style={{
                 width: 54, height: 54, flex: "0 0 54px", borderRadius: 4, overflow: "hidden",
-                background: "#E3E3DD", border: "1px solid #CFCFC8",
+                background: "#DCE6E0", border: "1px solid #C6D2CA",
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}>
                 {img
                   ? <img src={img} alt={s.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <span style={{ fontFamily: FONT.mono, fontSize: 9, color: "#6A6A63" }}>{hasIt ? "…" : "no photo"}</span>}
+                  : <span style={{ fontFamily: FONT.mono, fontSize: 9, color: "#5E6E64" }}>{hasIt ? "…" : "no photo"}</span>}
               </div>
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111", fontWeight: 600 }}>{s.name}</div>
-                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55" }}>
+                <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A", fontWeight: 600 }}>{s.name}</div>
+                <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50" }}>
                   {s.id} · {classNameOf(roster, s.classId)}
                 </div>
               </div>
@@ -8724,14 +8729,14 @@ function StudentIdCards({ roster, students, onBack, title }) {
   ].filter(Boolean).join(" | ");
 
   // Kenyan flag palette: black, red, white, green — with gold for the seal.
-  const KE = { black: "#1A1A1A", red: "#C0261B", white: "#FFFFFF", green: "#0E7A3C", gold: "#FFC400" };
+  const KE = { black: "#0E4A29", red: "#C0261B", white: "#FFFFFF", green: "#0E7A3C", gold: "#FFC400" };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0D0D0D" }}>
+    <div style={{ minHeight: "100vh", background: "#073D22" }}>
       <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", padding: "14px 12px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #2E2E2E", color: "#FFFFFF", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
-        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#FFC400", color: "#0D0D0D" }}>Print cards</button>
-        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#9A9A92" }}>
+        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #155336", color: "#FFFFFF", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
+        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#FFC400", color: "#073D22" }}>Print cards</button>
+        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#93A69A" }}>
           {students.length} card{students.length === 1 ? "" : "s"} · {title}
         </span>
       </div>
@@ -8786,12 +8791,12 @@ function StudentIdCards({ roster, students, onBack, title }) {
                 {/* photo */}
                 <div style={{
                   width: 62, height: 74, flex: "0 0 62px", borderRadius: 4, overflow: "hidden",
-                  border: `2px solid ${KE.green}`, background: "#EDEDE7",
+                  border: `2px solid ${KE.green}`, background: "#E7EFE9",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   {photo
                     ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <span style={{ fontFamily: FONT.mono, fontSize: 6.5, color: "#6A6A63", textAlign: "center", lineHeight: 1.3 }}>NO<br />PHOTO</span>}
+                    : <span style={{ fontFamily: FONT.mono, fontSize: 6.5, color: "#5E6E64", textAlign: "center", lineHeight: 1.3 }}>NO<br />PHOTO</span>}
                 </div>
 
                 {/* details */}
@@ -8801,12 +8806,12 @@ function StudentIdCards({ roster, students, onBack, title }) {
                   </div>
                   <div style={{ fontSize: 14.5, fontWeight: "bold", lineHeight: 1.15, marginTop: 3 }}>{s.name}</div>
                   <div style={{ marginTop: 5, display: "grid", gap: 2, fontSize: 9 }}>
-                    <div><span style={{ color: "#5C5C55" }}>Adm No:</span>{" "}
+                    <div><span style={{ color: "#4A5A50" }}>Adm No:</span>{" "}
                       <strong style={{ fontFamily: FONT.mono, background: KE.gold, padding: "0 3px", borderRadius: 2 }}>{s.id}</strong>
                     </div>
-                    <div><span style={{ color: "#5C5C55" }}>Class:</span> <strong>{classNameOf(roster, s.classId)}</strong></div>
+                    <div><span style={{ color: "#4A5A50" }}>Class:</span> <strong>{classNameOf(roster, s.classId)}</strong></div>
                     {s.parentName && <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      <span style={{ color: "#5C5C55" }}>Guardian:</span> {s.parentName}
+                      <span style={{ color: "#4A5A50" }}>Guardian:</span> {s.parentName}
                     </div>}
                   </div>
                 </div>
@@ -8837,7 +8842,7 @@ function StudentIdCards({ roster, students, onBack, title }) {
         })}
       </div>
 
-      <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#9A9A92", lineHeight: 1.5 }}>
+      <div className="no-print" style={{ maxWidth: 820, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#93A69A", lineHeight: 1.5 }}>
         Print on card stock if you have it. Scanning a card shows the school, admission number, pupil's name,
         class and guardian.
         <div style={{ marginTop: 6, color: "#FFC400" }}>
@@ -8866,7 +8871,7 @@ function IdCardDashboard({ roster }) {
   return (
     <div>
       <SectionTitle>Student ID cards</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 14 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 14 }}>
         Each card carries a scannable code holding the school name, admission number, pupil's name,
         class and guardian — readable with any phone camera.
       </div>
@@ -8899,7 +8904,7 @@ function IdCardDashboard({ roster }) {
         )}
       </div>
 
-      {pool.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#6A6A63" }}>No pupils to show.</div>}
+      {pool.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#5E6E64" }}>No pupils to show.</div>}
 
       <div style={{ display: "grid", gap: 5 }}>
         {pool.map((s) => (
@@ -8907,19 +8912,19 @@ function IdCardDashboard({ roster }) {
             style={{
               display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
               textAlign: "left", padding: "9px 12px", borderRadius: 3,
-              background: picked[s.id] ? "#E3F5E9" : "#F7F7F4",
-              border: `1px solid ${picked[s.id] ? "#0E7A3C" : "#E3E3DD"}`,
+              background: picked[s.id] ? "#E3F5E9" : "#F4F8F5",
+              border: `1px solid ${picked[s.id] ? "#0E7A3C" : "#DCE6E0"}`,
             }}>
             <span style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
               <span style={{
                 width: 17, height: 17, borderRadius: 3, flex: "0 0 17px",
-                border: `1.5px solid ${picked[s.id] ? "#0E7A3C" : "#C4C4BC"}`,
+                border: `1.5px solid ${picked[s.id] ? "#0E7A3C" : "#B9C7BF"}`,
                 background: picked[s.id] ? "#0E7A3C" : "transparent",
                 color: "#fff", fontSize: 12, lineHeight: "15px", textAlign: "center",
               }}>{picked[s.id] ? "✓" : ""}</span>
-              <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#111111" }}>{s.name}</span>
+              <span style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#0A2E1A" }}>{s.name}</span>
             </span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#5C5C55" }}>
+            <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#4A5A50" }}>
               {s.id} · {classNameOf(roster, s.classId)}
             </span>
           </button>
@@ -8948,7 +8953,7 @@ function TeacherReportCards({ roster, classId, teacher }) {
       <div>
         <SectionTitle>Print report cards</SectionTitle>
         <div style={{ padding: "13px 15px", borderRadius: 5, background: "#FFF6D6", border: "1px solid #F0D98A",
-                      fontFamily: FONT.body, fontSize: 13, color: "#111111", lineHeight: 1.6 }}>
+                      fontFamily: FONT.body, fontSize: 13, color: "#0A2E1A", lineHeight: 1.6 }}>
           Report cards are printed by the class teacher. You are not registered as the class teacher
           for any class, so there is nothing to print here — ask the administrator if that is wrong.
         </div>
@@ -8963,7 +8968,7 @@ function TeacherReportCards({ roster, classId, teacher }) {
   return (
     <div>
       <SectionTitle>Print report cards</SectionTitle>
-      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#5C5C55", marginBottom: 12 }}>
+      <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#4A5A50", marginBottom: 12 }}>
         Prints one report card per pupil in <strong>{classNameOf(roster, useClass)}</strong>, each on its own page,
         with the pupil's admission number and parent PIN printed at the foot.
       </div>
@@ -8977,7 +8982,7 @@ function TeacherReportCards({ roster, classId, teacher }) {
 
       {!approved && (
         <div style={{ padding: "10px 12px", borderRadius: 4, background: "#FFF6D6", border: "1px solid #F0D98A",
-                      fontFamily: FONT.body, fontSize: 12.5, color: "#111111", marginBottom: 14 }}>
+                      fontFamily: FONT.body, fontSize: 12.5, color: "#0A2E1A", marginBottom: 14 }}>
           These results have not been approved by admin yet. You can still print for your own checking,
           but do not give them to parents until they are approved.
         </div>
@@ -9015,11 +9020,11 @@ function BulkReportCards({ roster, classId, term, onBack }) {
   const withResults = students.filter((s) => studentSummary(grid, s.id, roster.subjects, weights).count > 0);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0D0D0D" }}>
+    <div style={{ minHeight: "100vh", background: "#073D22" }}>
       <div className="no-print" style={{ maxWidth: 760, margin: "0 auto", padding: "14px 12px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #2E2E2E", color: "#FFFFFF", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
-        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#FFC400", color: "#0D0D0D" }}>Print all / Save as PDF</button>
-        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#9A9A92" }}>
+        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #155336", color: "#FFFFFF", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
+        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#FFC400", color: "#073D22" }}>Print all / Save as PDF</button>
+        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#93A69A" }}>
           {withResults.length} report card{withResults.length === 1 ? "" : "s"} · {classNameOf(roster, classId)} · {term}
         </span>
       </div>
@@ -9042,8 +9047,8 @@ function BulkReportCards({ roster, classId, term, onBack }) {
 
         return (
           <div key={student.id} className="print-doc report-page" style={{
-            maxWidth: 760, margin: "0 auto 24px", background: "#fff", color: "#111111",
-            border: "1px solid #CFCFC8", borderRadius: 4, padding: "28px 30px",
+            maxWidth: 760, margin: "0 auto 24px", background: "#fff", color: "#0A2E1A",
+            border: "1px solid #C6D2CA", borderRadius: 4, padding: "28px 30px",
             boxShadow: "0 8px 24px rgba(0,0,0,0.18)", fontFamily: "Georgia, 'Times New Roman', serif",
             pageBreakAfter: idx < withResults.length - 1 ? "always" : "auto",
           }}>
@@ -9091,8 +9096,8 @@ function BulkReportCards({ roster, classId, term, onBack }) {
                 ["TOTAL", sum.count ? sum.total : "—"],
                 ["MEAN", avg === null ? "—" : `${avg}/100`],
                 ["LEVEL", avg === null ? "—" : `L${gradeLevel(avg)}`]].map(([l, v]) => (
-                <div key={l} style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "8px 9px", background: "#F7F7F4", textAlign: "center" }}>
-                  <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#6A6A63", letterSpacing: 0.8 }}>{l}</div>
+                <div key={l} style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "8px 9px", background: "#F4F8F5", textAlign: "center" }}>
+                  <div style={{ fontFamily: FONT.mono, fontSize: 8, color: "#5E6E64", letterSpacing: 0.8 }}>{l}</div>
                   <div style={{ fontSize: 15, fontWeight: "bold", marginTop: 3 }}>{v}</div>
                 </div>
               ))}
@@ -9105,26 +9110,26 @@ function BulkReportCards({ roster, classId, term, onBack }) {
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-              <div style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "9px 11px", background: "#F7F7F4" }}>
-                <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#6A6A63", letterSpacing: 1 }}>ATTENDANCE</div>
+              <div style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "9px 11px", background: "#F4F8F5" }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#5E6E64", letterSpacing: 1 }}>ATTENDANCE</div>
                 <div style={{ fontSize: 15, fontWeight: "bold", marginTop: 3 }}>{rate === null ? "—" : `${rate}%`}</div>
               </div>
-              <div style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "9px 11px", background: "#F7F7F4" }}>
-                <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#6A6A63", letterSpacing: 1 }}>FEES DUE / PAID / BALANCE</div>
+              <div style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "9px 11px", background: "#F4F8F5" }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#5E6E64", letterSpacing: 1 }}>FEES DUE / PAID / BALANCE</div>
                 <div style={{ fontSize: 12.5, fontWeight: "bold", marginTop: 3 }}>
                   {cur}{money(due)} / {cur}{money(paid)} / {cur}{money(due - paid)}
                 </div>
               </div>
             </div>
 
-            <div style={{ borderTop: "1px solid #E3E3DD", paddingTop: 9, marginBottom: 12, fontSize: 9.5, color: "#5C5C55", fontFamily: FONT.mono }}>
+            <div style={{ borderTop: "1px solid #DCE6E0", paddingTop: 9, marginBottom: 12, fontSize: 9.5, color: "#4A5A50", fontFamily: FONT.mono }}>
               CBC PERFORMANCE LEVELS — 4 Exceeding (76–100) · 3 Meeting (51–75) · 2 Approaching (26–50) · 1 Below (0–25)
             </div>
 
-            <div style={{ border: "1px dashed #C4C4BC", borderRadius: 4, padding: "9px 11px", marginBottom: 18,
-                          fontSize: 11, fontFamily: FONT.mono, color: "#111111" }}>
+            <div style={{ border: "1px dashed #B9C7BF", borderRadius: 4, padding: "9px 11px", marginBottom: 18,
+                          fontSize: 11, fontFamily: FONT.mono, color: "#0A2E1A" }}>
               PARENT PORTAL — Admission No: <strong>{student.id}</strong> · PIN: <strong>{student.pin || "—"}</strong>
-              <div style={{ color: "#6A6A63", marginTop: 3 }}>
+              <div style={{ color: "#5E6E64", marginTop: 3 }}>
                 Use these at {SCHOOL_NAME} portal to see results any time. Keep them private.
               </div>
             </div>
@@ -9137,7 +9142,7 @@ function BulkReportCards({ roster, classId, term, onBack }) {
         );
       })}
 
-      <div className="no-print" style={{ maxWidth: 760, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#9A9A92", lineHeight: 1.5 }}>
+      <div className="no-print" style={{ maxWidth: 760, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#93A69A", lineHeight: 1.5 }}>
         Each report card prints on its own page. If the Print button does not respond, use your browser menu (⋮ → Print).
       </div>
     </div>
@@ -9182,7 +9187,7 @@ function ClassMarksheetDoc({ roster, classId, term, onBack }) {
       </div>
 
       {subjects.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#5C5C55" }}>No marks entered for {term} yet.</div>
+        <div style={{ fontSize: 12, color: "#4A5A50" }}>No marks entered for {term} yet.</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -9206,11 +9211,11 @@ function ClassMarksheetDoc({ roster, classId, term, onBack }) {
                   <tr key={s.id}>
                     <td style={{ ...td, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>{posOf(s.id)}</td>
                     <td style={td}>{s.name}</td>
-                    <td style={{ ...td, fontFamily: FONT.mono, fontSize: 8.5, color: "#5C5C55" }}>{s.id}</td>
+                    <td style={{ ...td, fontFamily: FONT.mono, fontSize: 8.5, color: "#4A5A50" }}>{s.id}</td>
                     {subjects.map((sub) => {
                       const fin = subjectFinal(grid[s.id]?.[sub], weights);
                       return (
-                        <td key={sub} style={{ ...td, textAlign: "center", fontFamily: FONT.mono, color: fin === null ? "#C4C4BC" : gradeInk(fin) }}>
+                        <td key={sub} style={{ ...td, textAlign: "center", fontFamily: FONT.mono, color: fin === null ? "#B9C7BF" : gradeInk(fin) }}>
                           {fin === null ? "–" : fin}
                         </td>
                       );
@@ -9224,14 +9229,14 @@ function ClassMarksheetDoc({ roster, classId, term, onBack }) {
                 );
               })}
               <tr>
-                <td style={{ ...td, borderTop: "2px solid #111111" }} colSpan={3}><strong>Subject mean</strong></td>
+                <td style={{ ...td, borderTop: "2px solid #0A2E1A" }} colSpan={3}><strong>Subject mean</strong></td>
                 {subjects.map((sub) => (
-                  <td key={sub} style={{ ...td, borderTop: "2px solid #111111", textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>
+                  <td key={sub} style={{ ...td, borderTop: "2px solid #0A2E1A", textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>
                     {subjectMean(sub) ?? "–"}
                   </td>
                 ))}
-                <td style={{ ...td, borderTop: "2px solid #111111" }} colSpan={2}></td>
-                <td style={{ ...td, borderTop: "2px solid #111111", textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>
+                <td style={{ ...td, borderTop: "2px solid #0A2E1A" }} colSpan={2}></td>
+                <td style={{ ...td, borderTop: "2px solid #0A2E1A", textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>
                   {classMean === null ? "–" : `L${gradeLevel(classMean)}`}
                 </td>
               </tr>
@@ -9240,7 +9245,7 @@ function ClassMarksheetDoc({ roster, classId, term, onBack }) {
         </div>
       )}
 
-      <div style={{ borderTop: "1px solid #E3E3DD", paddingTop: 10, marginTop: 16, fontSize: 10, color: "#5C5C55", fontFamily: FONT.mono }}>
+      <div style={{ borderTop: "1px solid #DCE6E0", paddingTop: 10, marginTop: 16, fontSize: 10, color: "#4A5A50", fontFamily: FONT.mono }}>
         CBC PERFORMANCE LEVELS — 4 Exceeding (76–100) · 3 Meeting (51–75) · 2 Approaching (26–50) · 1 Below (0–25)
         <div style={{ marginTop: 3 }}>
           Marks weighted: CAT 1 {weights.cat1}% + CAT 2 {weights.cat2}% + Exam {weights.exam}%
@@ -9263,7 +9268,7 @@ function ReceiptDoc({ roster, student, payment, onBack }) {
     .reduce((a, p) => a + (p.amount || 0), 0);
   const balanceAfter = (student.feeDue || 0) - paidToDate;
 
-  const row = { display: "flex", justifyContent: "space-between", padding: "7px 0", fontSize: 13, borderBottom: "1px solid #EDEDE7" };
+  const row = { display: "flex", justifyContent: "space-between", padding: "7px 0", fontSize: 13, borderBottom: "1px solid #E7EFE9" };
 
   return (
     <DocShell title="Fee receipt" onBack={onBack}>
@@ -9282,10 +9287,10 @@ function ReceiptDoc({ roster, student, payment, onBack }) {
 
       <DocInfo roster={roster} student={student} />
 
-      <div style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "14px 16px", background: "#F7F7F4", margin: "10px 0 18px" }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#6A6A63", letterSpacing: 1 }}>AMOUNT RECEIVED</div>
+      <div style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "14px 16px", background: "#F4F8F5", margin: "10px 0 18px" }}>
+        <div style={{ fontFamily: FONT.mono, fontSize: 9.5, color: "#5E6E64", letterSpacing: 1 }}>AMOUNT RECEIVED</div>
         <div style={{ fontSize: 30, fontWeight: "bold", marginTop: 4 }}>{cur}{money(payment.amount)}</div>
-        <div style={{ fontSize: 11.5, color: "#5C5C55", marginTop: 4 }}>
+        <div style={{ fontSize: 11.5, color: "#4A5A50", marginTop: 4 }}>
           {amountInWords(payment.amount)} {cur === "KSh" ? "shillings" : ""} only
         </div>
       </div>
@@ -9293,13 +9298,13 @@ function ReceiptDoc({ roster, student, payment, onBack }) {
       <div style={{ marginBottom: 20 }}>
         <div style={row}><span>Total fee due</span><strong>{cur}{money(student.feeDue || 0)}</strong></div>
         <div style={row}><span>Paid to date (including this payment)</span><strong>{cur}{money(paidToDate)}</strong></div>
-        <div style={{ ...row, borderBottom: "none", borderTop: "2px solid #111111", paddingTop: 10, fontSize: 15 }}>
+        <div style={{ ...row, borderBottom: "none", borderTop: "2px solid #0A2E1A", paddingTop: 10, fontSize: 15 }}>
           <span><strong>Balance outstanding</strong></span>
           <strong style={{ color: balanceAfter > 0 ? "#C0261B" : "#0E7A3C" }}>{cur}{money(balanceAfter)}</strong>
         </div>
       </div>
 
-      <div style={{ fontSize: 11, color: "#5C5C55", marginBottom: 26 }}>
+      <div style={{ fontSize: 11, color: "#4A5A50", marginBottom: 26 }}>
         This receipt confirms the amount stated above has been received by the school.
         Please retain it as proof of payment.
       </div>
@@ -9335,18 +9340,18 @@ function amountInWords(n) {
 
 function DocShell({ title, onBack, children }) {
   return (
-    <div style={{ minHeight: "100vh", background: "#0D0D0D" }}>
+    <div style={{ minHeight: "100vh", background: "#073D22" }}>
       <div className="no-print" style={{ maxWidth: 720, margin: "0 auto", padding: "14px 12px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #2E2E2E", color: "#FFFFFF", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
-        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#FFC400", color: "#0D0D0D" }}>Print / Save as PDF</button>
-        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#9A9A92" }}>{title}</span>
+        <button onClick={onBack} style={{ background: "transparent", border: "1px solid #155336", color: "#FFFFFF", borderRadius: 3, padding: "8px 14px", fontFamily: FONT.body, fontSize: 13 }}>← Back</button>
+        <button onClick={() => window.print()} style={{ ...primaryBtn(), background: "#FFC400", color: "#073D22" }}>Print / Save as PDF</button>
+        <span style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#93A69A" }}>{title}</span>
       </div>
       <div className="print-doc" style={{
-        maxWidth: 720, margin: "0 auto 24px", background: "#fff", color: "#111111",
-        border: "1px solid #CFCFC8", borderRadius: 4, padding: "30px 32px",
+        maxWidth: 720, margin: "0 auto 24px", background: "#fff", color: "#0A2E1A",
+        border: "1px solid #C6D2CA", borderRadius: 4, padding: "30px 32px",
         boxShadow: "0 8px 24px rgba(0,0,0,0.18)", fontFamily: "Georgia, 'Times New Roman', serif",
       }}>{children}</div>
-      <div className="no-print" style={{ maxWidth: 720, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#9A9A92", lineHeight: 1.5 }}>
+      <div className="no-print" style={{ maxWidth: 720, margin: "0 auto", padding: "0 12px 50px", fontFamily: FONT.body, fontSize: 12, color: "#93A69A", lineHeight: 1.5 }}>
         If the Print button doesn't respond, use your browser menu (⋮ → Print or Share → Print), or screenshot the document above.
       </div>
     </div>
@@ -9355,11 +9360,11 @@ function DocShell({ title, onBack, children }) {
 
 function DocHeader({ subtitle }) {
   return (
-    <div style={{ textAlign: "center", borderBottom: "2px solid #111111", paddingBottom: 14, marginBottom: 20 }}>
-      <div style={{ display: "flex", justifyContent: "center" }}><Seal size={50} ink="#111111" /></div>
-      <div style={{ fontFamily: FONT.mono, fontSize: 10, letterSpacing: 1.3, color: "#5C5C55", marginTop: 8 }}>REPUBLIC OF KENYA · MINISTRY OF EDUCATION</div>
+    <div style={{ textAlign: "center", borderBottom: "2px solid #0A2E1A", paddingBottom: 14, marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "center" }}><Seal size={50} ink="#0A2E1A" /></div>
+      <div style={{ fontFamily: FONT.mono, fontSize: 10, letterSpacing: 1.3, color: "#4A5A50", marginTop: 8 }}>REPUBLIC OF KENYA · MINISTRY OF EDUCATION</div>
       <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{SCHOOL_NAME}</div>
-      <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#6A6A63", marginTop: 2 }}>{SCHOOL_LOCATION}</div>
+      <div style={{ fontFamily: FONT.mono, fontSize: 11, color: "#5E6E64", marginTop: 2 }}>{SCHOOL_LOCATION}</div>
       <div style={{ fontWeight: "bold", marginTop: 10, fontSize: 14 }}>{subtitle}</div>
     </div>
   );
@@ -9376,9 +9381,9 @@ function DocInfo({ roster, student }) {
   );
 }
 
-const docTh = { borderBottom: "1px solid #E3E3DD", padding: "7px 8px", textAlign: "left", fontFamily: FONT.mono, fontSize: 9.5, textTransform: "uppercase", color: "#6A6A63", letterSpacing: 0.5 };
-const docTd = { borderBottom: "1px solid #E3E3DD", padding: "7px 8px", fontSize: 13 };
-const docSig = { borderTop: "1px solid #C4C4BC", paddingTop: 6, fontFamily: FONT.mono, fontSize: 10.5, color: "#6A6A63", textAlign: "center" };
+const docTh = { borderBottom: "1px solid #DCE6E0", padding: "7px 8px", textAlign: "left", fontFamily: FONT.mono, fontSize: 9.5, textTransform: "uppercase", color: "#5E6E64", letterSpacing: 0.5 };
+const docTd = { borderBottom: "1px solid #DCE6E0", padding: "7px 8px", fontSize: 13 };
+const docSig = { borderTop: "1px solid #B9C7BF", paddingTop: 6, fontFamily: FONT.mono, fontSize: 10.5, color: "#5E6E64", textAlign: "center" };
 
 function InvoiceDoc({ roster, student, onBack }) {
   const cur = roster.settings.currency;
@@ -9399,12 +9404,12 @@ function InvoiceDoc({ roster, student, onBack }) {
       <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: 16 }}>
         <thead><tr><th style={docTh}>#</th><th style={docTh}>Date</th><th style={docTh}>Description</th><th style={{ ...docTh, textAlign: "right" }}>Amount</th></tr></thead>
         <tbody>
-          {payments.length === 0 && <tr><td style={{ ...docTd, color: "#5C5C55" }} colSpan={4}>No payments recorded yet.</td></tr>}
+          {payments.length === 0 && <tr><td style={{ ...docTd, color: "#4A5A50" }} colSpan={4}>No payments recorded yet.</td></tr>}
           {payments.map((p, i) => (
             <tr key={i}>
               <td style={docTd}>{i + 1}</td>
               <td style={docTd}>{fmtDate(p.date)}</td>
-              <td style={{ ...docTd, color: "#5C5C55" }}>{p.receiptNo ? `Receipt ${p.receiptNo}` : "Fee payment"}</td>
+              <td style={{ ...docTd, color: "#4A5A50" }}>{p.receiptNo ? `Receipt ${p.receiptNo}` : "Fee payment"}</td>
               <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontWeight: 700 }}>{cur}{money(p.amount)}</td>
             </tr>
           ))}
@@ -9413,7 +9418,7 @@ function InvoiceDoc({ roster, student, onBack }) {
       <div style={{ marginLeft: "auto", width: 250 }}>
         <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span>Total fee due</span><span>{cur}{money(due)}</span></div>
         <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 13 }}><span>Total paid</span><span>{cur}{money(paid)}</span></div>
-        <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid #111111", marginTop: 4, paddingTop: 10, fontWeight: "bold", fontSize: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid #0A2E1A", marginTop: 4, paddingTop: 10, fontWeight: "bold", fontSize: 16 }}>
           <span>Balance</span><span>{cur}{money(balance)}</span>
         </div>
       </div>
@@ -9452,7 +9457,7 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
           </tr>
         </thead>
         <tbody>
-          {subjects.length === 0 && <tr><td style={{ ...docTd, color: "#5C5C55" }} colSpan={7}>No results recorded.</td></tr>}
+          {subjects.length === 0 && <tr><td style={{ ...docTd, color: "#4A5A50" }} colSpan={7}>No results recorded.</td></tr>}
           {subjects.map((sub) => {
             const e = normEntry(termMarks[sub]);
             const fin = subjectFinal(e, weights);
@@ -9466,7 +9471,7 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
                 ))}
                 <td style={{ ...docTd, textAlign: "right", fontFamily: FONT.mono, fontWeight: 700 }}>{fin === null ? "—" : fin}</td>
                 <td style={{ ...docTd, textAlign: "center", fontFamily: FONT.mono, fontWeight: 700 }}>{gradeOf(fin)}</td>
-                <td style={{ ...docTd, color: "#5C5C55", fontSize: 11.5 }}>{fin === null ? "—" : remark(fin)}</td>
+                <td style={{ ...docTd, color: "#4A5A50", fontSize: 11.5 }}>{fin === null ? "—" : remark(fin)}</td>
               </tr>
             );
           })}
@@ -9478,8 +9483,8 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
           ["TOTAL", rank ? rank.total : "—"],
           ["AVERAGE", avg === null || avg === undefined ? "—" : `${avg}/100`],
           ["PERFORMANCE LEVEL", avg === null || avg === undefined ? "—" : "L" + gradeLevel(avg)]].map(([l, v]) => (
-          <div key={l} style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "9px 10px", background: "#F7F7F4", textAlign: "center" }}>
-            <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#6A6A63", letterSpacing: 0.8 }}>{l}</div>
+          <div key={l} style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "9px 10px", background: "#F4F8F5", textAlign: "center" }}>
+            <div style={{ fontFamily: FONT.mono, fontSize: 8.5, color: "#5E6E64", letterSpacing: 0.8 }}>{l}</div>
             <div style={{ fontSize: 16, fontWeight: "bold", marginTop: 3 }}>{v}</div>
           </div>
         ))}
@@ -9488,28 +9493,28 @@ function ReportDoc({ roster, student, term, termMarks, avg, rank, rate, onBack }
       {avg !== null && avg !== undefined && (
         <div style={{ marginBottom: 18, fontSize: 13.5 }}>
           Overall: <strong>Level {gradeLevel(avg)} — {gradeLabel(avg)}</strong>
-          <span style={{ color: "#5C5C55", fontSize: 11.5 }}> (pass mark {passMark})</span>
+          <span style={{ color: "#4A5A50", fontSize: 11.5 }}> (pass mark {passMark})</span>
         </div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 26 }}>
-        <div style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "10px 12px", background: "#F7F7F4" }}>
-          <div style={{ fontFamily: FONT.mono, fontSize: 9, color: "#6A6A63", letterSpacing: 1 }}>ATTENDANCE</div>
+        <div style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "10px 12px", background: "#F4F8F5" }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 9, color: "#5E6E64", letterSpacing: 1 }}>ATTENDANCE</div>
           <div style={{ fontSize: 17, fontWeight: "bold", marginTop: 3 }}>{rate === null ? "—" : `${rate}%`}</div>
         </div>
-        <div style={{ border: "1px solid #E3E3DD", borderRadius: 4, padding: "10px 12px", background: "#F7F7F4" }}>
-          <div style={{ fontFamily: FONT.mono, fontSize: 9, color: "#6A6A63", letterSpacing: 1 }}>FEES DUE / PAID / BALANCE</div>
+        <div style={{ border: "1px solid #DCE6E0", borderRadius: 4, padding: "10px 12px", background: "#F4F8F5" }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 9, color: "#5E6E64", letterSpacing: 1 }}>FEES DUE / PAID / BALANCE</div>
           <div style={{ fontSize: 13.5, fontWeight: "bold", marginTop: 3 }}>{cur}{money(due)} / {cur}{money(paid)} / {cur}{money(due - paid)}</div>
         </div>
       </div>
 
-      <div style={{ borderTop: "1px solid #E3E3DD", paddingTop: 10, marginBottom: 14, fontSize: 11, color: "#5C5C55", fontFamily: FONT.mono }}>
+      <div style={{ borderTop: "1px solid #DCE6E0", paddingTop: 10, marginBottom: 14, fontSize: 11, color: "#4A5A50", fontFamily: FONT.mono }}>
         CBC PERFORMANCE LEVELS — 4 Exceeding Expectation (76–100) · 3 Meeting Expectation (51–75) · 2 Approaching Expectation (26–50) · 1 Below Expectation (0–25)
       </div>
 
-      <div style={{ border: "1px dashed #C4C4BC", borderRadius: 4, padding: "9px 11px", marginBottom: 20, fontSize: 11.5, fontFamily: FONT.mono, color: "#111111" }}>
+      <div style={{ border: "1px dashed #B9C7BF", borderRadius: 4, padding: "9px 11px", marginBottom: 20, fontSize: 11.5, fontFamily: FONT.mono, color: "#0A2E1A" }}>
         PARENT PORTAL LOGIN — Admission No: <strong>{student.id}</strong> · PIN: <strong>{student.pin || "—"}</strong>
-        <div style={{ color: "#6A6A63", marginTop: 3 }}>Keep this private. It shows only this student's records.</div>
+        <div style={{ color: "#5E6E64", marginTop: 3 }}>Keep this private. It shows only this student's records.</div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 40, marginTop: 30 }}>
