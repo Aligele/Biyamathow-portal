@@ -71,7 +71,7 @@ export async function staffLogin(username, password) {
   const rows = await rpc("staff_login", { p_username: username, p_password: password });
   const row = Array.isArray(rows) ? rows[0] : rows;
   if (!row || !row.token) return null;              // wrong credentials
-  const who = { role: row.role, name: row.name, teacherId: row.teacher_id, username };
+  const who = { role: row.role, name: row.name, teacherId: row.teacher_id, username, mustChange: !!row.must_change };
   setSession(row.token, who);
   return who;
 }
@@ -91,7 +91,8 @@ export async function restoreSession() {
     const rows = await rpc("staff_me", { p_token: t });
     const row = Array.isArray(rows) ? rows[0] : rows;
     if (!row) { setSession(null, null); return null; }
-    const who = { role: row.role, name: row.name, teacherId: row.teacher_id, username: row.username };
+    const who = { role: row.role, name: row.name, teacherId: row.teacher_id,
+                  username: row.username, mustChange: !!row.must_change };
     writeJSON(WHO_KEY, who);
     return who;
   } catch (e) {
@@ -100,8 +101,10 @@ export async function restoreSession() {
 }
 
 export const changeMyPassword = async (oldPw, newPw) => {
-  const r = await rpc("change_my_password", { p_token: getToken(), p_old: oldPw, p_new: newPw });
-  return r === true;
+  // kept for the older screen that calls it; both routes now go through the
+  // one function that enforces the password rules
+  await rpc("staff_change_own_password", { p_token: getToken(), p_current: oldPw, p_new: newPw });
+  return true;
 };
 
 // ---------- staff accounts (admin) ----------
@@ -411,4 +414,30 @@ export function readFileAsBase64(file, maxBytes = 4200000) {
     r.onerror = () => reject(new Error("That file could not be read."));
     r.readAsDataURL(file);
   });
+}
+
+// ---------- passwords and sessions ----------
+// Anyone signed in may change their own; the current one is required so a
+// phone left unlocked cannot be used to take the account over.
+export const changeOwnPassword = (current, next) =>
+  rpc("staff_change_own_password", { p_token: getToken(), p_current: current, p_new: next });
+export const sessionsList   = ()        => rpc("sessions_list",   { p_token: getToken() });
+export const sessionsRevoke = (username) => rpc("sessions_revoke", { p_token: getToken(), p_username: username });
+export const securityRecent = (days)    => rpc("security_recent", { p_token: getToken(), p_days: days || 30 });
+
+// The same rules the database applies, checked as the person types so they are
+// not told only after pressing the button.
+export function passwordProblem(pw, username) {
+  if (!pw || pw.length < 8) {
+    return "Use at least 8 characters. A short phrase you will remember is better than a short word.";
+  }
+  const low = pw.toLowerCase();
+  if (/^[0-9]+$/.test(low)) return "Digits alone are guessed quickly. Add some letters.";
+  const common = ["password","12345678","qwertyui","password1","abc12345","11111111",
+                  "teacher1","school123","kenya123","banane123","shantral"];
+  if (common.includes(low)) return "That is one of the first passwords anyone would try. Choose another.";
+  if (username && low === String(username).toLowerCase()) {
+    return "The password cannot be the same as the username.";
+  }
+  return null;
 }

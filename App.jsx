@@ -11,6 +11,7 @@ import {
   leaveApply, leaveList, leaveDecide, leaveCancel, leaveToday,
   assignmentSave, assignmentDelete, assignmentsForClass, submissionsFor, submissionMark,
   assignmentsForStudent, submissionSend,
+  changeOwnPassword, passwordProblem, sessionsList, sessionsRevoke, securityRecent,
   workFileAdd, workFileDelete, workFilesList, workFilesForStudent,
   submissionFileAdd, submissionFilesList, downloadWorkFile, readFileAsBase64, storageUsed,
   expenseCategories, expenseAdd, expenseList, expenseSummary, expenseDelete,
@@ -84,7 +85,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v38 · full records + desktop";
+const APP_VERSION = "v39 · tightened security";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -435,7 +436,8 @@ export default function SchoolRegister() {
   const [loading, setLoading] = useState(true);
   const [roster, setRoster] = useState(EMPTY_ROSTER);
   const [role, setRole] = useState(null);          // "admin" | "teacher" | "family"
-  const [who, setWho] = useState(null);            // signed-in staff { role, name, teacherId }
+  const [who, setWho] = useState(null);
+  const [mustChange, setMustChange] = useState(false);            // signed-in staff { role, name, teacherId }
   const [parentData, setParentData] = useState(null); // the one child a parent may see
   const [activeTeacherId, setActiveTeacherId] = useState(null);
   const [activeStudentId, setActiveStudentId] = useState(null);
@@ -449,6 +451,7 @@ export default function SchoolRegister() {
       if (session) {
         setWho(session);
         setRole(session.role);
+        if (session.mustChange) setMustChange(true);
         if (session.role === "teacher") setActiveTeacherId(session.teacherId);
       } else {
         setLoading(false);
@@ -566,6 +569,7 @@ export default function SchoolRegister() {
       {!role && (
         <RoleGate
           onStaffSignedIn={async (session) => {
+            if (session.mustChange) setMustChange(true);
             setWho(session);
             setRole(session.role);
             if (session.role === "teacher") setActiveTeacherId(session.teacherId);
@@ -590,15 +594,29 @@ export default function SchoolRegister() {
           onParentSignedIn={(payload) => { setParentData(payload); setRole("family"); }}
         />
       )}
-      {role === "admin" && (
+      {/* A temporary password must be replaced before anything else — otherwise
+          someone else still knows how to sign in as this person. */}
+      {role && role !== "family" && mustChange && (
+        <div>
+          <PortalHeader title={SCHOOL_NAME.toUpperCase()} section="Choose your own password"
+            onMenu={() => {}} onExit={async () => { await staffLogout(); setRole(null); setWho(null); setMustChange(false); }} />
+          <div style={{ maxWidth: 620, margin: "0 auto", padding: "18px 14px 60px" }}>
+            <div className="paper-panel" style={{ ...paperPanel(), padding: 22 }}>
+              <ChangeMyPassword who={who} forced onDone={() => setMustChange(false)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {role === "admin" && !mustChange && (
         <AdminView roster={roster} saveRoster={saveRoster} who={who} syncState={syncState} onForceSave={flush}
           onExit={async () => { await staffLogout(); setRole(null); setWho(null); setRoster(EMPTY_ROSTER); }} />
       )}
-      {role === "teacher" && (
+      {role === "teacher" && !mustChange && (
         <TeacherView roster={roster} saveRoster={saveRoster} teacherId={activeTeacherId} who={who}
           onExit={async () => { await staffLogout(); setRole(null); setWho(null); setActiveTeacherId(null); setRoster(EMPTY_ROSTER); }} />
       )}
-      {role === "finance" && (
+      {role === "finance" && !mustChange && (
         <FinanceView roster={roster} saveRoster={saveRoster} who={who} syncState={syncState} onForceSave={flush}
           onExit={async () => { await staffLogout(); setRole(null); setWho(null); setRoster(EMPTY_ROSTER); }} />
       )}
@@ -1314,6 +1332,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     { title: "SYSTEM", items: [
       { key: "health", label: "System health", icon: "approvals" },
       { key: "geofence", label: "School boundary", icon: "duty" },
+      { key: "security", label: "Security", icon: "logins" },
+      { key: "mypassword", label: "My password", icon: "logins" },
       { key: "backup", label: "Backup", icon: "backup" },
       { key: "settings", label: "Settings", icon: "settings" },
     ]},
@@ -1890,6 +1910,10 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "health" && <SystemHealth roster={roster} />}
 
           {tab === "geofence" && <GeofenceSettings who={who} />}
+
+          {tab === "security" && <SecurityPanel who={who} />}
+
+          {tab === "mypassword" && <ChangeMyPassword who={who} />}
 
           {tab === "backup" && <AdminBackup roster={roster} saveRoster={saveRoster} syncState={syncState} onForceSave={onForceSave} />}
 
@@ -2791,7 +2815,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
         section={{ memos: "Memos", leave: "Leave", signin: "Sign in", attendance: "Pupil attendance", results: "Exam results",
                    reportcards: "Report cards", timetable: "My timetable",
                    register: "Register a pupil", photos: "Pupil photos", examtt: "Exam timetable",
-                   holiday: "Holiday work",
+                   holiday: "Holiday work", mypassword: "My password",
                    discipline: "Discipline report" }[tab] || tab}
         onMenu={() => setMenuOpen(true)} onExit={onExit} />
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} active={tab} onPick={setTab}
@@ -2800,6 +2824,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           { title: "DAILY", items: [
             { key: "memos", label: "Memos", icon: "subjects", badge: unreadMemos(roster, teacher.id).length },
             { key: "leave", label: "Apply for leave", icon: "duty" },
+            { key: "mypassword", label: "My password", icon: "logins" },
             { key: "signin", label: "Sign in (arrival)", icon: "duty" },
             { key: "attendance", label: "Pupil attendance", icon: "attendance" },
           ]},
@@ -2835,6 +2860,8 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
           {tab === "memos" && <MemoBoard roster={roster} saveRoster={saveRoster} who={who} teacherId={teacher.id} />}
 
           {tab === "leave" && <MyLeave who={who} roster={roster} />}
+
+          {tab === "mypassword" && <ChangeMyPassword who={who} />}
 
           {tab === "signin" && (
             <GeoGate action="signin" label="Signing in">
@@ -7876,6 +7903,223 @@ function StoragePanel() {
   );
 }
 
+
+// ---------- Changing your own password ----------
+// Available to every signed-in account. This is the piece that stops a
+// forgotten password meaning the administrator sets one and reads it aloud,
+// after which two people know it and nobody changes it.
+function ChangeMyPassword({ who, forced = false, onDone }) {
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [again, setAgain] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const problem = next ? passwordProblem(next, who?.username) : null;
+  const mismatch = again && next !== again;
+  const ready = next && !problem && !mismatch && cur;
+
+  const save = async () => {
+    if (!ready) return;
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      await changeOwnPassword(cur, next);
+      setMsg("Your password has been changed. Any other phone signed in as you has been signed out.");
+      setCur(""); setNext(""); setAgain("");
+      onDone?.();
+    } catch (e) {
+      setErr(String(e.message || e).replace(/^staff_change_own_password \d+: /, ""));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <SectionTitle>{forced ? "Choose your own password" : "Change my password"}</SectionTitle>
+
+      {forced ? (
+        <div style={{ padding: "12px 14px", borderRadius: 5, background: "#F5E8DC",
+              border: "1px solid #E8CBA0", borderLeft: "4px solid #C98A2C",
+              fontFamily: FONT.body, fontSize: 13, color: "#22304A", marginBottom: 16, lineHeight: 1.6 }}>
+          <strong>The administrator gave you a temporary password.</strong>
+          <div style={{ marginTop: 5 }}>
+            Choose your own now. Until you do, someone else knows how to sign in as you — and
+            anything done under your name would look like your doing.
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#6B6552",
+              marginBottom: 14, lineHeight: 1.6 }}>
+          Change it whenever you like, and straight away if you have said it aloud, written it
+          down, or let anyone use your account.
+        </div>
+      )}
+
+      {err && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5,
+            color: "#B84C3E", marginBottom: 12, lineHeight: 1.5 }}>{err}</div>}
+      {msg && <div className="enter" style={{ padding: "9px 12px", borderRadius: 4, background: "#E4F0E8",
+            border: "1px solid #B8D9C4", fontFamily: FONT.body, fontSize: 12.5,
+            color: "#22304A", marginBottom: 12, lineHeight: 1.5 }}>{msg}</div>}
+
+      <div style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5,
+            padding: 14, maxWidth: 460 }}>
+        <input type="password" value={cur} onChange={(e) => { setCur(e.target.value); setErr(""); }}
+          placeholder={forced ? "The temporary password" : "Your current password"}
+          autoComplete="current-password"
+          style={{ ...darkInput(), width: "100%", marginBottom: 9 }} />
+
+        <input type="password" value={next} onChange={(e) => { setNext(e.target.value); setErr(""); }}
+          placeholder="Your new password" autoComplete="new-password"
+          style={{ ...darkInput(), width: "100%", marginBottom: 5,
+                   borderColor: next && problem ? "#B84C3E" : next ? "#3F7A5C" : "#D8D2C2" }} />
+        {next && (
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, marginBottom: 9,
+                color: problem ? "#B84C3E" : "#3F7A5C", lineHeight: 1.5 }}>
+            {problem || "That will do."}
+          </div>
+        )}
+
+        <input type="password" value={again} onChange={(e) => setAgain(e.target.value)}
+          placeholder="Type it once more" autoComplete="new-password"
+          style={{ ...darkInput(), width: "100%", marginBottom: 5,
+                   borderColor: mismatch ? "#B84C3E" : again ? "#3F7A5C" : "#D8D2C2" }} />
+        {mismatch && (
+          <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#B84C3E", marginBottom: 9 }}>
+            The two do not match.
+          </div>
+        )}
+
+        <button onClick={save} disabled={!ready || busy}
+          style={{ ...primaryBtn(), marginTop: 6, opacity: ready && !busy ? 1 : 0.5 }}>
+          {busy ? "Changing…" : "Change my password"}
+        </button>
+
+        <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#8A8368", marginTop: 10, lineHeight: 1.55 }}>
+          A phrase you will remember beats a short word you will forget — <em>sabuli rains 26</em> is
+          both easier to recall and harder to guess than <em>Teach01</em>.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Admin: who is signed in, and what has happened ----------
+function SecurityPanel({ who }) {
+  const [sessions, setSessions] = useState(null);
+  const [events, setEvents] = useState(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(null);
+
+  const load = async () => {
+    try { setSessions(await sessionsList() || []); } catch (e) { setSessions([]); }
+    try { setEvents(await securityRecent(30) || []); } catch (e) { setEvents([]); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const revoke = async (u) => {
+    if (!window.confirm(`Sign ${u} out of every device?`)) return;
+    setBusy(u); setErr("");
+    try { await sessionsRevoke(u); await load(); }
+    catch (e) { setErr(String(e.message || e)); }
+    setBusy(null);
+  };
+
+  const ago = (t) => {
+    if (!t) return "—";
+    const mins = Math.round((Date.now() - new Date(t)) / 60000);
+    if (mins < 2) return "just now";
+    if (mins < 60) return `${mins} min ago`;
+    if (mins < 1440) return `${Math.round(mins / 60)} h ago`;
+    return `${Math.round(mins / 1440)} d ago`;
+  };
+
+  return (
+    <div>
+      <SectionTitle>Security</SectionTitle>
+
+      {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
+            border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5,
+            color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 4 }}>
+        Signed in now
+      </div>
+      <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 10, lineHeight: 1.55 }}>
+        A session lasts 14 days unless it is ended here. If a phone is lost, sign that account out
+        and change its password.
+      </div>
+
+      {sessions === null && <div className="skeleton" style={{ height: 60 }} />}
+      <div style={{ display: "grid", gap: 5, marginBottom: 22 }}>
+        {(sessions || []).map((r, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 9,
+                flexWrap: "wrap", alignItems: "center", padding: "9px 12px", borderRadius: 4,
+                background: r.is_me ? "#E4F0E8" : "#F5F1E6",
+                border: `1px solid ${r.is_me ? "#B8D9C4" : "#E4DFCF"}` }}>
+            <span>
+              <span style={{ fontFamily: FONT.body, fontSize: 13, fontWeight: 600, color: "#22304A" }}>
+                {r.name}
+              </span>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368", marginLeft: 8 }}>
+                {r.username} · {r.role}{r.is_me ? " · this device" : ""}
+              </span>
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#6B6552" }}>
+                last used {ago(r.last_seen)}
+              </span>
+              {!r.is_me && (
+                <button onClick={() => revoke(r.username)} disabled={busy === r.username}
+                  style={{ background: "none", border: "none", color: "#B84C3E",
+                    fontFamily: FONT.mono, fontSize: 10.5, cursor: "pointer" }}>
+                  sign out
+                </button>
+              )}
+            </span>
+          </div>
+        ))}
+        {sessions && sessions.length === 0 && (
+          <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Nobody is signed in.</div>
+        )}
+      </div>
+
+      <div style={{ fontFamily: FONT.display, fontSize: 15, fontWeight: 600, color: "#22304A", marginBottom: 8 }}>
+        Recent security events
+      </div>
+      {events === null && <div className="skeleton" style={{ height: 50 }} />}
+      {events && events.length === 0 && (
+        <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>Nothing recorded.</div>
+      )}
+      <div style={{ display: "grid", gap: 4 }}>
+        {(events || []).slice(0, 40).map((e, i) => {
+          const bad = /refused|blocked/.test(e.action);
+          return (
+            <div key={i} style={{ padding: "7px 11px", borderRadius: 3, background: "#F5F1E6",
+                  border: "1px solid #E4DFCF", borderLeft: `3px solid ${bad ? "#B84C3E" : "#3F7A5C"}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT.body, fontSize: 12.5, color: "#22304A" }}>
+                  <strong>{e.who || "—"}</strong> · {e.action}
+                </span>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10, color: "#8A8368" }}>
+                  {new Date(e.at).toLocaleString(undefined,
+                    { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+              {e.detail && (
+                <div style={{ fontFamily: FONT.body, fontSize: 11, color: "#6B6552", marginTop: 2 }}>
+                  {e.detail}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---------- Finance portal ----------
 function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }) {
   const [tab, setTab] = useState("collect");
@@ -7913,6 +8157,9 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
     { title: "MONEY OUT", items: [
       { key: "spend", label: "Record spending", icon: "fees" },
       { key: "spendreport", label: "Where money went", icon: "reports" },
+    ]},
+    { title: "MY ACCOUNT", items: [
+      { key: "mypassword", label: "My password", icon: "logins" },
     ]},
   ];
 
@@ -7966,6 +8213,8 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
           {tab === "spend" && <SpendRecord roster={roster} who={who} onVoucher={() => setSpendKey((k) => k + 1)} />}
 
           {tab === "spendreport" && <SpendReport roster={roster} refreshKey={spendKey} />}
+
+          {tab === "mypassword" && <ChangeMyPassword who={who} />}
           {tab === "daybook" && <DayBook roster={roster} onReceipt={setReceipt} />}
         </div>
       </div>
