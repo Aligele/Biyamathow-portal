@@ -84,7 +84,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v37 · file sharing";
+const APP_VERSION = "v38 · full records + desktop";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -240,6 +240,22 @@ const allTimetableClashes = (roster) => {
       const [day, periodId, teacherId] = k.split("|");
       return { day, periodId, teacherId, where: v };
     });
+};
+
+// Pupils registered before the fuller form still have a single "name". This
+// builds a display name from whichever parts exist, so old and new records sit
+// together without a migration.
+const fullName = (p) => {
+  if (!p) return "";
+  const parts = [p.firstName, p.middleName, p.surname].filter(Boolean).map((x) => String(x).trim());
+  return parts.length ? parts.join(" ") : (p.name || "");
+};
+
+// The name to file under: surname first, which is how a register is read.
+const filingName = (p) => {
+  if (!p) return "";
+  if (p.surname) return `${p.surname}, ${[p.firstName, p.middleName].filter(Boolean).join(" ")}`.trim();
+  return p.name || "";
 };
 
 const levelLabelForClass = (roster, classId) => {
@@ -653,6 +669,38 @@ function Shell({ children }) {
         .ring { transform: rotate(-90deg); }
         .ring circle { transition: stroke-dashoffset .6s cubic-bezier(.2,.7,.3,1); }
 
+        /* ---- laptops and desktops ----
+           The portal was drawn for a phone in a classroom. On a wide screen the
+           same column stranded in the middle wastes most of the glass, so from
+           900px the panels widen, forms lay out in columns, and lists become
+           grids. Nothing is hidden or added — the same screens, better used. */
+        @media (min-width: 900px) {
+          body { font-size: 15.5px; }
+          .paper-panel { padding: 30px 34px !important; }
+
+          /* registration and settings forms breathe into columns */
+          .form-row { grid-template-columns: repeat(3, 1fr) !important; }
+
+          /* card grids get more across rather than taller */
+          .grid-cards { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)) !important; }
+
+          /* long lists of pupils, vouchers and the like read in two columns */
+          .list-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
+
+          /* printed documents show at a comfortable reading width */
+          .print-doc { max-width: 900px !important; }
+        }
+
+        @media (min-width: 1300px) {
+          .list-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: start; }
+        }
+
+        /* a mouse gets hover affordances a finger does not need */
+        @media (hover: hover) and (pointer: fine) {
+          .lift:hover { transform: translateY(-2px); }
+          button { cursor: pointer; }
+        }
+
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
         .chalk-fade { animation: chalkIn 0.35s ease both; }
         @keyframes chalkIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
@@ -740,7 +788,7 @@ function StatCard({ label, value, tone }) {
 }
 function topBar(title, onExit) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 6px", maxWidth: 960, margin: "0 auto", gap: 12 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 14px", maxWidth: "min(1240px, 100%)", margin: "0 auto", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <Seal size={38} />
         <div>
@@ -1072,6 +1120,9 @@ const ICONS = {
 
 // Grouped navigation drawer, in the style of a university student portal.
 function Sidebar({ open, onClose, groups, active, onPick, heading, subheading }) {
+  // On a laptop the menu closes as soon as something is chosen, same as a
+  // phone — but the wider page means the chosen screen is not then hidden
+  // behind it, which is the reason the overlay felt heavy on desktop.
   return (
     <>
       <div onClick={onClose} className="no-print" style={{
@@ -1162,8 +1213,18 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
   const [tab, setTab] = useState("overview");
   const [newClass, setNewClass] = useState("");
   const [newSubject, setNewSubject] = useState("");
-  const [newTeacher, setNewTeacher] = useState({ name: "", classId: "", username: "", password: "" });
-  const [newStudent, setNewStudent] = useState({ name: "", classId: "", parentName: "", feeDue: "" });
+  const [newTeacher, setNewTeacher] = useState({
+    firstName: "", surname: "", classId: "", username: "", password: "",
+    tsc: "", email: "", phone: "", idNumber: "", qualification: "",
+  });
+  const [showTeacherMore, setShowTeacherMore] = useState(false);
+  const [newStudent, setNewStudent] = useState({
+    firstName: "", middleName: "", surname: "", classId: "",
+    sex: "", dob: "", birthCertNo: "",
+    parentName: "", parentId: "", parentPhone: "", parentRelation: "Parent",
+    homeArea: "", feeDue: "",
+  });
+  const [showMore, setShowMore] = useState(false);
   const [lastAddedClassId, setLastAddedClassId] = useState("");
   const [newAdminPass, setNewAdminPass] = useState("");
   const [payment, setPayment] = useState({ studentId: "", amount: "", method: "cash", code: "", sender: "" });
@@ -1270,22 +1331,62 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
     setNewSubject("");
   };
   const addTeacher = () => {
-    if (!newTeacher.name.trim() || !newTeacher.classId) return;
-    const username = newTeacher.username.trim() || slugUser(newTeacher.name);
+    const n = newTeacher;
+    if (!n.firstName.trim() || !n.surname.trim() || !n.classId) return;
+    const display = `${n.firstName.trim()} ${n.surname.trim()}`;
+    const username = n.username.trim() || slugUser(display);
     if (roster.teachers.some((t) => t.username?.toLowerCase() === username.toLowerCase())) return;
-    const password = newTeacher.password.trim() || Math.random().toString(36).slice(2, 8);
-    const t = { id: genId("TCH", roster.teachers), name: newTeacher.name.trim(), classId: newTeacher.classId, username, password, subjects: [] };
-    saveRoster({ ...roster, teachers: [...roster.teachers, t] }, `${t.name} — login: ${username} / ${password}`);
-    setNewTeacher({ name: "", classId: "", username: "", password: "" });
+    const password = n.password.trim() || Math.random().toString(36).slice(2, 8);
+    const t = {
+      id: genId("TCH", roster.teachers),
+      name: display,                      // kept so every existing screen works
+      firstName: n.firstName.trim(),
+      surname: n.surname.trim(),
+      classId: n.classId, username, password, subjects: [],
+      tsc: n.tsc.trim() || undefined,
+      email: n.email.trim() || undefined,
+      phone: n.phone.trim() || undefined,
+      idNumber: n.idNumber.trim() || undefined,
+      qualification: n.qualification.trim() || undefined,
+      joinedOn: todayISO(),
+    };
+    saveRoster({ ...roster, teachers: [...roster.teachers, t] },
+      `${display} — login: ${username} / ${password}`);
+    setNewTeacher({ firstName: "", surname: "", classId: "", username: "", password: "",
+      tsc: "", email: "", phone: "", idNumber: "", qualification: "" });
   };
   const addStudent = () => {
-    if (!newStudent.name.trim() || !newStudent.classId) return;
+    const n = newStudent;
+    if (!n.firstName.trim() || !n.surname.trim() || !n.classId) return;
     const pin = String(Math.floor(1000 + Math.random() * 9000));
-    const s = { id: nextAdmissionNo(roster.students), name: newStudent.name.trim(), classId: newStudent.classId, parentName: newStudent.parentName.trim(), feeDue: Number(newStudent.feeDue) || 0, feePaid: 0, payments: [], pin };
-    saveRoster(logAction({ ...roster, students: [...roster.students, s] }, "Admin", `Added student ${s.name} (${s.id})`), `Added ${s.name} — PIN ${pin}`);
+    const display = [n.firstName, n.middleName, n.surname]
+      .map((x) => x.trim()).filter(Boolean).join(" ");
+
+    const s = {
+      id: nextAdmissionNo(roster.students),
+      name: display,                       // kept so every existing screen works
+      firstName: n.firstName.trim(),
+      middleName: n.middleName.trim() || undefined,
+      surname: n.surname.trim(),
+      classId: n.classId,
+      sex: n.sex || undefined,
+      dob: n.dob || undefined,
+      birthCertNo: n.birthCertNo.trim() || undefined,
+      parentName: n.parentName.trim(),
+      parentId: n.parentId.trim() || undefined,
+      parentPhone: n.parentPhone.trim() || undefined,
+      parentRelation: n.parentRelation || undefined,
+      homeArea: n.homeArea.trim() || undefined,
+      feeDue: Number(n.feeDue) || 0, feePaid: 0, payments: [], pin,
+      admittedOn: todayISO(),
+    };
+    saveRoster(logAction({ ...roster, students: [...roster.students, s] }, "Admin",
+      `Added student ${display} (${s.id})`), `Added ${display} — PIN ${pin}`);
     setLastAddedClassId(s.classId);
-    // keep the class selected, so registering a whole class is quick
-    setNewStudent({ name: "", classId: newStudent.classId, parentName: "", feeDue: newStudent.feeDue });
+    // the class, fee and home area usually repeat down a queue of families
+    setNewStudent({ firstName: "", middleName: "", surname: "", classId: n.classId,
+      sex: "", dob: "", birthCertNo: "", parentName: "", parentId: "", parentPhone: "",
+      parentRelation: "Parent", homeArea: n.homeArea, feeDue: n.feeDue });
   };
   const removeItem = (kind, id) => saveRoster({ ...roster, [kind]: roster[kind].filter((x) => x.id !== id) }, "Removed");
   const toggleTeacherSubject = (teacherId, subject) => {
@@ -1352,8 +1453,8 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
         onMenu={() => setMenuOpen(true)} onExit={onExit} badge={alertTotal} />
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} groups={NAV} active={tab} onPick={setTab}
         heading="Administration" subheading={who?.name || "Signed in"} />
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
-        <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
+      <div style={{ maxWidth: "min(1240px, 100%)", margin: "0 auto", padding: "18px 14px 70px" }}>
+        <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade paper-panel">
 
           {tab === "overview" && (
             <>
@@ -1415,17 +1516,73 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
                 To let them teach <strong>other</strong> classes, put them on the <strong>Timetable</strong> —
                 every lesson assigned to them there lets them enter marks for that class and subject.
               </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                <input value={newTeacher.name} onChange={(e) => setNewTeacher({ ...newTeacher, name: e.target.value })} placeholder="Teacher name" style={{ ...darkInput(), flex: 1, minWidth: 150 }} />
-                <select value={newTeacher.classId} onChange={(e) => setNewTeacher({ ...newTeacher, classId: e.target.value })} style={darkInput()}>
-                  <option value="">Assign class…</option>
-                  {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-                <input value={newTeacher.username} onChange={(e) => setNewTeacher({ ...newTeacher, username: e.target.value })} placeholder="Username (auto if blank)" style={{ ...darkInput(), flex: 1, minWidth: 150 }} />
-                <input value={newTeacher.password} onChange={(e) => setNewTeacher({ ...newTeacher, password: e.target.value })} placeholder="Password (auto if blank)" style={{ ...darkInput(), flex: 1, minWidth: 150 }} />
-                <button onClick={addTeacher} style={primaryBtn()}>Add teacher</button>
+              <div style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5,
+                    padding: 13, marginBottom: 16 }}>
+                <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#8A8368",
+                      textTransform: "uppercase", marginBottom: 6 }}>The teacher</div>
+                <div style={{ display: "grid", gap: 8, marginBottom: 8,
+                      gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
+                  <input value={newTeacher.firstName}
+                    onChange={(e) => setNewTeacher({ ...newTeacher, firstName: e.target.value })}
+                    placeholder="First name" style={darkInput()} />
+                  <input value={newTeacher.surname}
+                    onChange={(e) => setNewTeacher({ ...newTeacher, surname: e.target.value })}
+                    placeholder="Surname" style={darkInput()} />
+                  <select value={newTeacher.classId}
+                    onChange={(e) => setNewTeacher({ ...newTeacher, classId: e.target.value })}
+                    style={darkInput()}>
+                    <option value="">Assign class…</option>
+                    {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div style={{ display: "grid", gap: 8, marginBottom: 8,
+                      gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
+                  <input value={newTeacher.tsc}
+                    onChange={(e) => setNewTeacher({ ...newTeacher, tsc: e.target.value })}
+                    placeholder="TSC number" style={{ ...darkInput(), fontFamily: FONT.mono }} />
+                  <input value={newTeacher.phone} inputMode="tel"
+                    onChange={(e) => setNewTeacher({ ...newTeacher, phone: e.target.value })}
+                    placeholder="Phone, e.g. 0722 000000" style={darkInput()} />
+                  <input value={newTeacher.email} type="email" inputMode="email"
+                    onChange={(e) => setNewTeacher({ ...newTeacher, email: e.target.value })}
+                    placeholder="Email" style={darkInput()} />
+                </div>
+
+                <button onClick={() => setShowTeacherMore(!showTeacherMore)}
+                  style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer",
+                    fontFamily: FONT.mono, fontSize: 11, color: "#22304A" }}>
+                  {showTeacherMore ? "▾ hide the rest" : "▸ ID number, qualification and login"}
+                </button>
+
+                {showTeacherMore && (
+                  <div className="enter" style={{ marginTop: 9, paddingTop: 11, borderTop: "1px dashed #D8D2C2",
+                        display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
+                    <input value={newTeacher.idNumber}
+                      onChange={(e) => setNewTeacher({ ...newTeacher, idNumber: e.target.value })}
+                      placeholder="National ID number" style={darkInput()} />
+                    <input value={newTeacher.qualification}
+                      onChange={(e) => setNewTeacher({ ...newTeacher, qualification: e.target.value })}
+                      placeholder="Qualification, e.g. P1, Diploma" style={darkInput()} />
+                    <input value={newTeacher.username}
+                      onChange={(e) => setNewTeacher({ ...newTeacher, username: e.target.value })}
+                      placeholder="Username (auto if blank)" style={darkInput()} />
+                    <input value={newTeacher.password}
+                      onChange={(e) => setNewTeacher({ ...newTeacher, password: e.target.value })}
+                      placeholder="Password (auto if blank)" style={darkInput()} />
+                  </div>
+                )}
+
+                <button onClick={addTeacher}
+                  disabled={!newTeacher.firstName.trim() || !newTeacher.surname.trim() || !newTeacher.classId}
+                  style={{ ...primaryBtn(), marginTop: 12,
+                    opacity: (!newTeacher.firstName.trim() || !newTeacher.surname.trim() || !newTeacher.classId) ? 0.5 : 1 }}>
+                  Add teacher
+                </button>
+                <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#6B6552", marginTop: 8, lineHeight: 1.5 }}>
+                  The TSC number matters for returns to the Sub-County office. The email lets them
+                  reset their own password without waiting for you.
+                </div>
               </div>
 
               {roster.teachers.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No teachers yet.</div>}
@@ -1477,18 +1634,103 @@ function AdminView({ roster, saveRoster, onExit, syncState, onForceSave, who }) 
           {tab === "students" && (
             <div>
               <SectionTitle>Students</SectionTitle>
-              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                <input value={newStudent.name} onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })} placeholder="Student name" style={{ ...darkInput(), flex: 1, minWidth: 140 }} />
-                <select value={newStudent.classId} onChange={(e) => setNewStudent({ ...newStudent, classId: e.target.value })} style={darkInput()}>
-                  <option value="">Assign class…</option>
-                  {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <input value={newStudent.parentName} onChange={(e) => setNewStudent({ ...newStudent, parentName: e.target.value })} placeholder="Guardian (optional)" style={{ ...darkInput(), flex: 1, minWidth: 130 }} />
-                <input value={newStudent.feeDue} onChange={(e) => setNewStudent({ ...newStudent, feeDue: e.target.value })} placeholder="Fee due" type="number" style={{ ...darkInput(), width: 100 }} />
-                <button onClick={addStudent} style={primaryBtn()}>Add student</button>
+              <div style={{ background: "#F5F1E6", border: "1px solid #E4DFCF", borderRadius: 5,
+                    padding: 13, marginBottom: 16 }}>
+                {/* the three names the register needs */}
+                <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#8A8368",
+                      textTransform: "uppercase", marginBottom: 6 }}>The pupil</div>
+                <div className="form-row" style={{ display: "grid", gap: 8, marginBottom: 8,
+                      gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))" }}>
+                  <input value={newStudent.firstName}
+                    onChange={(e) => setNewStudent({ ...newStudent, firstName: e.target.value })}
+                    placeholder="First name" style={darkInput()} />
+                  <input value={newStudent.middleName}
+                    onChange={(e) => setNewStudent({ ...newStudent, middleName: e.target.value })}
+                    placeholder="Middle name" style={darkInput()} />
+                  <input value={newStudent.surname}
+                    onChange={(e) => setNewStudent({ ...newStudent, surname: e.target.value })}
+                    placeholder="Surname" style={darkInput()} />
+                </div>
+
+                <div style={{ display: "grid", gap: 8, marginBottom: 8,
+                      gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))" }}>
+                  <select value={newStudent.classId}
+                    onChange={(e) => setNewStudent({ ...newStudent, classId: e.target.value })}
+                    style={darkInput()}>
+                    <option value="">Assign class…</option>
+                    {roster.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <select value={newStudent.sex}
+                    onChange={(e) => setNewStudent({ ...newStudent, sex: e.target.value })}
+                    style={darkInput()}>
+                    <option value="">Boy or girl…</option>
+                    <option value="M">Boy</option>
+                    <option value="F">Girl</option>
+                  </select>
+                  <input value={newStudent.feeDue} type="number" inputMode="numeric"
+                    onChange={(e) => setNewStudent({ ...newStudent, feeDue: e.target.value })}
+                    placeholder="Fee due" style={darkInput()} />
+                </div>
+
+                {/* everything else is real but not needed to get a child into class today */}
+                <button onClick={() => setShowMore(!showMore)}
+                  style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer",
+                    fontFamily: FONT.mono, fontSize: 11, color: "#22304A" }}>
+                  {showMore ? "▾ hide the rest" : "▸ birth certificate, guardian and contact"}
+                </button>
+
+                {showMore && (
+                  <div className="enter" style={{ marginTop: 9, paddingTop: 11, borderTop: "1px dashed #D8D2C2" }}>
+                    <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#8A8368",
+                          textTransform: "uppercase", marginBottom: 6 }}>Birth record</div>
+                    <div style={{ display: "grid", gap: 8, marginBottom: 11,
+                          gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
+                      <input value={newStudent.birthCertNo}
+                        onChange={(e) => setNewStudent({ ...newStudent, birthCertNo: e.target.value })}
+                        placeholder="Birth certificate number" style={darkInput()} />
+                      <input type="date" value={newStudent.dob}
+                        onChange={(e) => setNewStudent({ ...newStudent, dob: e.target.value })}
+                        style={darkInput()} />
+                    </div>
+
+                    <div style={{ fontFamily: FONT.mono, fontSize: 9, letterSpacing: 1.2, color: "#8A8368",
+                          textTransform: "uppercase", marginBottom: 6 }}>Parent or guardian</div>
+                    <div style={{ display: "grid", gap: 8,
+                          gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
+                      <input value={newStudent.parentName}
+                        onChange={(e) => setNewStudent({ ...newStudent, parentName: e.target.value })}
+                        placeholder="Full name" style={darkInput()} />
+                      <select value={newStudent.parentRelation}
+                        onChange={(e) => setNewStudent({ ...newStudent, parentRelation: e.target.value })}
+                        style={darkInput()}>
+                        {["Parent","Mother","Father","Guardian","Grandparent","Aunt or uncle","Elder sibling"]
+                          .map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                      <input value={newStudent.parentId}
+                        onChange={(e) => setNewStudent({ ...newStudent, parentId: e.target.value })}
+                        placeholder="National ID number" style={darkInput()} />
+                      <input value={newStudent.parentPhone} inputMode="tel"
+                        onChange={(e) => setNewStudent({ ...newStudent, parentPhone: e.target.value })}
+                        placeholder="Phone, e.g. 0722 000000" style={darkInput()} />
+                      <input value={newStudent.homeArea}
+                        onChange={(e) => setNewStudent({ ...newStudent, homeArea: e.target.value })}
+                        placeholder="Where the family lives" style={darkInput()} />
+                    </div>
+                  </div>
+                )}
+
+                <button onClick={addStudent}
+                  disabled={!newStudent.firstName.trim() || !newStudent.surname.trim() || !newStudent.classId}
+                  style={{ ...primaryBtn(), marginTop: 12,
+                    opacity: (!newStudent.firstName.trim() || !newStudent.surname.trim() || !newStudent.classId) ? 0.5 : 1 }}>
+                  Add student
+                </button>
               </div>
-              <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 8 }}>
-                Each student gets a PIN. Parents sign in with the admission number + PIN, so only they can see their child's results.
+
+              <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#6B6552", marginBottom: 10, lineHeight: 1.55 }}>
+                Only the names and class are needed to register a child today — the rest can be added
+                later rather than turning a family away. Each pupil gets a PIN; parents sign in with
+                the admission number and PIN, so only they see their child's results.
               </div>
               {roster.students.length === 0 && <div style={{ fontFamily: FONT.body, fontSize: 13, color: "#8A8368" }}>No students yet.</div>}
               <StudentsByClass roster={roster} saveRoster={saveRoster} removeItem={removeItem} openClassId={lastAddedClassId} />
@@ -2515,7 +2757,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
         <PortalHeader title={SCHOOL_NAME.toUpperCase()} section="Not set up yet"
           onMenu={() => {}} onExit={onExit} />
         <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 14px 60px" }}>
-          <div style={{ ...paperPanel(), padding: 22 }}>
+          <div className="paper-panel" style={{ ...paperPanel(), padding: 22 }}>
             <SectionTitle>Your account isn't linked to a class yet</SectionTitle>
             <div style={{ fontFamily: FONT.body, fontSize: 13.5, color: "#22304A", lineHeight: 1.6, marginBottom: 14 }}>
               You signed in successfully{who?.name ? ` as ${who.name}` : ""}, but the portal doesn't yet know
@@ -2574,7 +2816,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
             { key: "discipline", label: "Discipline report", icon: "approvals" },
           ]},
         ]} />
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
+      <div style={{ maxWidth: "min(1240px, 100%)", margin: "0 auto", padding: "18px 14px 70px" }}>
         {tab !== "memos" && unreadMemos(roster, teacher.id).length > 0 && (
           <button onClick={() => setTab("memos")} style={{
             width: "100%", textAlign: "left", padding: "11px 13px", marginBottom: 12,
@@ -2584,7 +2826,7 @@ function TeacherView({ roster, saveRoster, teacherId, onExit, who }) {
             <strong>{unreadMemos(roster, teacher.id).length} unread memo{unreadMemos(roster, teacher.id).length === 1 ? "" : "s"}</strong> from the office — tap to read
           </button>
         )}
-        <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
+        <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade paper-panel">
           {tab === "attendance" && (
             <GeoGate action="attendance" label="Marking the register">
               <TeacherAttendance roster={roster} saveRoster={saveRoster} classId={classId} students={students} />
@@ -2744,7 +2986,7 @@ function ParentView({ payload, onExit }) {
     <div>
       {topBar(`${student.name}'s record`, onExit)}
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 6px 60px" }}>
-        <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade">
+        <div style={{ ...paperPanel(), padding: 22 }} className="chalk-fade paper-panel">
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 16 }}>
             <div>
               <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: "#8A8368" }}>{student.id}</div>
@@ -7689,8 +7931,8 @@ function FinanceView({ roster, saveRoster, who, onExit, syncState, onForceSave }
       <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} groups={NAV} active={tab} onPick={setTab}
         heading="Finance" subheading={who?.name || "Bursar"} />
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 6px 60px" }}>
-        <div style={{ ...paperPanel(), padding: 20 }}>
+      <div style={{ maxWidth: "min(1240px, 100%)", margin: "0 auto", padding: "18px 14px 70px" }}>
+        <div className="paper-panel" style={{ ...paperPanel(), padding: 20 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))",
                 gap: 10, marginBottom: 20 }}>
             <StatCard label="Expected" value={`${cur}${money(totals.due)}`} />
