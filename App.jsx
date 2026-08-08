@@ -85,7 +85,7 @@ const STATUS = {
   late: { label: "Late", ink: "#C98A2C", mark: "L" },
 };
 
-const APP_VERSION = "v39 · tightened security";
+const APP_VERSION = "v40 · attach files while writing";
 
 // Keeps the last 400 actions so the school can see who changed what.
 const logAction = (roster, actor, action) => {
@@ -6986,9 +6986,14 @@ function HolidayWork({ roster, teacher, classId }) {
       {err && <div style={{ padding: "9px 12px", borderRadius: 4, background: "#F7E4E1",
             border: "1px solid #E8C4BD", fontFamily: FONT.body, fontSize: 12.5, color: "#B84C3E", marginBottom: 12 }}>{err}</div>}
 
-      <button onClick={() => setEditing({})} style={{ ...primaryBtn(), marginBottom: 18 }}>
+      <button onClick={() => setEditing({})} style={{ ...primaryBtn(), marginBottom: 8 }}>
         Set new work
       </button>
+      <div style={{ fontFamily: FONT.body, fontSize: 11.5, color: "#8A8368",
+            marginBottom: 18, lineHeight: 1.55 }}>
+        You can attach PDFs, Word documents or pictures from this computer while writing the work,
+        or with <strong>Attach files</strong> on anything already set.
+      </div>
 
       {rows === null && <div className="skeleton" style={{ height: 70 }} />}
       {rows && rows.length === 0 && (
@@ -7037,8 +7042,8 @@ function HolidayWork({ roster, teacher, classId }) {
                 <button onClick={() => setPrinting(w)} style={{ ...backBtnStyle(), color: "#22304A" }}>print worksheet</button>
                 <button onClick={() => setEditing(w)} style={{ ...backBtnStyle(), color: "#22304A" }}>edit</button>
                 <button onClick={() => setFilesFor(filesFor === w.id ? null : w.id)}
-                  style={{ ...backBtnStyle(), color: "#22304A" }}>
-                  {filesFor === w.id ? "hide files" : "files"}
+                  style={{ ...primaryBtn(), padding: "6px 13px", fontSize: 12, background: "#6B5B95" }}>
+                  {filesFor === w.id ? "Hide files" : "Attach files"}
                 </button>
               </div>
 
@@ -7064,15 +7069,23 @@ function WorkEditor({ roster, teacher, classId, work, onDone }) {
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [savedId, setSavedId] = useState(work.id || null);
+  const [justSaved, setJustSaved] = useState(false);
 
   const save = async () => {
     if (!f.title.trim()) return setErr("Give the work a title.");
     if (!f.body.trim()) return setErr("Write the questions.");
     setBusy(true); setErr("");
     try {
-      await assignmentSave({ id: work.id, classId, subject: f.subject, title: f.title,
-        instructions: f.instructions, body: f.body, due: f.due || null, published: f.published });
-      onDone();
+      const id = await assignmentSave({ id: work.id || savedId, classId, subject: f.subject,
+        title: f.title, instructions: f.instructions, body: f.body,
+        due: f.due || null, published: f.published });
+      // Stay here rather than closing. A teacher writing homework expects to
+      // attach the sheet while writing it, and a new piece of work has no id to
+      // hang a file from until it has been saved once.
+      setSavedId(work.id || id);
+      setJustSaved(true);
+      setBusy(false);
     } catch (e) { setErr(String(e.message || e).replace(/^assignment_save \d+: /, "")); setBusy(false); }
   };
 
@@ -7135,16 +7148,46 @@ function WorkEditor({ roster, teacher, classId, work, onDone }) {
         </span>
       </button>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={save} disabled={busy} style={{ ...primaryBtn(), opacity: busy ? 0.5 : 1 }}>
-          {busy ? "Saving…" : isNew ? "Save and send" : "Save changes"}
+          {busy ? "Saving…" : savedId ? "Save changes" : "Save and send"}
         </button>
-        {!isNew && (
+        {savedId && (
+          <button onClick={onDone} style={{ ...primaryBtn(), background: "#3F7A5C" }}>
+            Done
+          </button>
+        )}
+        {savedId && (
           <button onClick={remove} disabled={busy} style={{ ...primaryBtn(), background: "#B84C3E" }}>
             Delete
           </button>
         )}
       </div>
+
+      {justSaved && (
+        <div className="enter" style={{ marginTop: 12, padding: "10px 13px", borderRadius: 4,
+              background: "#E4F0E8", border: "1px solid #B8D9C4",
+              fontFamily: FONT.body, fontSize: 12.5, color: "#22304A", lineHeight: 1.55 }}>
+          Saved{f.published ? " and sent to families" : " as a draft"}.
+          Attach any files below, or tap <strong>Done</strong>.
+        </div>
+      )}
+
+      {/* Files live here, where a teacher writing the work will look for them.
+          A new piece of work has to be saved once before a file has anything to
+          attach to, so this appears the moment it has an id. */}
+      {savedId ? (
+        <WorkFiles assignmentId={savedId} />
+      ) : (
+        <div style={{ marginTop: 14, paddingTop: 13, borderTop: "1px dashed #D8D2C2" }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 9.5, letterSpacing: 1.2,
+                color: "#8A8368", marginBottom: 6 }}>FILES FOR THE PUPILS</div>
+          <div style={{ fontFamily: FONT.body, fontSize: 12, color: "#8A8368", lineHeight: 1.55 }}>
+            Save the work first, then attach PDFs, Word documents or pictures from this computer —
+            the button appears here.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
